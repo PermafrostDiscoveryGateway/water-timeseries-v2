@@ -3,7 +3,7 @@ import pandas as pd
 import Rbeast as rb
 from tqdm import tqdm
 
-from lake_drainage.drainage_analysis.lake_dataset import LakeDataset
+from water_timeseries.dataset import LakeDataset
 
 
 class BreakpointMethod:
