@@ -1,0 +1,52 @@
+site_name: water-timeseries
+site_description: Automated analysis of water timeseries data from satellite imagery and remote sensing sources
+site_url: https://PermafrostDiscoveryGateway.github.io/water-timeseries-v2/
+repo_url: https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2
+repo_name: PermafrostDiscoveryGateway/water-timeseries-v2
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: blue
+      accent: light blue
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - toc.follow
+    - search.suggest
+    - search.highlight
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            docstring_style: google
+            show_source: true
+            show_bases: true
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tasklist
+  - pymdownx.arithmatex
+  - pymdownx.highlight
+  - pymdownx.emoji:
+      emoji_index: !!python/name:pymdownx.emoji.twemoji
+      emoji_generator: !!python/name:pymdownx.emoji.to_svg
+  - toc:
+      permalink: "🔗"
+
+nav:
+  - Home: index.md
+  - Getting Started: getting_started.md
+  - Examples: examples.md
+  - API Reference:
+    - Overview: api/index.md
+    - Dataset: api/dataset.md
+    - Breakpoint: api/breakpoint.md
+    - Utils: api/utils.md
