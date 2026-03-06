@@ -1,0 +1,5 @@
+{
+  "author": "Ingmar Nitze (Alfred Wegener Institute), Kayla Hardie (Google), Chen Wang (NCSA, U Illinois), Todd Nicholson(NCSA, U Illinois)",
+  "contact": "ingmar.nitze@awi.de",
+  "description": "This datasets provides the monthly area of the dynamic world classes (water, trees, grass, flooded_vegetation, crops, shrub_and_scrub, built, bare, snow_and_ice) for selected lake polygons. The areas were calculated from the Dynamic World V1 dataset through Google Earth Engine. Lake polygons were calculated by Ingmar Nitze through the Permafrost Discovery Gateway Project. \"id_geohash\" is the lake_id, which needs be joined to the accompanying polygon vector dataset"
+}

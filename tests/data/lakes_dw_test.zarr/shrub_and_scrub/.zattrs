@@ -1,0 +1,7 @@
+{
+  "units": "ha",
+  "_ARRAY_DIMENSIONS": [
+    "id_geohash",
+    "date"
+  ]
+}

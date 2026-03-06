@@ -1,0 +1,6 @@
+{
+  "accompanying vector dataset": "Nitze_etal_Lakes_filtered_full_set_V2b.parquet",
+  "author": "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)",
+  "contact": "ingmar.nitze@awi.de",
+  "description": "This datasets provides the annual area of permanent water, seasonal water, land, and no data for selected lake polygons. The areas were calculated from the JRC annual surface water dataset through Google Earth Engine. Lake polygons were calculated by Ingmar Nitze through the Permafrost Discovery Gateway Project. \"id_geohash\" is the lake_id, which needs be joined to the accompanying polygon vector dataset"
+}
