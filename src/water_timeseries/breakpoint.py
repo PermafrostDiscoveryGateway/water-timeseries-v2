@@ -1,8 +1,9 @@
 import numpy as np
 import pandas as pd
 import Rbeast as rb
-from water_timeseries.dataset import LakeDataset
 from tqdm import tqdm
+
+from water_timeseries.dataset import LakeDataset
 
 
 class BreakpointMethod:
