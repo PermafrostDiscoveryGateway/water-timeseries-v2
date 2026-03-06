@@ -175,7 +175,7 @@ class DWDataset(LakeDataset):
         if breakpoints is not None:
             breaks = breakpoints.calculate_break(self, object_id=id_geohash)
             if breaks is not None:
-                bp = breaks['date_break'].iloc[0]
+                bp = breaks["date_break"].iloc[0]
         else:
             bp = None
 
@@ -221,9 +221,7 @@ class JRCDataset(LakeDataset):
         Calculates total area as the sum of permanent water, seasonal water, and land.
         """
         ds = self.ds
-        ds["area_data"] = (
-            ds["area_land"] + ds["area_water_permanent"] + ds["area_water_seasonal"]
-        )
+        ds["area_data"] = ds["area_land"] + ds["area_water_permanent"] + ds["area_water_seasonal"]
         self.preprocessed_ = True
         self.ds = ds
 
@@ -249,19 +247,13 @@ class JRCDataset(LakeDataset):
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
         """
         self._normalize_ds()
-        df = (
-            self.ds.sel(id_geohash=id_geohash)
-            .load()
-            .to_dataframe()
-            .dropna()
-            .reset_index(drop=False)
-        )
+        df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
 
         if breakpoints is not None:
             breaks = breakpoints.calculate_break(self, object_id=id_geohash)
             if breaks is not None:
-                bp = breaks['date_break'].iloc[0]
+                bp = breaks["date_break"].iloc[0]
         else:
             bp = None
 

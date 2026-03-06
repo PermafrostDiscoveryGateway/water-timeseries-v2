@@ -4,9 +4,7 @@ import pandas as pd
 import seaborn as sns
 
 
-def prepare_data_for_plot_dw(
-    df: pd.DataFrame, group_vegetation: bool = True
-) -> pd.DataFrame:
+def prepare_data_for_plot_dw(df: pd.DataFrame, group_vegetation: bool = True) -> pd.DataFrame:
     """
     Restructure data for plotting.
 
@@ -47,9 +45,7 @@ def prepare_data_for_plot_dw(
 
     # Melt for plotting with seaborn
     if group_vegetation:
-        data_plot["vegetation"] = data_plot[
-            ["flooded_vegetation", "grass", "shrub_and_scrub", "trees"]
-        ].sum(axis=1)
+        data_plot["vegetation"] = data_plot[["flooded_vegetation", "grass", "shrub_and_scrub", "trees"]].sum(axis=1)
         df_plot_prepared = data_plot.melt(
             id_vars="date",
             value_name="value",
@@ -179,9 +175,7 @@ def plot_water_time_series_dw(
         # Create right y-axis for normalized values
         ax2 = ax1.twinx()
         lower, upper = ax1.get_ylim()
-        ax2.set_ylim(
-            lower / normalization_factor * 100, upper / normalization_factor * 100
-        )
+        ax2.set_ylim(lower / normalization_factor * 100, upper / normalization_factor * 100)
         # Set labels for right y-axis (normalized values)
         ax2.set_ylabel("Relative Area [%]")
 
@@ -265,9 +259,7 @@ def plot_water_time_series_jrc(
         # Create right y-axis for normalized values
         ax2 = ax1.twinx()
         lower, upper = ax1.get_ylim()
-        ax2.set_ylim(
-            lower / normalization_factor * 100, upper / normalization_factor * 100
-        )
+        ax2.set_ylim(lower / normalization_factor * 100, upper / normalization_factor * 100)
         # Set labels for right y-axis (normalized values)
         ax2.set_ylabel("Relative Area [%]")
 

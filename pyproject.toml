@@ -81,7 +81,6 @@ build-backend = "hatchling.build"
 # use ruff as the primary linter/formatter with compatibility to black/isort
 # ruff will enforce the same line length and import sorting style
 line-length = 120
-format = true
 extend-select = ["I"]
 exclude = [".venv", "build", "dist", "__pycache__"]
 extend-ignore = ["E203"]
