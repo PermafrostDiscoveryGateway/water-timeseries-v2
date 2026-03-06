@@ -31,7 +31,7 @@ class BreakpointMethod:
 
 
 class SimpleBreakpoint(BreakpointMethod):
-    def __init__(self, kwargs_break: dict):
+    def __init__(self, kwargs_break: dict=dict(window=3, method="median", threshold=0.25)):
         super().__init__(method_name="simple")
         self.kwargs_break = kwargs_break
         self.breakpoint_columns = ["date_break", "date_before_break", "break_method"]
@@ -87,6 +87,7 @@ class SimpleBreakpoint(BreakpointMethod):
         return first_break_date, previous_date
 
     def calculate_break(self, dataset: LakeDataset, object_id: str) -> pd.DataFrame:
+        dataset._normalize_ds()
         ds = dataset.ds_normalized
         df_normed = ds.sel(id_geohash=object_id).to_pandas()
         first_break, previous_date = self.get_first_break_date(
