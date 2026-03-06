@@ -85,3 +85,24 @@ line-length = 120
 extend-select = ["I"]
 exclude = [".venv", "build", "dist", "__pycache__"]
 extend-ignore = ["E203"]
+
+[tool.pytest.ini_options]
+# Pytest configuration for water-timeseries
+
+# Test discovery
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+
+# Output options
+addopts = "-v --strict-markers"
+
+# Markers for test categorization
+markers = [
+    "loading: Tests for dataset loading",
+    "normalization: Tests for data normalization",
+    "plotting: Tests for plotting functionality",
+]
+
+# Console output
+testpaths = ["tests"]
