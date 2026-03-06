@@ -1,0 +1,7 @@
+{
+  "units": "days since 1984-01-01",
+  "calendar": "proleptic_gregorian",
+  "_ARRAY_DIMENSIONS": [
+    "date"
+  ]
+}
