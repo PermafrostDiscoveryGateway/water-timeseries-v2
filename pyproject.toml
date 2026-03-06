@@ -59,6 +59,10 @@ dependencies = [
     "loguru>=0.7.3",
     "typer>=0.24.1",
     "typer-config>=1.5.0",
+    "mkdocs>=1.5.0,<2.0",
+    "mkdocs-material>=9.4.0",
+    "mkdocstrings[python]>=0.24.0",
+    "pymdown-extensions>=10.0"
 ]
 
 [project.scripts]
