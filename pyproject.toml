@@ -1,7 +1,7 @@
 [project]
 name = "water-timeseries"
 version = "0.1.0"
-description = "Add your description here"
+description = "Toolbox to download, analyze, and visualize water area time-series"
 readme = "README.md"
 authors = [
     { name = "Ingmar Nitze", email = "ingmarnitze@gmail.com" }
@@ -62,8 +62,17 @@ dependencies = [
 ]
 
 [project.scripts]
-water-timeseries = "water_timeseries:main"
+# water-timeseries = "water_timeseries:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff]
+# use ruff as the primary linter/formatter with compatibility to black/isort
+# ruff will enforce the same line length and import sorting style
+line-length = 120
+format = true
+extend-select = ["I"]
+exclude = [".venv", "build", "dist", "__pycache__"]
+extend-ignore = ["E203"]
