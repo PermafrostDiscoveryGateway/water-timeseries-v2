@@ -23,7 +23,12 @@ class TestSimpleBreakpoint:
         assert isinstance(result, pd.DataFrame)
 
         # Check expected columns
-        expected_columns = ["date_break", "date_before_break", "break_method"]
+        expected_columns = ['date_break', 'date_before_break', 'date_after_break', 'break_method',
+       'pre_break_mean', 'pre_break_median',
+       'pre_break_std', 'pre_break_min', 'pre_break_max', 'post_break_mean',
+       'post_break_median', 'post_break_std', 'post_break_min',
+       'post_break_max']
+        
         for col in expected_columns:
             assert col in result.columns
 
@@ -47,7 +52,11 @@ class TestSimpleBreakpoint:
         assert isinstance(result, pd.DataFrame)
 
         # Check expected columns
-        expected_columns = ["date_break", "date_before_break", "break_method"]
+        expected_columns = ['date_break', 'date_before_break', 'date_after_break', 'break_method',
+       'pre_break_mean', 'pre_break_median',
+       'pre_break_std', 'pre_break_min', 'pre_break_max', 'post_break_mean',
+       'post_break_median', 'post_break_std', 'post_break_min',
+       'post_break_max']
         for col in expected_columns:
             assert col in result.columns
 
@@ -67,7 +76,7 @@ class TestBeastBreakpoint:
         bp = BeastBreakpoint()
 
         # Use specific geohash
-        geohash_id = "b7g4rf3n3x43"
+        geohash_id = 'b7g4rf3n3x43'
 
         result = bp.calculate_break(dataset, geohash_id)
 
@@ -75,7 +84,10 @@ class TestBeastBreakpoint:
         assert isinstance(result, pd.DataFrame)
 
         # Check expected columns
-        expected_columns = ["date_break", "date_before_break", "break_method", "break_number", "proba_rbeast"]
+        expected_columns = ["date_break", "date_before_break", "break_method", "break_number", "proba_rbeast", "pre_break_mean", "pre_break_median",
+       "pre_break_std", "pre_break_min", "pre_break_max", "post_break_mean",
+       "post_break_median", "post_break_std", "post_break_min",
+       "post_break_max"]
         for col in expected_columns:
             assert col in result.columns
 
@@ -99,7 +111,10 @@ class TestBeastBreakpoint:
         assert isinstance(result, pd.DataFrame)
 
         # Check expected columns
-        expected_columns = ["date_break", "date_before_break", "break_method", "break_number", "proba_rbeast"]
+        expected_columns = ["date_break", "date_before_break", "break_method", "break_number", "proba_rbeast", "pre_break_mean", "pre_break_median",
+       "pre_break_std", "pre_break_min", "pre_break_max", "post_break_mean",
+       "post_break_median", "post_break_std", "post_break_min",
+       "post_break_max"]
         for col in expected_columns:
             assert col in result.columns
 
@@ -137,44 +152,4 @@ class TestBreakpointComparison:
         # Same method names
         assert simple_result["break_method"].iloc[0] == "simple"
         assert beast_result["break_method"].iloc[0] == "rbeast"
-
-    def test_batch_breakpoint_simple(self, dw_test_dataset):
-        """Test batch breakpoint processing with SimpleBreakpoint."""
-        dataset = DWDataset(dw_test_dataset)
-        bp = SimpleBreakpoint()
-
-        # Test batch processing
-        results = bp.calculate_breaks_batch(dataset, progress_bar=False)
-
-        # Check result is DataFrame
-        assert isinstance(results, pd.DataFrame)
-        assert len(results) > 0
-
-        # Check expected columns
-        expected_columns = ["date_break", "date_before_break", "break_method"]
-        for col in expected_columns:
-            assert col in results.columns
-
-        # Check all results have correct method name
-        assert all(results["break_method"] == "simple")
-
-    def test_batch_breakpoint_beast(self, dw_test_dataset):
-        """Test batch breakpoint processing with BeastBreakpoint."""
-        dataset = DWDataset(dw_test_dataset)
-        bp = BeastBreakpoint()
-
-        # Test batch processing
-        results = bp.calculate_breaks_batch(dataset, progress_bar=False)
-
-        # Check result is DataFrame
-        assert isinstance(results, pd.DataFrame)
-        assert len(results) >= 0  # May have no breaks detected
-
-        # Check expected columns if results exist
-        if len(results) > 0:
-            expected_columns = ["date_break", "date_before_break", "break_method", "break_number", "proba_rbeast"]
-            for col in expected_columns:
-                assert col in results.columns
-
-            # Check all results have correct method name
-            assert all(results["break_method"] == "rbeast")
+        

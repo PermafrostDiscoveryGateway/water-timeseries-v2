@@ -4,8 +4,8 @@ This module provides classes for processing and normalizing satellite-derived
 land cover and water classification data. It includes specialized handlers for
 different data sources and processing pipelines.
 """
-
 import matplotlib.pyplot as plt
+import pandas as pd
 
 from .utils.plotting import (
     plot_water_time_series_dw,
@@ -87,6 +87,12 @@ class LakeDataset:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
         """
+        pass
+
+    def calculate_changes(self, break_df: pd.DataFrame, id_geohash: str) -> pd.DataFrame:
+
+
+
         pass
 
 

@@ -35,7 +35,7 @@ class SimpleBreakpoint(BreakpointMethod):
     def __init__(self, kwargs_break: dict = dict(window=3, method="median", threshold=0.25)):
         super().__init__(method_name="simple")
         self.kwargs_break = kwargs_break
-        self.breakpoint_columns = ["date_break", "date_before_break", "break_method"]
+        self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
 
     def get_first_break_date(self, df: pd.DataFrame, column: str = "water") -> tuple:
         """Find the first break date and the immediately preceding index value.
@@ -45,7 +45,7 @@ class SimpleBreakpoint(BreakpointMethod):
             column (str, optional): Column name to evaluate. Defaults to "water".
 
         Returns:
-            tuple: (first_break_date (pd.Timestamp or None), previous_date (pd.Timestamp or None))
+            tuple: (first_break_date (pd.Timestamp or None), previous_date (pd.Timestamp or None), after_date (pd.Timestamp or None))
         """
         df = df.drop(columns=["id_geohash"]).dropna()
 
@@ -80,26 +80,38 @@ class SimpleBreakpoint(BreakpointMethod):
                     pos = pos.start if pos.start is not None else 0
                 if pos > 0:
                     previous_date = df.index[pos - 1]
+                    after_date = df.index[pos + 1] if pos + 1 < len(df) else None
             except Exception:
                 previous_date = None
+                after_date = None
 
-        return first_break_date, previous_date
+        return first_break_date, previous_date, after_date
 
     def calculate_break(self, dataset: LakeDataset, object_id: str) -> pd.DataFrame:
         dataset._normalize_ds()
         ds = dataset.ds_normalized
         df_normed = ds.sel(id_geohash=object_id).to_pandas()
-        first_break, previous_date = self.get_first_break_date(df=df_normed, column=dataset.water_column)
+        first_break, previous_date, after_date = self.get_first_break_date(df=df_normed, column=dataset.water_column)
         df_out = pd.DataFrame(
             {
                 self.breakpoint_columns[0]: [first_break],
                 self.breakpoint_columns[1]: [previous_date],
-                self.breakpoint_columns[2]: [self.method_name],
+                self.breakpoint_columns[2]: [after_date],
+                self.breakpoint_columns[3]: [self.method_name],
             },
             index=[object_id],
         )
+        
+        break_list = []
+        df_water = dataset.ds.sel(id_geohash=object_id).to_dataframe()
+        for i, row in df_out.iterrows():
+            id_geohash = row.name
+            df_breaks = pd.concat([row, calculate_water_area_before(df_water, break_date=row['date_break'], water_column=dataset.water_column), calculate_water_area_after(df_water, break_date_after=row['date_after_break'], water_column=dataset.water_column)])
+            df_breaks.name = id_geohash
+            break_list.append(df_breaks)
+        break_df = pd.concat(break_list, axis=1).T
 
-        return df_out
+        return break_df
 
 
 class BeastBreakpoint(BreakpointMethod):
@@ -114,6 +126,7 @@ class BeastBreakpoint(BreakpointMethod):
         self.breakpoint_columns = [
             "date_break",
             "date_before_break",
+            "date_after_break",
             "break_method",
             "break_number",
             "proba_rbeast",
@@ -138,8 +151,11 @@ class BeastBreakpoint(BreakpointMethod):
         break_indices = np.where(cp_prob > self.break_threshold)[0]
         # # get previous date
         break_indices_before = np.array(break_indices) - 1
+        # # get after date
+        break_indices_after = np.array(break_indices) + 1
         # return df
         break_dates_before = df.iloc[break_indices_before]["date"].to_list()
+        break_dates_after = df.iloc[break_indices_after]["date"].to_list()
 
         # ensure we're working with copies to avoid pandas SettingWithCopyWarning
         df = df.copy()
@@ -149,6 +165,7 @@ class BeastBreakpoint(BreakpointMethod):
 
         # safely add the previous-date column
         break_df.loc[:, "date_before_break"] = break_dates_before
+        break_df.loc[:, "date_after_break"] = break_dates_after
 
         # sort by probability descending, then add sequential break numbers
         break_df = break_df.sort_values("proba_rbeast", ascending=False).copy()
@@ -156,4 +173,30 @@ class BeastBreakpoint(BreakpointMethod):
 
         break_df_out = break_df.rename(columns={"date": "date_break"}).set_index("id_geohash")
         break_df_out["break_method"] = self.method_name
-        return break_df_out[self.breakpoint_columns]
+        
+        df_out = break_df_out[self.breakpoint_columns]
+
+        break_list = []
+        df_water = dataset.ds.sel(id_geohash=object_id).to_dataframe()
+        for i, row in df_out.iterrows():
+            id_geohash = row.name
+            df_breaks = pd.concat([row, calculate_water_area_before(df_water, break_date=row['date_break'], water_column=dataset.water_column), calculate_water_area_after(df_water, break_date_after=row['date_after_break'], water_column=dataset.water_column)])
+            df_breaks.name = id_geohash
+            break_list.append(df_breaks)
+        break_df = pd.concat(break_list, axis=1).T
+        break_df.index.name = "id_geohash"
+        
+        return break_df
+
+
+def calculate_water_area_before(df_water, break_date, water_column:str, stats=['mean', 'median', 'std', 'min', 'max']):
+    before = df_water.loc[:break_date][water_column].agg(stats)
+    cols_out = [f'pre_break_{col}' for col in before.index]
+    before.index = cols_out
+    return before
+
+def calculate_water_area_after(df_water, break_date_after, water_column:str, stats=['mean', 'median', 'std', 'min', 'max']):
+    after = df_water.loc[break_date_after:][water_column].agg(stats)
+    cols_out = [f'post_break_{col}' for col in after.index]
+    after.index = cols_out
+    return after

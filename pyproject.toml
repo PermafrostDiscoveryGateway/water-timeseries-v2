@@ -8,9 +8,10 @@ authors = [
 ]
 requires-python = ">=3.11, <3.14"
 dependencies = [
-    "pandas",
+    "pandas>=2.0.0,<3.0.0",
+    "numpy>=1.24.0,<2.0.0",
     "geopandas>=0.8.0",
-    "xarray",
+    "xarray>=2023.0.0",
     "tqdm",
     "netcdf4",
     "python-geohash",
@@ -29,7 +30,6 @@ dependencies = [
     "opencv-python>=4.11.0.86",
     "statsmodels>=0.14.4",
     "scikit-learn>=1.6.1",
-    "numpy<2",
     "basemap>=1.4.1",
     "plotly-geo>=1.0.0",
     "dask-geopandas>=0.4.2",
