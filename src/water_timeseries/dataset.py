@@ -229,10 +229,10 @@ class JRCDataset(LakeDataset):
         """
         ds = self.ds
         ds["area_data"] = ds["area_land"] + ds["area_water_permanent"] + ds["area_water_seasonal"]
-        
+
         max_area = ds["area_data"].max(dim="date", skipna=True)
         ds["area_nodata"] = (max_area - ds["area_data"]).round(4)
-        
+
         self.preprocessed_ = True
         self.ds = ds
 
