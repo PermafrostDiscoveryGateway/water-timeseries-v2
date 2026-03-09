@@ -72,6 +72,14 @@ class LakeDataset:
         self.ds_normalized = self.ds / self.ds.max(dim="date")["area_data"]
         self.normalized_available_ = True
 
+    def _mask_invalid(self):
+        """Mask invalid data based on quality criteria.
+
+        This method should be overridden in subclasses to implement data-source-specific
+        masking logic based on their quality thresholds and constraints.
+        """
+        pass
+
     def plot_timeseries(self, id_geohash: str, breakpoints: None) -> plt.Figure:
         """Plot the time series for a specific geohash.
 
@@ -154,7 +162,6 @@ class DWDataset(LakeDataset):
         ds = self.ds_normalized
         mask = (ds["area_nodata"] <= 0) & (ds["snow_and_ice"] < 0.05)
         self.ds = self.ds.where(mask)
-        self.ds_normalized = self.ds.where(mask)
         self.ds_normalized = self.ds_normalized.where(mask)
 
         self.ds_ismasked_ = True
@@ -222,6 +229,10 @@ class JRCDataset(LakeDataset):
         """
         ds = self.ds
         ds["area_data"] = ds["area_land"] + ds["area_water_permanent"] + ds["area_water_seasonal"]
+
+        max_area = ds["area_data"].max(dim="date", skipna=True)
+        ds["area_nodata"] = (max_area - ds["area_data"]).round(4)
+
         self.preprocessed_ = True
         self.ds = ds
 
@@ -233,7 +244,6 @@ class JRCDataset(LakeDataset):
         ds = self.ds_normalized
         mask = ds["area_nodata"] <= 0
         self.ds = self.ds.where(mask)
-        self.ds_normalized = self.ds.where(mask)
         self.ds_normalized = self.ds_normalized.where(mask)
 
         self.ds_ismasked_ = True
