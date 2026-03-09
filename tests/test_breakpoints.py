@@ -1,9 +1,8 @@
 """Tests for breakpoint detection functionality."""
 
 import pandas as pd
-import pytest
 
-from water_timeseries.breakpoint import SimpleBreakpoint, BeastBreakpoint
+from water_timeseries.breakpoint import BeastBreakpoint, SimpleBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
 
 
