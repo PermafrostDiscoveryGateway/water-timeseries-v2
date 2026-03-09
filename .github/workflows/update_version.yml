@@ -51,6 +51,10 @@ jobs:
           VERSION="${{ steps.update_version.outputs.tag-number }}"
           VERSION_NO_V="${VERSION#v}"
           
+          # Configure git user
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          
           # Update version in pyproject.toml
           sed -i "s/^version = \".*\"/version = \"$VERSION_NO_V\"/" pyproject.toml
           
