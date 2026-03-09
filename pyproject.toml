@@ -41,6 +41,7 @@ dependencies = [
     "lz4>=4.4.5",
     "ipykernel",
     "jupyterlab",
+    "cyclopts>=4.8.0",
 ]
 
 [project.optional-dependencies]
@@ -66,6 +67,7 @@ docs = [
 ]
 
 [project.scripts]
+water-timeseries-bp = "water_timeseries.scripts.break_pipeline:main"
 # water-timeseries = "water_timeseries:main"
 
 [build-system]
