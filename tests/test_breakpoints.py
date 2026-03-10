@@ -200,3 +200,35 @@ class TestBreakpointComparison:
         # Same method names
         assert simple_result["break_method"].iloc[0] == "simple"
         assert beast_result["break_method"].iloc[0] == "rbeast"
+
+
+class TestBeastBreakpointBatch:
+    """Test batch breakpoint calculation with BeastBreakpoint."""
+
+    def test_batch_breakpoint_beast_jrc(self, jrc_test_dataset):
+        """Test BeastBreakpoint batch detection functionality."""
+        dataset = JRCDataset(jrc_test_dataset)
+        bp = BeastBreakpoint()
+        breaks = bp.calculate_breaks_batch(dataset)
+        assert isinstance(breaks, pd.DataFrame)
+
+    def test_batch_breakpoint_beast_dw(self, dw_test_dataset):
+        """Test BeastBreakpoint batch detection functionality."""
+        dataset = DWDataset(dw_test_dataset)
+        bp = BeastBreakpoint()
+        breaks = bp.calculate_breaks_batch(dataset)
+        assert isinstance(breaks, pd.DataFrame)
+
+    def test_batch_breakpoint_simple_jrc(self, jrc_test_dataset):
+        """Test BeastBreakpoint batch detection functionality."""
+        dataset = JRCDataset(jrc_test_dataset)
+        bp = SimpleBreakpoint()
+        breaks = bp.calculate_breaks_batch(dataset)
+        assert isinstance(breaks, pd.DataFrame)
+
+    def test_batch_breakpoint_simple_dw(self, dw_test_dataset):
+        """Test BeastBreakpoint batch detection functionality."""
+        dataset = DWDataset(dw_test_dataset)
+        bp = SimpleBreakpoint()
+        breaks = bp.calculate_breaks_batch(dataset)
+        assert isinstance(breaks, pd.DataFrame)

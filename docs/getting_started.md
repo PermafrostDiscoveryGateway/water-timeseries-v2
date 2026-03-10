@@ -43,6 +43,64 @@ normalized_data = dataset.ds_normalized
 preprocessed_ds = dataset.ds
 ```
 
+## Command Line Interface
+
+The package includes a CLI tool `water-timeseries-bp` for running breakpoint detection from the command line.
+
+### Installation
+
+The CLI is installed automatically with the package:
+
+```bash
+uv sync
+```
+
+### Basic Usage
+
+```bash
+# Show all options
+uv run water-timeseries-bp --help
+
+# Run with required arguments
+uv run water-timeseries-bp --water-dataset-file data.zarr --output-file output.parquet
+
+# Run with optional parameters
+uv run water-timeseries-bp \
+    --water-dataset-file data.zarr \
+    --output-file output.parquet \
+    --chunksize 100 \
+    --n-jobs 4
+
+# Run with a config file
+uv run water-timeseries-bp -C configs/config.yaml
+```
+
+### Using a Config File
+
+Create a YAML configuration file:
+
+```yaml
+# config.yaml
+water_dataset_file: /path/to/your/data.zarr
+output_file: /path/to/output.parquet
+
+# Optional: vector dataset for bbox filtering
+vector_dataset_file: /path/to/lakes.parquet
+
+# Bounding box (optional)
+bbox_west: -160
+bbox_east: -155
+bbox_north: 68
+bbox_south: 66
+
+# Processing options
+chunksize: 100
+n_jobs: 20
+min_chunksize: 10
+```
+
+CLI arguments take priority over config file values.
+
 ## Key Classes
 
 ### `LakeDataset`

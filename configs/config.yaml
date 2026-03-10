@@ -1,0 +1,19 @@
+# Configuration for break pipeline
+# Usage: uv run water-timeseries-bp -C src/water_timeseries/scripts/config.yaml
+
+# Required arguments
+water_dataset_file: /isipd/projects/Response/GIS_RS_projects/Ingmar_other/drainage_analysis2/data/input/dynamic_world/lakes_dw_V2d.zarr
+output_file: test.parquet
+
+# Optional arguments
+vector_dataset_file: /isipd/projects/Response/GIS_RS_projects/Ingmar_other/lake_dataset_creation/data/output/V2d/Nitze_etal_Lakes_filtered_full_set_V2d.parquet
+
+# Bounding box filter (optional)
+bbox_west: -160
+bbox_east: -155
+bbox_north: 68
+bbox_south: 66
+
+# Processing options
+chunksize: 100
+n_jobs: 20

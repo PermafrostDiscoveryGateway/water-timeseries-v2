@@ -19,8 +19,9 @@ class BreakpointMethod:
 
     def calculate_breaks_batch(self, dataset, progress_bar=False):
         # Batch processing of breakpoints for all objects in the dataset
-        dataset.ds_normalized.load()
+        # dataset.ds_normalized.load()
         dataset.ds.load()
+        dataset.ds_normalized.load()
         results = []
         if progress_bar:
             progress = tqdm(dataset.ds_normalized.id_geohash.values)
@@ -73,6 +74,7 @@ class SimpleBreakpoint(BreakpointMethod):
 
         # Determine the preceding index value (previous_date) if available
         previous_date = None
+        after_date = None
         if first_break_date is not None:
             try:
                 pos = df.index.get_loc(first_break_date)
@@ -89,10 +91,12 @@ class SimpleBreakpoint(BreakpointMethod):
         return first_break_date, previous_date, after_date
 
     def calculate_break(self, dataset: LakeDataset, object_id: str) -> pd.DataFrame:
-        dataset._normalize_ds()
+        # dataset._normalize_ds()
         ds = dataset.ds_normalized
         df_normed = ds.sel(id_geohash=object_id).to_pandas()
         first_break, previous_date, after_date = self.get_first_break_date(df=df_normed, column=dataset.water_column)
+        if first_break is None:
+            return pd.DataFrame(columns=self.breakpoint_columns)
         df_out = pd.DataFrame(
             {
                 self.breakpoint_columns[0]: [first_break],
@@ -160,6 +164,10 @@ class BeastBreakpoint(BreakpointMethod):
 
         # get break indices
         break_indices = np.where(cp_prob > self.break_threshold)[0]
+
+        if break_indices.size == 0:
+            return pd.DataFrame(columns=self.breakpoint_columns)
+
         # # get previous date
         break_indices_before = np.array(break_indices) - 1
         # # get after date
