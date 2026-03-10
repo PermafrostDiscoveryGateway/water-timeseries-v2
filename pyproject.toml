@@ -42,6 +42,7 @@ dependencies = [
     "ipykernel",
     "jupyterlab",
     "cyclopts>=4.8.0",
+    "rich>=14.3.3",
 ]
 
 [project.optional-dependencies]
