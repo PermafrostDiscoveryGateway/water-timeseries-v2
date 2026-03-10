@@ -191,3 +191,80 @@ def synthetic_jrc_dataset_with_break():
     )
 
     return ds
+
+
+@pytest.fixture
+def synthetic_dw_dataset_large():
+    """Create a larger synthetic DW dataset with 100 geohashes for testing parallelization.
+
+    Creates a dataset with:
+    - 100 geohash IDs
+    - 20 time steps
+    - High water values (0.8-0.9) for first half, low (0.1-0.2) for second half (breakpoint pattern)
+    """
+    # Create time series
+    dates = pd.date_range("2020-01-01", periods=20, freq="D")
+    n_dates = len(dates)
+
+    # Create 100 geohash IDs
+    geohashes = [f"test_{i:03d}" for i in range(100)]
+    n_geohashes = len(geohashes)
+
+    # Create data with breakpoint: high values then sharp drop
+    # Shape should be (n_dates, n_geohashes) = (20, 100)
+    water_high = np.random.uniform(0.8, 0.9, (n_dates // 2, n_geohashes))
+    water_low = np.random.uniform(0.1, 0.2, (n_dates - n_dates // 2, n_geohashes))
+    water_values = np.concatenate([water_high, water_low], axis=0)
+
+    # Create other land cover classes - each with shape (n_dates, n_geohashes)
+    bare = np.random.uniform(0.0, 0.1, (n_dates, n_geohashes))
+    snow_ice = np.random.uniform(0.0, 0.05, (n_dates, n_geohashes))
+    trees = np.random.uniform(0.0, 0.1, (n_dates, n_geohashes))
+    grass = np.random.uniform(0.0, 0.1, (n_dates, n_geohashes))
+    flooded_veg = np.random.uniform(0.0, 0.05, (n_dates, n_geohashes))
+    crops = np.random.uniform(0.0, 0.1, (n_dates, n_geohashes))
+    shrub = np.random.uniform(0.0, 0.1, (n_dates, n_geohashes))
+    built = np.random.uniform(0.0, 0.05, (n_dates, n_geohashes))
+
+    # Create dataset
+    ds = xr.Dataset(
+        {
+            "water": (["date", "id_geohash"], water_values),
+            "bare": (["date", "id_geohash"], bare),
+            "snow_and_ice": (["date", "id_geohash"], snow_ice),
+            "trees": (["date", "id_geohash"], trees),
+            "grass": (["date", "id_geohash"], grass),
+            "flooded_vegetation": (["date", "id_geohash"], flooded_veg),
+            "crops": (["date", "id_geohash"], crops),
+            "shrub_and_scrub": (["date", "id_geohash"], shrub),
+            "built": (["date", "id_geohash"], built),
+        },
+        coords={
+            "date": dates,
+            "id_geohash": geohashes,
+        },
+    )
+
+    return ds
+
+
+@pytest.fixture
+def synthetic_dw_dataset_large_zarr(synthetic_dw_dataset_large):
+    """Create a temporary zarr file from synthetic_dw_dataset_large for testing BreakpointPipeline.
+    
+    Returns the path to the temporary zarr file. Cleanup is handled automatically.
+    """
+    import tempfile
+    import shutil
+    
+    # Create a temporary directory
+    temp_dir = tempfile.mkdtemp()
+    zarr_path = Path(temp_dir) / "synthetic_dw_large.zarr"
+    
+    # Save dataset to zarr
+    synthetic_dw_dataset_large.to_zarr(zarr_path, mode="w")
+    
+    yield str(zarr_path)
+    
+    # Cleanup
+    shutil.rmtree(temp_dir, ignore_errors=True)

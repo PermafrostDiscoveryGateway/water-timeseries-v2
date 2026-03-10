@@ -72,7 +72,7 @@ class TestBreakpointPipelineChunking:
         min_size = min(chunk_sizes)
         assert min_size >= 1, f"Minimum chunk size should be >= 1, got {min_size}"
 
-        # Verify total number of IDs matches
+        # Verify total number of IDs matchesfor default min chunk size and one setup for min chunksize of 50
         total_ids = sum(chunk_sizes)
         original_ids = len(pipeline.input_ds.id_geohash)
         assert total_ids == original_ids, f"Total IDs {total_ids} should match original {original_ids}"
@@ -230,7 +230,131 @@ class TestBreakpointPipelineJRC:
 
         pipeline.run_breaks()
         pipeline.save_to_parquet()
+        
+        # Check output file exists
+        assert output_file.exists(), f"Output file should exist at {output_file}"
+        assert output_file.stat().st_size > 0, "Output file should not be empty"
 
+
+class TestBreakpointPipelineParallelization:
+    """Test parallelization with larger synthetic dataset."""
+
+    @pytest.fixture
+    def temp_output_dir(self):
+        """Create a temporary directory for output files."""
+        temp_dir = tempfile.mkdtemp()
+        yield Path(temp_dir)
+        # Cleanup
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+    def test_parallel_chunking_with_large_dataset_default_min_chunksize(self, synthetic_dw_dataset_large_zarr, temp_output_dir):
+        """Test chunking with default min_chunksize (10) and 10 chunks.
+        
+        With 100 geohashes, n_chunks=10, and default min_chunksize=10:
+        chunk_size = max(10, 100//10) = max(10, 10) = 10
+        Expected: 10 chunks of 10 geohashes each
+        """
+        output_file = temp_output_dir / "breaks_large_default.parquet"
+        
+        pipeline = BreakpointPipeline(
+            water_dataset_file=synthetic_dw_dataset_large_zarr,
+            output_file=str(output_file),
+            n_chunks=10,
+            logger=None,
+            # Using default min_chunksize=10
+        )
+        
+        # Check that we have 10 chunks
+        assert pipeline.n_chunks == 10, f"Expected 10 chunks, got {pipeline.n_chunks}"
+        
+        # Check that all chunks have the minimum size (10)
+        chunk_sizes = [len(chunk.id_geohash) for chunk in pipeline.chunked_ds]
+        min_size = min(chunk_sizes)
+        max_size = max(chunk_sizes)
+        assert min_size >= 10, f"Minimum chunk size should be >= 10, got {min_size}"
+        assert max_size <= 10, f"Maximum chunk size should be <= 10, got {max_size}"
+        
+        # Verify total number of IDs matches
+        total_ids = sum(chunk_sizes)
+        assert total_ids == 100, f"Total IDs should be 100, got {total_ids}"
+
+    def test_parallel_chunking_with_large_dataset_min_chunksize_50(self, synthetic_dw_dataset_large_zarr, temp_output_dir):
+        """Test chunking with min_chunksize=50 and 10 chunks.
+        
+        With 100 geohashes, n_chunks=10, and min_chunksize=50:
+        chunk_size = max(50, 100//10) = max(50, 10) = 50
+        Expected: 2 chunks of 50 geohashes each
+        """
+        output_file = temp_output_dir / "breaks_large_min50.parquet"
+        
+        pipeline = BreakpointPipeline(
+            water_dataset_file=synthetic_dw_dataset_large_zarr,
+            output_file=str(output_file),
+            n_chunks=10,
+            logger=None,
+            min_chunksize=50,
+        )
+        
+        # Check that we have 2 chunks (due to min_chunksize=50)
+        assert pipeline.n_chunks == 2, f"Expected 2 chunks (min_chunksize=50 overrides n_chunks), got {pipeline.n_chunks}"
+        
+        # Check that all chunks have size 50
+        chunk_sizes = [len(chunk.id_geohash) for chunk in pipeline.chunked_ds]
+        min_size = min(chunk_sizes)
+        max_size = max(chunk_sizes)
+        assert min_size >= 50, f"Minimum chunk size should be >= 50, got {min_size}"
+        assert max_size <= 50, f"Maximum chunk size should be <= 50, got {max_size}"
+        
+        # Verify total number of IDs matches
+        total_ids = sum(chunk_sizes)
+        assert total_ids == 100, f"Total IDs should be 100, got {total_ids}"
+
+    def test_parallel_chunking_with_large_dataset_min_chunksize_5(self, synthetic_dw_dataset_large_zarr, temp_output_dir):
+        """Test that large dataset is chunked correctly for parallel processing."""
+        output_file = temp_output_dir / "breaks_large.parquet"
+        
+        pipeline = BreakpointPipeline(
+            water_dataset_file=synthetic_dw_dataset_large_zarr,
+            output_file=str(output_file),
+            n_chunks=10,
+            logger=None,
+            min_chunksize=5,
+        )
+        
+        # Check that we have the expected number of chunks
+        assert pipeline.n_chunks == 10, f"Expected 10 chunks, got {pipeline.n_chunks}"
+        
+        # Check that all chunks have the minimum size
+        chunk_sizes = [len(chunk.id_geohash) for chunk in pipeline.chunked_ds]
+        min_size = min(chunk_sizes)
+        assert min_size >= 5, f"Minimum chunk size should be >= 5, got {min_size}"
+        
+        # Verify total number of IDs matches
+        total_ids = sum(chunk_sizes)
+        assert total_ids == 100, f"Total IDs should be 100, got {total_ids}"
+
+    def test_parallel_execution_with_large_dataset(self, synthetic_dw_dataset_large_zarr, temp_output_dir):
+        """Test parallel execution with large dataset."""
+        import ray
+        
+        output_file = temp_output_dir / "breaks_large_parallel.parquet"
+        
+        # Initialize Ray if not already initialized
+        if not ray.is_initialized():
+            ray.init(ignore_reinit_error=True)
+        
+        pipeline = BreakpointPipeline(
+            water_dataset_file=synthetic_dw_dataset_large_zarr,
+            output_file=str(output_file),
+            n_chunks=10,
+            logger=None,
+            min_chunksize=5,
+        )
+        
+        # Run with parallelization
+        pipeline.run_breaks()
+        pipeline.save_to_parquet()
+        
         # Check output file exists
         assert output_file.exists(), f"Output file should exist at {output_file}"
         assert output_file.stat().st_size > 0, "Output file should not be empty"
