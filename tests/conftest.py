@@ -254,8 +254,8 @@ def synthetic_dw_dataset_large_zarr(synthetic_dw_dataset_large):
     
     Returns the path to the temporary zarr file. Cleanup is handled automatically.
     """
-    import tempfile
     import shutil
+    import tempfile
     
     # Create a temporary directory
     temp_dir = tempfile.mkdtemp()
