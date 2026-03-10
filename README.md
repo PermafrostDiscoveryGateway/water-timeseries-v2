@@ -25,6 +25,8 @@ Documentation is automatically built and deployed on every push to `main` using 
 
 ## Quick Start
 
+### Python API
+
 ```python
 from water_timeseries.dataset import DWDataset
 import xarray as xr
@@ -41,6 +43,83 @@ water_extent = processor.ds_normalized[processor.water_column]
 # Access normalized time series
 water_extent = processor.ds_normalized["water"]
 ```
+
+### Command Line Interface
+
+The package provides a CLI tool `water-timeseries-bp` for running breakpoint detection on water datasets.
+
+#### Installation
+
+```bash
+# Using uv (recommended)
+uv sync
+
+# Or using pip
+pip install .
+```
+
+#### Basic Usage
+
+```bash
+# Show help
+uv run water-timeseries-bp --help
+
+# Run with required arguments
+uv run water-timeseries-bp --water-dataset-file data.zarr --output-file output.parquet
+
+# Run with optional parameters
+uv run water-timeseries-bp \
+    --water-dataset-file data.zarr \
+    --output-file output.parquet \
+    --chunksize 100 \
+    --n-jobs 4
+```
+
+#### Using a Config File
+
+You can also use a YAML configuration file:
+
+```bash
+uv run water-timeseries-bp -C configs/config.yaml
+```
+
+Example config file:
+
+```yaml
+# config.yaml
+water_dataset_file: /path/to/data.zarr
+output_file: /path/to/output.parquet
+
+# Optional: vector dataset for bbox filtering
+vector_dataset_file: /path/to/lakes.parquet
+
+# Bounding box filter (optional)
+bbox_west: -160
+bbox_east: -155
+bbox_north: 68
+bbox_south: 66
+
+# Processing options
+chunksize: 100
+n_jobs: 20
+min_chunksize: 10
+```
+
+#### CLI Options
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|--------|
+| `--water-dataset-file` | | Path to water dataset (zarr or parquet) | Required |
+| `--output-file` | | Path to output parquet file | Required |
+| `--vector-dataset-file` | `-v` | Path to vector dataset (gpkg, shp, geojson) | None |
+| `--config` | `-C` | Path to config YAML/JSON file | None |
+| `--chunksize` | `-c` | Number of IDs per chunk | 100 |
+| `--n-jobs` | `-j` | Number of parallel jobs (>1 for Ray) | 1 |
+| `--min-chunksize` | `-m` | Minimum chunk size | 10 |
+| `--bbox-west` | | Minimum longitude (west) | -180 |
+| `--bbox-south` | | Minimum latitude (south) | -90 |
+| `--bbox-east` | | Maximum longitude (east) | 180 |
+| `--bbox-north` | | Maximum latitude (north) | 90 |
 
 ## Installation
 
