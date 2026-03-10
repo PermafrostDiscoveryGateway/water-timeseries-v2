@@ -39,12 +39,30 @@ def load_config(config_path: Optional[Path]) -> dict:
     return {}
 
 
+def merge_config_with_args(config: dict, **kwargs) -> dict:
+    """Merge config with CLI args, CLI args take priority.
+    
+    Args:
+        config: Configuration dictionary from config file.
+        **kwargs: CLI arguments (None values are ignored).
+        
+    Returns:
+        Merged dictionary with CLI args taking priority.
+    """
+    result = config.copy()
+    for key, value in kwargs.items():
+        if value is not None:
+            result[key] = value
+    return result
+
+
 # configure logger: writes to rbeast_batch.log in current working dir
 _log_file = Path.cwd() / "rbeast_batch.log"
 logger.add(
     _log_file,
-    format="{time:YYYY-MM-DD HH:mm:ss} {level} {extra[script]}:{function}:{line} - {message}",
+    format="{time:YYYY-MM-DD HH:mm:ss} {level} {name}:{function}:{line} - {message}",
     mode="a",
+    diagnose=False,
 )
 # Bind script filename so logs show script name instead of __main__
 logger = logger.bind(script=Path(__file__).name)
@@ -118,12 +136,12 @@ class BreakpointPipeline:
 
         if logger:
             self.logger.info(
-                f"Initialized BreakpointPipeline with \n"
-                f"water dataset: {self.water_dataset_file} \n"
-                f"output file: {self.output_file} \n"
-                f"n_chunks: {self.n_chunks} \n"
-                f"chunksize: {self.chunksize} \n"
-                f"n_jobs: {self.n_jobs}"
+                f"Initialized BreakpointPipeline with: "
+                f"water_dataset={self.water_dataset_file}, "
+                f"output_file={self.output_file}, "
+                f"n_chunks={self.n_chunks}, "
+                f"chunksize={self.chunksize}, "
+                f"n_jobs={self.n_jobs}"
             )
 
         self.input_ds = self.load_water_data()

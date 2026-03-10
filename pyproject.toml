@@ -70,7 +70,7 @@ docs = [
 
 [project.scripts]
 water-timeseries-bp = "water_timeseries.scripts.break_pipeline:main"
-# water-timeseries = "water_timeseries:main"
+water-timeseries = "water_timeseries.scripts.cli:app"
 
 [build-system]
 requires = ["hatchling"]
