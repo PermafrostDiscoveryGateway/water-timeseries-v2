@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 
@@ -31,11 +32,13 @@ def get_water_dataset_type(input_ds) -> str:
 
 def calculate_temporal_stats(df: pd.DataFrame) -> pd.DataFrame:
     """Calculate temporal statistics for a given DataFrame."""
+    df[["pre_break_median", "post_break_median"]].replace(0, np.nan, inplace=True)
+    # df.dropna(subset=["pre_break_median", "post_break_median"], inplace=True)
     breaks = pd.to_datetime(df["date_break"])
     df["date_break_year"] = breaks.dt.year
     df["date_break_month"] = breaks.dt.month
     # change area ha
-    df["change_area_ha"] = df["pre_break_median"] - df["post_break_median"]
+    df["water_change_ha"] = df["pre_break_median"] - df["post_break_median"]
     # change area perc
-    df["change_area_perc"] = (df["change_area_ha"] / df["pre_break_median"]) * 100
+    df["water_change_perc"] = df["water_change_ha"].div(df["pre_break_median"].replace(0, np.nan)) * 100
     return df

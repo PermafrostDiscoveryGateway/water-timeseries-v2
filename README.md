@@ -119,10 +119,13 @@ min_chunksize: 10
 | `--chunksize` | `-c` | Number of IDs per chunk | 100 |
 | `--n-jobs` | `-j` | Number of parallel jobs (>1 for Ray) | 1 |
 | `--min-chunksize` | `-m` | Minimum chunk size | 10 |
-| `--bbox-west` | | Minimum longitude (west) | None |
-| `--bbox-south` | | Minimum latitude (south) | None |
-| `--bbox-east` | | Maximum longitude (east) | None |
-| `--bbox-north` | | Maximum latitude (north) | None |
+| `--bbox-west` | | Minimum longitude (west) | -180 |
+| `--bbox-south` | | Minimum latitude (south) | 60 |
+| `--bbox-east` | | Maximum longitude (east) | 180 |
+| `--bbox-north` | | Maximum latitude (north) | 90 |
+| `--output-geometry` | | Export output with geometries | True |
+| `--output-geometry-all` | | Export output all geometries including non breakpoints | True |
+
 
 *Can also be provided via config file
 

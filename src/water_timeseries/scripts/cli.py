@@ -41,6 +41,8 @@ def breakpoint_analysis(
     bbox_south: Optional[float] = None,
     bbox_east: Optional[float] = None,
     bbox_north: Optional[float] = None,
+    output_geometry: bool = True,
+    output_geometry_all: bool = True,
 ):
     """Run breakpoint analysis on water dataset.
 
@@ -78,6 +80,8 @@ def breakpoint_analysis(
         bbox_south=bbox_south,
         bbox_east=bbox_east,
         bbox_north=bbox_north,
+        output_geometry=output_geometry,
+        output_geometry_all=output_geometry_all,
     )
 
     # Get water_dataset_file and output_file from merged config
@@ -101,6 +105,8 @@ def breakpoint_analysis(
         bbox_south=config_dict.get("bbox_south"),
         bbox_east=config_dict.get("bbox_east"),
         bbox_north=config_dict.get("bbox_north"),
+        output_geometry=config_dict.get("output_geometry", True),
+        output_geometry_all=config_dict.get("output_geometry_all", False),
         logger=logger,
     )
     pipeline.run_breaks()

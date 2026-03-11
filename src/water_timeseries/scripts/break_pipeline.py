@@ -118,6 +118,8 @@ class BreakpointPipeline:
         bbox_south: Optional[float] = None,
         bbox_east: Optional[float] = None,
         bbox_north: Optional[float] = None,
+        output_geometry: bool = True,
+        output_geometry_all: bool = False,
     ):
         self.water_dataset_file = water_dataset_file
         self.output_file = output_file
@@ -133,6 +135,8 @@ class BreakpointPipeline:
         self.logger = logger
         self.process_ids = None
         self.breaks = None
+        self.output_geometry = output_geometry
+        self.output_geometry_all = output_geometry_all
 
         if logger:
             self.logger.info(
@@ -168,7 +172,19 @@ class BreakpointPipeline:
     def save_to_parquet(self):
         """Save break detection results to parquet file."""
         output_file = Path(self.output_file)
-        self.breaks.to_parquet(output_file)
+
+        # join geospatial data
+        if self.gdf is not None and "id_geohash" in self.gdf.columns and self.output_geometry:
+            self.logger.info("Joining break results with vector dataset geometries")
+            local_gdf = self.gdf.set_index("id_geohash").loc[self.process_ids][["geometry"]]
+            if self.output_geometry_all:
+                joined = local_gdf.join(self.breaks, how="left").reset_index(drop=False)
+            else:
+                joined = local_gdf.join(self.breaks, how="inner").reset_index(drop=False)
+            joined.to_parquet(output_file)
+        else:
+            self.logger.info("Saving break results without vector dataset geometries")
+            self.breaks.to_parquet(output_file)
 
     def get_water_dataset_type(self) -> str:
         """Determine the water dataset type based on the presence of specific variables in the dataset."""
