@@ -4,7 +4,7 @@
 Usage:
     water-timeseries breakpoint-analysis data.zarr output.parquet
     water-timeseries breakpoint-analysis data.zarr output.parquet -c 100 -j 20
-    water-timeseries plot-lake-timeseries data.zarr --lake-id abc123
+    water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
 """
 
 from pathlib import Path
@@ -58,8 +58,8 @@ def breakpoint_analysis(
         bbox_north: Maximum latitude (north)
 
     Example usage:
-        water-timeseries breakpoint-analysis data.zarr output.parquet
-        water-timeseries breakpoint-analysis data.zarr output.parquet -c 100 -j 20
+        water-timeseries breakpoint-analysis tests/data/lakes_dw_test.zarr output.parquet
+        water-timeseries breakpoint-analysis tests/data/lakes_dw_test.zarr output.parquet -c 100 -j 20
         water-timeseries breakpoint-analysis --config-file configs/config.yaml
     """
     # Load config file if provided
@@ -107,9 +107,9 @@ def breakpoint_analysis(
     pipeline.save_to_parquet()
 
 
-# Subcommand: plot lake timeseries
+# Subcommand: plot timeseries
 @app.command(group="Plotting")
-def plot_lake(
+def plot_timeseries(
     water_dataset_file: Optional[Path] = None,
     lake_id: Optional[str] = None,
     output_figure: Optional[Path] = None,
@@ -127,9 +127,9 @@ def plot_lake(
         config_file: Path to config YAML/JSON file
 
     Example usage:
-        water-timeseries plot-lake-timeseries data.zarr --lake-id abc123
-        water-timeseries plot-lake-timeseries data.zarr --lake-id abc123 --output-figure plot.png
-        water-timeseries plot-lake-timeseries --config-file configs/plot_config.yaml
+        water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
+        water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc --output-figure plot.png
+        water-timeseries plot-timeseries --config-file configs/plot_config.yaml
     """
     # Load config file if provided
     config_dict = load_config(config_file) if config_file else {}
