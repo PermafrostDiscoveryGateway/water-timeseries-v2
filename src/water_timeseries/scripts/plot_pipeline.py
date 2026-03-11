@@ -1,11 +1,10 @@
 # imports
-import matplotlib
 
 # Try to use interactive backend for popup windows
-try:
-    matplotlib.use("TkAgg")
-except:
-    pass  # Fall back to default if TkAgg not available
+# try:
+#     matplotlib.use("TkAgg")
+# except:
+#     pass  # Fall back to default if TkAgg not available
 from pathlib import Path
 from typing import Optional
 
