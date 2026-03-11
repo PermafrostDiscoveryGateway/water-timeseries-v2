@@ -184,3 +184,34 @@ uv run water-timeseries breakpoint-analysis --config-file config.yaml --n-jobs 8
 | `--bbox-north` | | Max latitude | None |
 
 *Can also be provided via config file
+
+## Plot Timeseries
+
+Plot time series for a specific lake using the CLI:
+
+```bash
+# Plot lake timeseries
+uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
+
+# Save figure to file
+uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc --output-figure plot.png
+
+# Save only (no popup window)
+uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc --output-figure plot.png --no-show
+
+# Use config file
+uv run water-timeseries plot-timeseries --config-file configs/plot_config.yaml
+```
+
+### Plot Options
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|--------|
+| `water_dataset_file` | | Path to water dataset (zarr or netCDF) | Required* |
+| `--lake-id` | | Geohash ID of the lake | Required* |
+| `--output-figure` | | Path to save output figure | None |
+| `--break-method` | | Break method to overlay (beast or simple) | None |
+| `--no-show` | | Don't show popup window | False |
+| `--config-file` | | Path to config YAML/JSON file | None |
+
+*Can also be provided via config file

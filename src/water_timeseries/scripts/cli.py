@@ -4,6 +4,7 @@
 Usage:
     water-timeseries breakpoint-analysis data.zarr output.parquet
     water-timeseries breakpoint-analysis data.zarr output.parquet -c 100 -j 20
+    water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
 """
 
 from pathlib import Path
@@ -18,6 +19,9 @@ from water_timeseries.scripts.break_pipeline import (
     load_config,
     merge_config_with_args,
 )
+
+# Import plotting function from plot_pipeline
+from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
 
 # Create the main app
 app = cyclopts.App(name="water-timeseries", help="Water timeseries analysis tools")
@@ -54,8 +58,8 @@ def breakpoint_analysis(
         bbox_north: Maximum latitude (north)
 
     Example usage:
-        water-timeseries breakpoint-analysis data.zarr output.parquet
-        water-timeseries breakpoint-analysis data.zarr output.parquet -c 100 -j 20
+        water-timeseries breakpoint-analysis tests/data/lakes_dw_test.zarr output.parquet
+        water-timeseries breakpoint-analysis tests/data/lakes_dw_test.zarr output.parquet -c 100 -j 20
         water-timeseries breakpoint-analysis --config-file configs/config.yaml
     """
     # Load config file if provided
@@ -101,6 +105,74 @@ def breakpoint_analysis(
     )
     pipeline.run_breaks()
     pipeline.save_to_parquet()
+
+
+# Subcommand: plot timeseries
+@app.command(group="Plotting")
+def plot_timeseries(
+    water_dataset_file: Optional[Path] = None,
+    lake_id: Optional[str] = None,
+    output_figure: Optional[Path] = None,
+    break_method: Optional[str] = None,
+    config_file: Optional[Path] = None,
+    show: bool = True,
+):
+    """Plot time series for a specific lake.
+
+    Args:
+        water_dataset_file: Path to water dataset file (zarr or netCDF)
+        lake_id: Geohash ID of the lake to plot
+        output_figure: Path to save the output figure
+        break_method: Break method to overlay (optional)
+        config_file: Path to config YAML/JSON file
+
+    Example usage:
+        water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
+        water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc --output-figure plot.png
+        water-timeseries plot-timeseries --config-file configs/plot_config.yaml
+    """
+    # Load config file if provided
+    config_dict = load_config(config_file) if config_file else {}
+
+    # Merge config with CLI args (CLI takes priority)
+    # Note: show is handled separately since it's a bool
+    config_dict = merge_config_with_args(
+        config_dict,
+        water_dataset_file=str(water_dataset_file) if water_dataset_file else None,
+        lake_id=lake_id,
+        output_figure=str(output_figure) if output_figure else None,
+        break_method=break_method,
+    )
+
+    # Get values from merged config
+    water_ds = config_dict.get("water_dataset_file")
+    lake_id_val = config_dict.get("lake_id")
+    output_fig = config_dict.get("output_figure")
+    break_method_val = config_dict.get("break_method")
+
+    # Validate required arguments
+    if not water_ds or not lake_id_val:
+        logger.error("water_dataset_file and lake_id are required. Provide via CLI arguments or config file.")
+        raise SystemExit(1)
+
+    # Log key parameters
+    logger.info(
+        f"Plotting lake timeseries with parameters: "
+        f"water_dataset_file={water_ds}, "
+        f"lake_id={lake_id_val}, "
+        f"output_figure={output_fig}, "
+        f"break_method={break_method_val}, "
+        f"show={show}"
+    )
+
+    # Use the imported function
+    plot_lake_timeseries(
+        water_dataset_file=water_ds,
+        lake_id=lake_id_val,
+        output_figure=output_fig,
+        break_method=break_method_val,
+        show=show,
+    )
 
 
 if __name__ == "__main__":

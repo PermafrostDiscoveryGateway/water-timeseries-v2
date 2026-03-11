@@ -172,6 +172,102 @@ class TestBeastBreakpoint:
         # Check index name
         assert result.index.name == "id_geohash"
 
+    def test_beast_breakpoint_b7uefy0bvcrc_jrc(self, jrc_test_dataset):
+        """Test BeastBreakpoint on JRC dataset with known break date.
+
+        The test dataset should have a first break at 2018-01-01.
+        """
+        import pandas as pd
+
+        dataset = JRCDataset(jrc_test_dataset)
+        bp = BeastBreakpoint()
+
+        # Use specific geohash
+        geohash_id = "b7uefy0bvcrc"
+
+        result = bp.calculate_break(dataset, geohash_id)
+
+        # Assert that it has breaks
+        assert len(result) > 0, f"Expected breaks for geohash {geohash_id}"
+
+        # Assert first_break is 2018-01-01
+        first_break = result["date_break"].iloc[0]
+        expected_break = pd.Timestamp("2018-01-01")
+        assert first_break == expected_break, f"Expected first break at {expected_break}, got {first_break}"
+
+    def test_beast_breakpoint_b7uefy0bvcrc_dw(self, dw_test_dataset):
+        """Test BeastBreakpoint on DW dataset with known break date.
+
+        The test dataset should have a first break at either 2018-06-01 or 2018-07-01.
+        """
+        import pandas as pd
+
+        dataset = DWDataset(dw_test_dataset)
+        bp = BeastBreakpoint()
+
+        # Use specific geohash
+        geohash_id = "b7uefy0bvcrc"
+
+        result = bp.calculate_break(dataset, geohash_id)
+
+        # Assert that it has breaks
+        assert len(result) > 0, f"Expected breaks for geohash {geohash_id}"
+
+        # Assert first_break is either 2018-06-01 or 2018-07-01
+        first_break = result["date_break"].iloc[0]
+        expected_breaks = [pd.Timestamp("2018-06-01"), pd.Timestamp("2018-07-01")]
+        assert first_break in expected_breaks, f"Expected first break at 2018-06-01 or 2018-07-01, got {first_break}"
+
+
+class TestSimpleBreakpointKnownBreak:
+    """Test SimpleBreakpoint detection with known break dates."""
+
+    def test_simple_breakpoint_b7uefy0bvcrc_jrc(self, jrc_test_dataset):
+        """Test SimpleBreakpoint on JRC dataset with known break date.
+
+        The test dataset should have a first break at 2018-01-01.
+        """
+        import pandas as pd
+
+        dataset = JRCDataset(jrc_test_dataset)
+        bp = SimpleBreakpoint()
+
+        # Use specific geohash
+        geohash_id = "b7uefy0bvcrc"
+
+        result = bp.calculate_break(dataset, geohash_id)
+
+        # Assert that it has breaks
+        assert len(result) > 0, f"Expected breaks for geohash {geohash_id}"
+
+        # Assert first_break is 2018-01-01
+        first_break = result["date_break"].iloc[0]
+        expected_break = pd.Timestamp("2018-01-01")
+        assert first_break == expected_break, f"Expected first break at {expected_break}, got {first_break}"
+
+    def test_simple_breakpoint_b7uefy0bvcrc_dw(self, dw_test_dataset):
+        """Test SimpleBreakpoint on DW dataset with known break date.
+
+        The test dataset should have a first break at either 2018-06-01 or 2018-07-01.
+        """
+        import pandas as pd
+
+        dataset = DWDataset(dw_test_dataset)
+        bp = SimpleBreakpoint()
+
+        # Use specific geohash
+        geohash_id = "b7uefy0bvcrc"
+
+        result = bp.calculate_break(dataset, geohash_id)
+
+        # Assert that it has breaks
+        assert len(result) > 0, f"Expected breaks for geohash {geohash_id}"
+
+        # Assert first_break is either 2018-06-01 or 2018-07-01
+        first_break = result["date_break"].iloc[0]
+        expected_breaks = [pd.Timestamp("2018-06-01"), pd.Timestamp("2018-07-01")]
+        assert first_break in expected_breaks, f"Expected first break at 2018-06-01 or 2018-07-01, got {first_break}"
+
 
 class TestBreakpointComparison:
     """Test comparing different breakpoint methods."""

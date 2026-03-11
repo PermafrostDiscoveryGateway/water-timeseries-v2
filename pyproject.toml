@@ -44,6 +44,7 @@ dependencies = [
     "cyclopts>=4.8.0",
     "rich>=14.3.3",
     "nbconvert>=7.17.0",
+    "tk>=0.1.0",
 ]
 
 [project.optional-dependencies]
@@ -70,6 +71,7 @@ docs = [
 
 [project.scripts]
 water-timeseries-bp = "water_timeseries.scripts.break_pipeline:main"
+water-timeseries-plot = "water_timeseries.scripts.plot_pipeline:main"
 water-timeseries = "water_timeseries.scripts.cli:app"
 
 [build-system]

@@ -8,7 +8,7 @@ different data sources and processing pipelines.
 import matplotlib.pyplot as plt
 import pandas as pd
 
-from .utils.plotting import (
+from water_timeseries.utils.plotting import (
     plot_water_time_series_dw,
     plot_water_time_series_jrc,
     prepare_data_for_plot_dw,
@@ -36,11 +36,12 @@ class LakeDataset:
         >>> normalized = lake_data.ds_normalized
     """
 
-    def __init__(self, ds):
+    def __init__(self, ds, id_field: str = "id_geohash"):
         """Initialize the LakeDataset.
 
         Args:
             ds (xr.Dataset): Input xarray Dataset with land cover or water classification data.
+            id_field (str): Name of the coordinate field that identifies individual time series (default: "id_geohash").
         """
         self.ds = ds
         # self.ds_normalized = None
@@ -50,6 +51,7 @@ class LakeDataset:
         self.data_columns = None
         self.ds_ismasked_ = False
         self.ds_normalized_ismasked_ = False
+        self.id_field = id_field
         self._preprocess()
         self._normalize_ds()
         self._mask_invalid()
@@ -179,7 +181,7 @@ class DWDataset(LakeDataset):
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
         """
-        self._normalize_ds()
+        # self._normalize_ds()
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna()
         df_plot = prepare_data_for_plot_dw(df, group_vegetation=True)
         normalization_factor = df["area_data"].max()
@@ -261,7 +263,6 @@ class JRCDataset(LakeDataset):
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
         """
-        self._normalize_ds()
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
 
