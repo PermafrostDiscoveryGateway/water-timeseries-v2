@@ -1,6 +1,6 @@
 [project]
 name = "water-timeseries"
-version = "0.3.1"
+version = "0.3.2"
 description = "Toolbox to download, analyze, and visualize water area time-series"
 readme = "README.md"
 authors = [
