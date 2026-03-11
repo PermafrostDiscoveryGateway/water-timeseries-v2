@@ -126,6 +126,33 @@ min_chunksize: 10
 
 *Can also be provided via config file
 
+#### Plot Lake Timeseries
+
+Plot time series for a specific lake:
+
+```bash
+# Plot lake timeseries
+uv run water-timeseries plot-lake-timeseries data.zarr --lake-id abc123
+
+# Save figure to file
+uv run water-timeseries plot-lake-timeseries data.zarr --lake-id abc123 --output-figure plot.png
+
+# Use config file
+uv run water-timeseries plot-lake-timeseries --config-file configs/plot_config.yaml
+```
+
+Plot options:
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|--------|
+| `water_dataset_file` | | Path to water dataset (zarr) | Required* |
+| `--lake-id` | | Geohash ID of the lake | Required* |
+| `--output-figure` | | Path to save output figure | None |
+| `--break-method` | | Break method to overlay | None |
+| `--config-file` | | Path to config YAML/JSON file | None |
+
+*Can also be provided via config file
+
 ## Installation
 
 ```bash
