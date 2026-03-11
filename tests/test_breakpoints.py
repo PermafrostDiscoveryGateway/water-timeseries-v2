@@ -38,6 +38,10 @@ class TestSimpleBreakpoint:
             "post_break_std",
             "post_break_min",
             "post_break_max",
+            "date_break_year",
+            "date_break_month",
+            "change_area_ha",
+            "change_area_perc",
         ]
 
         for col in expected_columns:
@@ -78,6 +82,10 @@ class TestSimpleBreakpoint:
             "post_break_std",
             "post_break_min",
             "post_break_max",
+            "date_break_year",
+            "date_break_month",
+            "change_area_ha",
+            "change_area_perc",
         ]
         for col in expected_columns:
             assert col in result.columns
@@ -122,6 +130,10 @@ class TestBeastBreakpoint:
             "post_break_std",
             "post_break_min",
             "post_break_max",
+            "date_break_year",
+            "date_break_month",
+            "change_area_ha",
+            "change_area_perc",
         ]
         for col in expected_columns:
             assert col in result.columns
@@ -162,6 +174,10 @@ class TestBeastBreakpoint:
             "post_break_std",
             "post_break_min",
             "post_break_max",
+            "date_break_year",
+            "date_break_month",
+            "change_area_ha",
+            "change_area_perc",
         ]
         for col in expected_columns:
             assert col in result.columns

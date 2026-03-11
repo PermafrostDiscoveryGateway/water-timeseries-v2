@@ -4,7 +4,11 @@ import Rbeast as rb
 from tqdm import tqdm
 
 from water_timeseries.dataset import LakeDataset
-from water_timeseries.utils.data import calculate_water_area_after, calculate_water_area_before
+from water_timeseries.utils.data import (
+    calculate_temporal_stats,
+    calculate_water_area_after,
+    calculate_water_area_before,
+)
 
 
 class BreakpointMethod:
@@ -109,6 +113,7 @@ class SimpleBreakpoint(BreakpointMethod):
 
         break_list = []
         df_water = dataset.ds.sel(id_geohash=object_id).to_dataframe()
+        # TODO: can be done over entire df?
         for i, row in df_out.iterrows():
             id_geohash = row.name
             df_breaks = pd.concat(
@@ -124,7 +129,10 @@ class SimpleBreakpoint(BreakpointMethod):
             )
             df_breaks.name = id_geohash
             break_list.append(df_breaks)
+
         break_df = pd.concat(break_list, axis=1).T
+        # calculate additional stats
+        break_df = calculate_temporal_stats(break_df)
 
         return break_df
 
@@ -213,6 +221,8 @@ class BeastBreakpoint(BreakpointMethod):
             df_breaks.name = id_geohash
             break_list.append(df_breaks)
         break_df = pd.concat(break_list, axis=1).T
+
         break_df.index.name = "id_geohash"
+        break_df = calculate_temporal_stats(break_df)
 
         return break_df

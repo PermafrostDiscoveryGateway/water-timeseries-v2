@@ -1,3 +1,6 @@
+import pandas as pd
+
+
 def calculate_water_area_after(
     df_water, break_date_after, water_column: str, stats=["mean", "median", "std", "min", "max"]
 ):
@@ -24,3 +27,15 @@ def get_water_dataset_type(input_ds) -> str:
         raise ValueError("Unknown water dataset type")
 
     return water_dataset_type
+
+
+def calculate_temporal_stats(df: pd.DataFrame) -> pd.DataFrame:
+    """Calculate temporal statistics for a given DataFrame."""
+    breaks = pd.to_datetime(df["date_break"])
+    df["date_break_year"] = breaks.dt.year
+    df["date_break_month"] = breaks.dt.month
+    # change area ha
+    df["change_area_ha"] = df["pre_break_median"] - df["post_break_median"]
+    # change area perc
+    df["change_area_perc"] = (df["change_area_ha"] / df["pre_break_median"]) * 100
+    return df
