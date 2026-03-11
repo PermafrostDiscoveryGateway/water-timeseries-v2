@@ -6,6 +6,7 @@ Usage:
     water-timeseries breakpoint-analysis data.zarr output.parquet -c 100 -j 20
     water-timeseries plot-lake-timeseries data.zarr --lake-id abc123
 """
+
 from pathlib import Path
 from typing import Optional
 
@@ -18,6 +19,7 @@ from water_timeseries.scripts.break_pipeline import (
     load_config,
     merge_config_with_args,
 )
+
 # Import plotting function from plot_pipeline
 from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
 
@@ -116,14 +118,14 @@ def plot_lake(
     show: bool = True,
 ):
     """Plot time series for a specific lake.
-    
+
     Args:
         water_dataset_file: Path to water dataset file (zarr or netCDF)
         lake_id: Geohash ID of the lake to plot
         output_figure: Path to save the output figure
         break_method: Break method to overlay (optional)
         config_file: Path to config YAML/JSON file
-    
+
     Example usage:
         water-timeseries plot-lake-timeseries data.zarr --lake-id abc123
         water-timeseries plot-lake-timeseries data.zarr --lake-id abc123 --output-figure plot.png
@@ -131,7 +133,7 @@ def plot_lake(
     """
     # Load config file if provided
     config_dict = load_config(config_file) if config_file else {}
-    
+
     # Merge config with CLI args (CLI takes priority)
     # Note: show is handled separately since it's a bool
     config_dict = merge_config_with_args(
@@ -141,18 +143,18 @@ def plot_lake(
         output_figure=str(output_figure) if output_figure else None,
         break_method=break_method,
     )
-    
+
     # Get values from merged config
     water_ds = config_dict.get("water_dataset_file")
     lake_id_val = config_dict.get("lake_id")
     output_fig = config_dict.get("output_figure")
     break_method_val = config_dict.get("break_method")
-    
+
     # Validate required arguments
     if not water_ds or not lake_id_val:
         logger.error("water_dataset_file and lake_id are required. Provide via CLI arguments or config file.")
         raise SystemExit(1)
-    
+
     # Log key parameters
     logger.info(
         f"Plotting lake timeseries with parameters: "
@@ -162,7 +164,7 @@ def plot_lake(
         f"break_method={break_method_val}, "
         f"show={show}"
     )
-    
+
     # Use the imported function
     plot_lake_timeseries(
         water_dataset_file=water_ds,
