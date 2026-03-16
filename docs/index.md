@@ -1,6 +1,18 @@
-# water-timeseries
+# water-timeseries-v2
 
 Automated analysis of water timeseries data from satellite imagery and remote sensing sources.
+
+## Documentation
+
+**📖 Full Documentation**: [View Documentation](https://PermafrostDiscoveryGateway.github.io/water-timeseries-v2/)
+
+The documentation includes:
+- Getting started guide
+- API reference (auto-generated from code)
+- Usage examples
+- Tutorial notebooks
+
+Documentation is automatically built and deployed on every push to `main` using GitHub Actions.
 
 ## Features
 
@@ -10,9 +22,10 @@ Automated analysis of water timeseries data from satellite imagery and remote se
 - **Breakpoint Detection**: Statistical (SimpleBreakpoint) and advanced (RBEAST) methods for detecting water extent changes
 - **Batch Processing**: Efficient processing of multiple spatial entities
 - **Comprehensive Testing**: Full test coverage including breakpoint detection, normalization, and integration tests
-- **Command Line Interface**: Run breakpoint detection from the command line with CLI tool
 
 ## Quick Start
+
+### Python API
 
 ```python
 from water_timeseries.dataset import DWDataset
@@ -24,41 +37,28 @@ ds = xr.open_dataset("water_data.nc")
 # Process with Dynamic World handler
 processor = DWDataset(ds)
 
+# Access time series
+water_extent = processor.ds_normalized[processor.water_column]
+
 # Access normalized time series
 water_extent = processor.ds_normalized["water"]
 ```
 
-## Installation
+### Command Line Interface
+
+The package provides a hierarchical CLI tool `water-timeseries` for running breakpoint detection on water datasets.
+
+#### Installation
 
 ```bash
-git clone https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2
-cd water-timeseries-v2
-pip install -e ".[dev]"
+# Using uv (recommended)
+uv sync
+
+# Or using pip
+pip install .
 ```
 
-## Main Classes
-
-### Datasets
-
-- **DWDataset**: Dynamic World land cover processor
-- **JRCDataset**: JRC water classification processor
-
-### Breakpoints
-
-- **SimpleBreakpoint**: Statistical breakpoint detection
-- **BeastBreakpoint**: Advanced RBEAST-based detection
-
-## Documentation
-
-- [Getting Started](getting_started.md) - Installation and setup guide
-- [Examples](examples.md) - Usage examples and tutorials
-- [API Reference](api/index.md) - Complete API documentation
-
-## Command Line Interface
-
-The package provides a hierarchical CLI tool `water-timeseries` for water timeseries analysis.
-
-### Quick Start
+#### Basic Usage
 
 ```bash
 # Show help
@@ -70,14 +70,68 @@ uv run water-timeseries breakpoint-analysis --help
 # Show plot-timeseries subcommand help
 uv run water-timeseries plot-timeseries --help
 
-# Run breakpoint analysis
+# Run with required arguments
 uv run water-timeseries breakpoint-analysis data.zarr output.parquet
 
-# Run with config file
+# Run with optional parameters
+uv run water-timeseries breakpoint-analysis \
+    data.zarr \
+    output.parquet \
+    --chunksize 100 \
+    --n-jobs 4
+```
+
+#### Using a Config File
+
+You can also use a YAML configuration file:
+
+```bash
 uv run water-timeseries breakpoint-analysis --config-file configs/config.yaml
 ```
 
-### Plot Timeseries
+Example config file:
+
+```yaml
+# config.yaml
+water_dataset_file: /path/to/data.zarr
+output_file: /path/to/output.parquet
+
+# Optional: vector dataset for bbox filtering
+vector_dataset_file: /path/to/lakes.parquet
+
+# Bounding box filter (optional)
+bbox_west: -160
+bbox_east: -155
+bbox_north: 68
+bbox_south: 66
+
+# Processing options
+chunksize: 100
+n_jobs: 20
+min_chunksize: 10
+```
+
+#### CLI Options
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|--------|
+| `water_dataset_file` | | Path to water dataset (zarr or parquet) | Required* |
+| `output_file` | | Path to output parquet file | Required* |
+| `--config-file` | | Path to config YAML/JSON file | None |
+| `--vector-dataset-file` | `-v` | Path to vector dataset (gpkg, shp, geojson) | None |
+| `--chunksize` | `-c` | Number of IDs per chunk | 100 |
+| `--n-jobs` | `-j` | Number of parallel jobs (>1 for Ray) | 1 |
+| `--min-chunksize` | `-m` | Minimum chunk size | 10 |
+| `--bbox-west` | | Minimum longitude (west) | -180 |
+| `--bbox-south` | | Minimum latitude (south) | 60 |
+| `--bbox-east` | | Maximum longitude (east) | 180 |
+| `--bbox-north` | | Maximum latitude (north) | 90 |
+| `--output-geometry` | | Export output with geometries | True |
+| `--output-geometry-all` | | Export output all geometries including non breakpoints | True |
+
+*Can also be provided via config file
+
+#### Plot Timeseries
 
 Plot time series for a specific lake:
 
@@ -93,31 +147,61 @@ uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc --outpu
 
 # Use config file
 uv run water-timeseries plot-timeseries --config-file configs/plot_config.yaml
+
+# Plot lake timeseries with break detection
+uv run water-timeseries plot-timeseries tests/data/lakes_dw_test.zarr --lake-id b7uefy0bvcrc --output-figure examples/dw_example_b7uefy0bvcrc.png --break-method beast
 ```
 
-### Configuration File
+![Example Timeseries Plot](../examples/dw_example_b7uefy0bvcrc.png)
 
-Create a YAML config file:
-
-```yaml
-water_dataset_file: /path/to/data.zarr
-output_file: /path/to/output.parquet
-vector_dataset_file: /path/to/lakes.parquet
-chunksize: 100
-n_jobs: 20
-bbox_west: -160
-bbox_east: -155
-bbox_north: 68
-bbox_south: 66
+```bash
+# Plot lake timeseries with JRC data
+uv run water-timeseries plot-timeseries tests/data/lakes_jrc_test.zarr --lake-id b7uefy0bvcrc --output-figure examples/jrc_example_b7uefy0bvcrc.png --break-method beast
 ```
+
+![Example Timeseries Plot](../examples/jrc_example_b7uefy0bvcrc.png)
+
+Plot options:
+
+| Option | Short | Description | Default |
+|--------|-------|-------------|--------|
+| `water_dataset_file` | | Path to water dataset (zarr or netCDF) | Required* |
+| `--lake-id` | | Geohash ID of the lake | Required* |
+| `--output-figure` | | Path to save output figure | None |
+| `--break-method` | | Break method to overlay (beast or simple) | None |
+| `--no-show` | | Don't show popup window, only save if output-figure is provided | False |
+| `--config-file` | | Path to config YAML/JSON file | None |
+
+*Can also be provided via config file
+
+## Main Classes
+
+### Datasets
+
+- **DWDataset**: Dynamic World land cover processor
+- **JRCDataset**: JRC water classification processor
+
+### Breakpoints
+
+- **SimpleBreakpoint**: Statistical breakpoint detection
+- **BeastBreakpoint**: Advanced RBEAST-based detection
+
+## Documentation Links
+
+- [Getting Started](getting_started.md) - Installation and setup guide
+- [Examples](examples.md) - Usage examples and tutorials
+- [API Reference](api/index.md) - Complete API documentation
 
 ## Contributing
 
 We welcome contributions! Please ensure you:
-
 1. Add docstrings to new functions and classes (Google style)
 2. Update documentation in the `docs/` folder
 3. Run tests before submitting PRs
+
+## License
+
+[Add your license here]
 
 ## Author
 
