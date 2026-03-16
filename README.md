@@ -145,7 +145,20 @@ uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc --outpu
 
 # Use config file
 uv run water-timeseries plot-timeseries --config-file configs/plot_config.yaml
+
+# Plot lake timeseries
+uv run water-timeseries plot-timeseries tests/data/lakes_dw_test.zarr --lake-id b7uefy0bvcrc --output-figure examples/dw_example_b7uefy0bvcrc.png --break-method beast
+
 ```
+
+![Example Timeseries Plot](examples/dw_example_b7uefy0bvcrc.png)
+
+```
+# Plot lake timeseries
+uv run water-timeseries plot-timeseries tests/data/lakes_jrc_test.zarr --lake-id b7uefy0bvcrc --output-figure examples/jrc_example_b7uefy0bvcrc.png --break-method beast
+```
+
+![Example Timeseries Plot](examples/jrc_example_b7uefy0bvcrc.png)
 
 Plot options:
 

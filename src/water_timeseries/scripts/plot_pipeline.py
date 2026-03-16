@@ -99,6 +99,10 @@ def plot_lake_timeseries(
 
     # Save figure if output path provided
     if output_figure:
+        parent_dir = Path(output_figure).parent
+        if not parent_dir.exists():
+            logger.info(f'Creating output_directory "{str(parent_dir)}"')
+            parent_dir.mkdir(exist_ok=True)
         fig.savefig(output_figure)
         logger.info(f"Saved figure to {output_figure}")
 
