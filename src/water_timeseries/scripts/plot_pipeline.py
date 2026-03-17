@@ -17,7 +17,6 @@ from water_timeseries.breakpoint import BeastBreakpoint, SimpleBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.utils.data import get_water_dataset_type
 
-
 app = typer.Typer(help="Plot time series of dataset")
 
 

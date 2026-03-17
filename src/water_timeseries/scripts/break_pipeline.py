@@ -141,7 +141,7 @@ class BreakpointPipeline:
             self.input_ds = self.apply_bbox_filter()
 
         self.chunked_ds = self.chunk_dataset()
-        
+
         # Log initialization if logger is provided
         if logger:
             logger.info(

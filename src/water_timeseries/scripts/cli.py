@@ -7,13 +7,13 @@ Usage:
     water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
 """
 
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 import cyclopts
 from loguru import logger
-import sys
 
 # Import pipeline and utilities from break_pipeline
 from water_timeseries.scripts.break_pipeline import (
@@ -31,13 +31,14 @@ app = cyclopts.App(name="water-timeseries", help="Water timeseries analysis tool
 
 # Helper function to configure logging
 
+
 def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
     """Configure logging with verbosity control.
-    
+
     Args:
         logfile: Path to log file. If not provided, logs to console only.
         verbose: Verbosity level (0=INFO, 1=DEBUG)
-    
+
     Verbosity flags:
         - No flag or -v: INFO level (default)
         - -v: DEBUG level
@@ -47,7 +48,7 @@ def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
         log_level = "DEBUG"
     else:
         log_level = "INFO"
-    
+
     # Generate default logfile name from subcommand and timestamp
     if logfile is None:
         try:
@@ -62,13 +63,8 @@ def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
         # If no logfile set, log to console only
         if logfile is None:
             return
-    
-    logger.add(
-        logfile, 
-        rotation="10 MB", 
-        retention="1 week", 
-        level=log_level
-    )
+
+    logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
     print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
 
 
