@@ -14,6 +14,8 @@ import geemap
 import geopandas as gpd
 import pandas as pd
 
+import os
+
 from water_timeseries.utils.earthengine import calc_monthly_dw, create_dw_classes_mask, drop_z_from_gdf
 
 
@@ -50,22 +52,22 @@ class EarthEngineDownloader:
         ee_auth: Whether to authenticate with Earth Engine.
     """
 
-    def __init__(self, ee_project: str, output_dir: Optional[str] = None, ee_auth: bool = False):
+    def __init__(self, ee_project: Optional[str] = None, output_dir: Optional[str] = None, ee_auth: bool = False):
         """
         Initialize the Earth Engine Downloader.
 
         Args:
-            ee_project: Google Earth Engine project ID.
+            ee_project: Google Earth Engine project ID. If None, will check
+                the EE_PROJECT environment variable.
             output_dir: Output directory for downloaded data (optional).
-            ee_auth: Whether to authenticate with Earth Engine (default: True).
+            ee_auth: Whether to authenticate with Earth Engine (default: False).
 
         Raises:
             ValueError: If ee_project is empty or invalid.
         """
-        if not ee_project or not isinstance(ee_project, str):
-            raise ValueError("ee_project must be a non-empty string")
-
+        # Use _check_ee_initialization to handle project ID resolution
         self.ee_project = ee_project
+        self.ee_project = self._check_ee_initialization()
         self.output_dir = Path(output_dir) if output_dir else Path("downloads")
         self.ee_auth = ee_auth
         self.dw_bandnames = [
@@ -92,6 +94,41 @@ class EarthEngineDownloader:
         """
         self.output_dir.mkdir(parents=True, exist_ok=True)
         return self.output_dir
+
+    def _check_ee_initialization(self) -> str:
+        """Check and return the Earth Engine project ID.
+
+        Checks the ee_project attribute first, and if None, falls back to
+        checking the EE_PROJECT environment variable.
+
+        Returns:
+            str: The Earth Engine project ID.
+
+        Raises:
+            ValueError: If neither ee_project nor EE_PROJECT env var is set, or
+                if the project ID is an empty string.
+        """
+        # First check if ee_project is set and non-empty
+        if self.ee_project is not None and isinstance(self.ee_project, str):
+            if self.ee_project.strip() == "":
+                raise ValueError(
+                    "ee_project must be provided or set as EE_PROJECT environment variable"
+                )
+            return self.ee_project
+
+        # If ee_project is None, check environment variable
+        ee_project_env = os.getenv("EE_PROJECT")
+        if ee_project_env is not None and isinstance(ee_project_env, str):
+            if ee_project_env.strip() == "":
+                raise ValueError(
+                    "ee_project must be provided or set as EE_PROJECT environment variable"
+                )
+            return ee_project_env
+
+        # If neither is set, raise an error
+        raise ValueError(
+            "ee_project must be provided or set as EE_PROJECT environment variable"
+        )
 
     def download_dw_monthly(
         self,
