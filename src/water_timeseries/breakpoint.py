@@ -1,16 +1,22 @@
 """Breakpoint detection strategies for water‑timeseries.
 
-This module defines a small hierarchy of classes used by the CLI and the
-pipeline:
+This module provides a hierarchy of breakpoint detection methods for analyzing
+water‑timeseries data. It includes:
 
-* ``BreakpointMethod`` – abstract base with shared helpers.
+* ``BreakpointMethod`` – abstract base class with shared helpers.
 * ``SimpleBreakpoint`` – a fast rolling‑window statistical detector.
 * ``BeastBreakpoint`` – a Bayesian RBEAST‑based detector.
 
 Each concrete class implements ``calculate_break`` for a single lake and
-inherits ``calculate_breaks_batch`` from the base class.  The classes can be
+inherits ``calculate_breaks_batch`` from the base class. The classes can be
 used directly in Python code *or* indirectly through the ``water-timeseries``
 CLI.
+
+Example
+-------
+>>> from water_timeseries.breakpoint import SimpleBreakpoint
+>>> breakpoint = SimpleBreakpoint(kwargs_break=dict(window=3, method="median", threshold=-0.25))
+>>> # breakpoint.calculate_break(dataset)  # Returns DataFrame with breakpoint info
 """
 
 import numpy as np
@@ -31,41 +37,69 @@ class BreakpointMethod:
 
     Parameters
     ----------
-    method_name: str
+    method_name : str
         Short identifier stored in the ``break_method`` column of the output
-        DataFrames.  Sub‑classes pass values such as ``"simple"`` or ``"rbeast"``.
+        DataFrames. Sub‑classes pass values such as ``"simple"`` or ``"rbeast"``.
     """
 
-    def __init__(self, method_name):
+    def __init__(self, method_name: str):
         self.method_name = method_name
 
     def get_first_break_date(self, df: pd.DataFrame, column: str = "water") -> tuple:
         """Placeholder implementation for the abstract base.
 
         Concrete subclasses override this method.  The default returns a
-        ``(None, None)`` tuple so that calling code can safely handle the lack of
+        ``(None, None, None)`` tuple so that calling code can safely handle the lack of
         a breakpoint.
-        """
-        return (None, None)
 
-    def calculate_break(self, dataset):
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame with a datetime-like index and a water column.
+        column : str, optional
+            Column name to evaluate. Defaults to "water".
+
+        Returns
+        -------
+        tuple
+            (first_break_date, previous_date, after_date) - All values are None
+            for the default implementation.
+        """
+        return (None, None, None)
+
+    def calculate_break(self, dataset: LakeDataset) -> pd.DataFrame:
         """Calculate breakpoints for a single object.
 
         Sub‑classes must implement the actual detection algorithm and return a
         ``pandas.DataFrame`` containing at least the columns defined in
         ``self.breakpoint_columns``.
+
+        Parameters
+        ----------
+        dataset : LakeDataset
+            Dataset containing lake water‑area data.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing breakpoint information.
         """
         pass
 
-    def calculate_breaks_batch(self, dataset, progress_bar=False):
+    def calculate_breaks_batch(self, dataset: LakeDataset, progress_bar: bool = False) -> pd.DataFrame:
         """Run ``calculate_break`` for every lake in *dataset*.
 
         Parameters
         ----------
-        dataset : water_timeseries.dataset.LakeDataset
+        dataset : LakeDataset
             Dataset providing both raw and normalized water‑area arrays.
-        progress_bar : bool, default ``False``
-            Show a ``tqdm`` progress bar when ``True``.
+        progress_bar : bool, optional
+            Show a ``tqdm`` progress bar when ``True``. Default is ``False``.
+
+        Returns
+        -------
+        pd.DataFrame
+            Concatenated results from all lakes in the dataset.
         """
         # Batch processing of breakpoints for all objects in the dataset
         # dataset.ds_normalized.load()
@@ -83,7 +117,31 @@ class BreakpointMethod:
 
 
 class SimpleBreakpoint(BreakpointMethod):
-    def __init__(self, kwargs_break: dict = dict(window=3, method="median", threshold=0.25)):
+    """Fast rolling‑window statistical breakpoint detector.
+
+    This method detects breakpoints by comparing current water values against
+    rolling window statistics (mean, median, or max). A breakpoint is identified
+    when values fall below a threshold in both a primary and secondary window
+    for consecutive time points, which helps reduce false positives.
+
+    Parameters
+    ----------
+    kwargs_break : dict, optional
+        Configuration dictionary with the following keys:
+        - ``window`` : int, default 3
+            Size of the primary rolling window.
+        - ``method`` : str, default "median"
+            Rolling statistic to use: "mean", "median", or "max".
+        - ``threshold`` : float, default -0.25
+            Threshold for detecting a break (values below this indicate a break).
+
+    Attributes
+    ----------
+    breakpoint_columns : list
+        List of column names in the output DataFrame.
+    """
+
+    def __init__(self, kwargs_break: dict = dict(window=3, method="median", threshold=-0.25)):
         super().__init__(method_name="simple")
         self.kwargs_break = kwargs_break
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
@@ -91,37 +149,66 @@ class SimpleBreakpoint(BreakpointMethod):
     def get_first_break_date(self, df: pd.DataFrame, column: str = "water") -> tuple:
         """Find the first break date and the immediately preceding index value.
 
-        Args:
-            df (pd.DataFrame): DataFrame with a datetime-like index and a water column.
-            column (str, optional): Column name to evaluate. Defaults to "water".
+        The detection uses a dual‑window approach: a primary rolling window
+        (kwargs_break['window']) and a secondary window that is window+2.
+        A break is detected when the current value falls below BOTH window
+        calculations for consecutive points, reducing false positives.
 
-        Returns:
-            tuple: (first_break_date (pd.Timestamp or None), previous_date (pd.Timestamp or None), after_date (pd.Timestamp or None))
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame with a datetime‑like index and a water column.
+        column : str, optional
+            Column name to evaluate. Defaults to "water".
+
+        Returns
+        -------
+        tuple
+            (first_break_date, previous_date, after_date) where each element is
+            a pandas Timestamp or None if no break was found.
         """
         df = df.drop(columns=["id_geohash"]).dropna()
 
-        # Calculate rolling difference
+        # Determine the rolling window sizes
+        primary_window = self.kwargs_break["window"]
+        secondary_window = primary_window + 2
+
+        # Calculate rolling statistics based on the specified method
+        # (mean, median, or max of the rolling window)
         if self.kwargs_break["method"] == "max":
-            rolling_diff = df - df.rolling(window=self.kwargs_break["window"]).max()
+            primary_rolling = df.rolling(window=primary_window).max()
+            secondary_rolling = df.rolling(window=secondary_window).max()
         elif self.kwargs_break["method"] == "mean":
-            rolling_diff = df - df.rolling(window=self.kwargs_break["window"]).mean()
+            primary_rolling = df.rolling(window=primary_window).mean()
+            secondary_rolling = df.rolling(window=secondary_window).mean()
         elif self.kwargs_break["method"] == "median":
-            rolling_diff = df - df.rolling(window=self.kwargs_break["window"]).median()
+            primary_rolling = df.rolling(window=primary_window).median()
+            secondary_rolling = df.rolling(window=secondary_window).median()
         else:
-            raise ValueError("Please assign correct rolling value [max, mean, median]")
+            raise ValueError("Please assign correct rolling value: 'max', 'mean', or 'median'")
 
-        # Create a boolean mask for values less than the threshold
-        mask = rolling_diff[column] < self.kwargs_break["threshold"]
+        # Calculate the difference from the rolling reference
+        # This measures how much the current value deviates from the window baseline
+        rolling_diff_primary = df - primary_rolling
+        rolling_diff_secondary = df - secondary_rolling
 
-        # Shift the mask to check for consecutive values
-        consecutive_mask = mask & mask.shift(-1)
+        # Create masks for values that fall below the threshold
+        # Both windows must indicate a break for a point to be considered
+        mask_primary = rolling_diff_primary[column] < self.kwargs_break["threshold"]
+        mask_secondary = rolling_diff_secondary[column] < self.kwargs_break["threshold"]
 
-        # Get the first index where there are at least two consecutive True values
+        # Require consecutive confirmation: current point meets condition
+        # AND the next point also meets it (using shifted mask)
+        consecutive_mask = mask_primary & mask_secondary.shift(-1)
+
+        # Find the first break date where both conditions are met
         first_break_date = (
-            rolling_diff[consecutive_mask].index.min() if not rolling_diff[consecutive_mask].empty else None
+            rolling_diff_primary[consecutive_mask].index.min()
+            if not rolling_diff_primary[consecutive_mask].empty
+            else None
         )
 
-        # Determine the preceding index value (previous_date) if available
+        # Determine the preceding and following dates if a break was found
         previous_date = None
         after_date = None
         if first_break_date is not None:
@@ -140,6 +227,21 @@ class SimpleBreakpoint(BreakpointMethod):
         return first_break_date, previous_date, after_date
 
     def calculate_break(self, dataset: LakeDataset, object_id: str) -> pd.DataFrame:
+        """Calculate breakpoints for a single lake object.
+
+        Parameters
+        ----------
+        dataset : LakeDataset
+            Dataset containing lake water‑area data.
+        object_id : str
+            Unique identifier (geohash) for the lake object.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing breakpoint information with columns defined in
+            ``self.breakpoint_columns`` plus calculated temporal statistics.
+        """
         # dataset._normalize_ds()
         ds = dataset.ds_normalized
         df_normed = ds.sel(id_geohash=object_id).to_pandas()
@@ -158,7 +260,7 @@ class SimpleBreakpoint(BreakpointMethod):
 
         break_list = []
         df_water = dataset.ds.sel(id_geohash=object_id).to_dataframe()
-        # TODO: can be done over entire df?
+        # TODO: can this be optimized to process the entire dataframe?
         for i, row in df_out.iterrows():
             id_geohash = row.name
             df_breaks = pd.concat(
@@ -183,6 +285,29 @@ class SimpleBreakpoint(BreakpointMethod):
 
 
 class BeastBreakpoint(BreakpointMethod):
+    """Bayesian RBEAST-based breakpoint detector.
+
+    This method uses the RBEAST library to detect breakpoints in water‑timeseries
+    data using Bayesian change‑point detection. It identifies points where the
+    statistical properties of the time series change significantly.
+
+    Parameters
+    ----------
+    kwargs_break : dict, optional
+        Configuration dictionary for RBEAST priors. Common keys include:
+        - ``trendMaxOrder`` : int, default 0
+            Maximum order of the trend component.
+        - ``trendMinSepDist`` : int, default 1
+            Minimum separation distance between change points.
+    break_threshold : float, optional
+        Probability threshold for detecting a break point. Default is 0.5.
+
+    Attributes
+    ----------
+    breakpoint_columns : list
+        List of column names in the output DataFrame.
+    """
+
     def __init__(
         self,
         kwargs_break: dict = dict(trendMaxOrder=0, trendMinSepDist=1),
@@ -201,6 +326,21 @@ class BeastBreakpoint(BreakpointMethod):
         ]
 
     def calculate_break(self, dataset: LakeDataset, object_id: str) -> pd.DataFrame:
+        """Calculate breakpoints for a single lake object using RBEAST.
+
+        Parameters
+        ----------
+        dataset : LakeDataset
+            Dataset containing lake water‑area data.
+        object_id : str
+            Unique identifier (geohash) for the lake object.
+
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing breakpoint information with columns defined in
+            ``self.breakpoint_columns`` plus calculated temporal statistics.
+        """
         # Example implementation for BeastBreakpoint
         # In a real application, this would use the rbeast library or similar
         ds = dataset.ds_normalized
@@ -221,9 +361,9 @@ class BeastBreakpoint(BreakpointMethod):
         if break_indices.size == 0:
             return pd.DataFrame(columns=self.breakpoint_columns)
 
-        # # get previous date
+        # get previous date
         break_indices_before = np.array(break_indices) - 1
-        # # get after date
+        # get after date
         break_indices_after = np.array(break_indices) + 1
         # return df
         break_dates_before = df.iloc[break_indices_before]["date"].to_list()
