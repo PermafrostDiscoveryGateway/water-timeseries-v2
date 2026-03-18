@@ -45,6 +45,8 @@ dependencies = [
     "rich>=14.3.3",
     "nbconvert>=7.17.0",
     "tk>=0.1.0",
+    "geemap>=0.37.1",
+    "eemont>=2025.7.1",
 ]
 
 [project.optional-dependencies]
