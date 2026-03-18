@@ -184,7 +184,7 @@ class EarthEngineDownloader:
         # except:
         #     print("crashed")
 
-        return ds
+        return ds.drop_vars('reducer')
 
 
 # Example usage
