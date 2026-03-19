@@ -53,46 +53,50 @@ import os
 from loguru import logger
 from water_timeseries.downloader import EarthEngineDownloader
 
-# Set your EE project
+# Set your EE project (or pass directly as ee_project parameter)
 os.environ["EE_PROJECT"] = "your-project"
 
-# Download data
+# Create downloader instance
 dl = EarthEngineDownloader(ee_auth=True, logger=logger)
+
+# Basic download - download all features
 ds = dl.download_dw_monthly(
-    vector_dataset="lakes.parquet",
+    vector_dataset="tests/data/lake_polygons.parquet",
     name_attribute="id_geohash",
     years=[2024],
     months=[7, 8],
+)
+
+# Download only specific IDs
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    id_list=["b7g6g1ny1mf7", "b7g4yc12k4yj", "b7g6c8gye56e"],  # Filter by specific geohash IDs
+    years=[2024],
+    months=[7, 8],
+)
+
+# Parallel download (faster for large datasets)
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    n_parallel=4,  # Use 4 parallel workers
+    max_total_requests=500,  # Request limit per chunk
+    years=[2024],
+    months=[7, 8],
+)
+
+# Preview download without actually downloading (useful for testing)
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    no_download=True,  # Only logs parameters, skips actual download
 )
 ```
 
 ### Command Line Interface
 
-The package provides a hierarchical CLI tool `water-timeseries` for running breakpoint detection on water datasets.
-
-#### Installation
-
 ```bash
-# Using uv (recommended)
-uv sync
-
-# Or using pip
-pip install .
-```
-
-#### Basic Usage
-
-```bash
-# Show help
-uv run water-timeseries --help
-
-# Show breakpoint-analysis subcommand help
-uv run water-timeseries breakpoint-analysis --help
-
-# Run with required arguments
-uv run water-timeseries breakpoint-analysis data.zarr output.parquet
-
-# Run with optional parameters
 uv run water-timeseries breakpoint-analysis \
     data.zarr \
     output.parquet \

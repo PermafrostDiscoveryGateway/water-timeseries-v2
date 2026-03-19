@@ -43,6 +43,122 @@ normalized_data = dataset.ds_normalized
 preprocessed_ds = dataset.ds
 ```
 
+## Downloading from Google Earth Engine
+
+The `EarthEngineDownloader` class allows you to download Dynamic World land cover data directly from Google Earth Engine.
+
+### Initialization
+
+```python
+import os
+from loguru import logger
+from water_timeseries.downloader import EarthEngineDownloader
+
+# Set your EE project via environment variable
+os.environ["EE_PROJECT"] = "your-project"
+
+# Or pass directly as parameter
+dl = EarthEngineDownloader(ee_project="your-project", ee_auth=True, logger=logger)
+```
+
+### Download Parameters
+
+The `download_dw_monthly()` method supports the following parameters:
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `vector_dataset` | str/Path | Path to input vector dataset (Parquet format) | Required |
+| `name_attribute` | str | Column name in vector dataset for grouping | Required |
+| `years` | List[int] | Years to process | [2017-2025] |
+| `months` | List[int] | Months to process (default: June-September) | [6,7,8,9] |
+| `bbox_west/east/north/south` | float | Bounding box for spatial filtering | Global (-180 to 180, -90 to 90) |
+| `id_list` | List[str] | Filter by specific IDs (from name_attribute column) | None (all) |
+| `scale` | float | Pixel scale in meters | 10 |
+| `max_total_requests` | int | Max requests per chunk (controls chunking) | 500 |
+| `n_parallel` | int | Number of parallel workers (1 = sequential) | 1 |
+| `no_download` | bool | If True, only log parameters without downloading | False |
+
+### Usage Examples
+
+#### Basic Download
+
+Download all features from the test dataset:
+
+```python
+dl = EarthEngineDownloader(ee_project="your-project", ee_auth=True, logger=logger)
+
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    years=[2024],
+    months=[7, 8],
+)
+```
+
+#### Filter by Specific IDs
+
+Download only specific lakes using their geohash IDs:
+
+```python
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    id_list=["b7g6g1ny1mf7", "b7g4yc12k4yj", "b7g6c8gye56e"],
+    years=[2024],
+    months=[7, 8],
+)
+```
+
+#### Parallel Download
+
+Speed up large downloads by using multiple parallel workers:
+
+```python
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    n_parallel=4,  # Use 4 parallel workers
+    max_total_requests=500,  # Control chunk size
+    years=[2024, 2025],
+    months=[6, 7, 8, 9],
+)
+```
+
+#### Spatial Bounding Box Filter
+
+Filter by geographic region:
+
+```python
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    bbox_west=-165,
+    bbox_east=-164,
+    bbox_south=66.2,
+    bbox_north=66.6,
+    years=[2024],
+    months=[7, 8],
+)
+```
+
+#### Preview Mode (No Download)
+
+Test your parameters without actually downloading data:
+
+```python
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    years=[2024],
+    months=[7, 8],
+    no_download=True,  # Only logs parameters, skips actual download
+)
+```
+
+### Test Dataset
+
+The package includes a test dataset at `tests/data/lake_polygons.parquet` with 118 lake polygons in Alaska.
+
 ## Command Line Interface
 
 The package includes a hierarchical CLI tool `water-timeseries` for running breakpoint detection from the command line.

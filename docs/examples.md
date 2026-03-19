@@ -42,7 +42,7 @@ processor = JRCDataset(ds)
 # Access permanent and seasonal water data
 print(processor.data_columns)
 # Output: ['area_water_permanent', 'area_water_seasonal', 'area_land']
-Dataset
+
 # Get preprocessed data with calculated total area
 total_area = processor.ds["area_data"]
 ```
