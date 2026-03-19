@@ -14,6 +14,7 @@ import eemont  # noqa: F401
 import geemap
 import xarray as xr
 from loguru import logger
+from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
 
 from water_timeseries.utils.data import load_vector_dataset
 from water_timeseries.utils.earthengine import calc_monthly_dw, create_dw_classes_mask, drop_z_from_gdf
@@ -405,16 +406,29 @@ class EarthEngineDownloader:
         # Chunk the GeoDataFrame into smaller pieces based on number of dates
         n_dates = len(imlist)
         gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates)
-
-        # Process each chunk and collect results
+        
+        # Process each chunk and collect results with progress bar
         df_out_list = []
-        for i, chunk in enumerate(gdf_chunks):
-            self._log_info(f"Processing chunk {i + 1}/{len(gdf_chunks)} with {len(chunk)} features")
-            df_out_chunk = self._extract_time_series(
-                imlist=imlist, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
-            )
-            if df_out_chunk is not None and not df_out_chunk.empty:
-                df_out_list.append(df_out_chunk)
+        with Progress(
+            SpinnerColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TimeRemainingColumn(),
+        ) as progress:
+            task = progress.add_task("[cyan]Downloading time series data...", total=len(gdf_chunks))
+            
+            for i, chunk in enumerate(gdf_chunks):
+                # self._log_info(f"Processing chunk {i+1}/{len(gdf_chunks)} with {len(chunk)} features")
+                df_out_chunk = self._extract_time_series(
+                    imlist=imlist, 
+                    gdf_chunk=chunk, 
+                    name_attribute=name_attribute,
+                    scale=scale
+                )
+                if df_out_chunk is not None and not df_out_chunk.empty:
+                    df_out_list.append(df_out_chunk)
+                progress.advance(task)
 
         # Combine all chunks
         if not df_out_list:
