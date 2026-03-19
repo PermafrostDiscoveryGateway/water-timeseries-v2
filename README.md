@@ -7,6 +7,7 @@ Automated analysis of water timeseries data from satellite imagery and remote se
 **📖 Full Documentation**: [View Documentation](https://PermafrostDiscoveryGateway.github.io/water-timeseries-v2/)
 
 The documentation includes:
+
 - Getting started guide
 - API reference (auto-generated from code)
 - Usage examples
@@ -18,6 +19,7 @@ Documentation is automatically built and deployed on every push to `main` using 
 
 - **Dynamic World Handler**: Process Dynamic World land cover classifications
 - **JRC Water Handler**: Handle JRC water occurrence and classification data
+- **Earth Engine Downloader**: Download data directly from Google Earth Engine
 - **Data Normalization**: Automatic normalization and scaling of time series
 - **Breakpoint Detection**: Statistical (SimpleBreakpoint) and advanced (RBEAST) methods for detecting water extent changes
 - **Batch Processing**: Efficient processing of multiple spatial entities
@@ -42,6 +44,26 @@ water_extent = processor.ds_normalized[processor.water_column]
 
 # Access normalized time series
 water_extent = processor.ds_normalized["water"]
+```
+
+### Download from Google Earth Engine
+
+```python
+import os
+from loguru import logger
+from water_timeseries.downloader import EarthEngineDownloader
+
+# Set your EE project
+os.environ["EE_PROJECT"] = "your-project"
+
+# Download data
+dl = EarthEngineDownloader(ee_auth=True, logger=logger)
+ds = dl.download_dw_monthly(
+    vector_dataset="lakes.parquet",
+    name_attribute="id_geohash",
+    years=[2024],
+    months=[7, 8],
+)
 ```
 
 ### Command Line Interface
@@ -126,7 +148,6 @@ min_chunksize: 10
 | `--output-geometry` | | Export output with geometries | True |
 | `--output-geometry-all` | | Export output all geometries including non breakpoints | True |
 
-
 *Can also be provided via config file
 
 #### Plot Timeseries
@@ -153,7 +174,7 @@ uv run water-timeseries plot-timeseries tests/data/lakes_dw_test.zarr --lake-id 
 
 ![Example Timeseries Plot](examples/dw_example_b7uefy0bvcrc.png)
 
-```
+```python
 # Plot lake timeseries
 uv run water-timeseries plot-timeseries tests/data/lakes_jrc_test.zarr --lake-id b7uefy0bvcrc --output-figure examples/jrc_example_b7uefy0bvcrc.png --break-method beast
 ```
@@ -197,6 +218,10 @@ pip install -e ".[dev]"
 - **DWDataset**: Dynamic World land cover processor
 - **JRCDataset**: JRC water classification processor
 
+### Download
+
+- **EarthEngineDownloader**: Download data from Google Earth Engine
+
 ### Breakpoints
 
 - **SimpleBreakpoint**: Statistical breakpoint detection
@@ -205,6 +230,7 @@ pip install -e ".[dev]"
 ## Testing
 
 The package includes comprehensive tests covering:
+
 - Dataset normalization and masking
 - Breakpoint detection methods (Simple and RBEAST)
 - Batch processing functionality
@@ -215,6 +241,7 @@ Run tests with: `pytest`
 ## Contributing
 
 We welcome contributions! Please ensure you:
+
 1. Add docstrings to new functions and classes (Google style)
 2. Update documentation in the `docs/` folder
 3. Run tests before submitting PRs
