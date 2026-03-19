@@ -302,6 +302,11 @@ class EarthEngineDownloader:
         # Convert to xarray dataset with proper indexing
         ds = df_out.set_index([feature_index_name, "date"]).to_xarray()
 
+        # Log summary statistics using the dataset coordinates (indexes)
+        n_items = len(ds.coords[feature_index_name])
+        n_dates = len(ds.coords["date"])
+        self._log_info(f"Download complete: {n_items} items, {n_dates} dates collected")
+
         return ds.drop_vars("reducer")
 
 
