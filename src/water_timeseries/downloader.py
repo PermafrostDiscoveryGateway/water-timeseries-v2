@@ -12,6 +12,7 @@ from typing import List, Optional
 import ee
 import eemont  # noqa: F401
 import geemap
+import geopandas as gpd
 import joblib
 import xarray as xr
 from loguru import logger
@@ -245,6 +246,48 @@ class EarthEngineDownloader:
         self._log_info(f"Split {n_features} features into {len(chunks)} chunks (chunk_size={chunk_size})")
         return chunks
 
+    def _apply_id_filter(self, gdf, id_list: Optional[List], name_attribute: str) -> gpd.GeoDataFrame:
+        """Apply ID filter to the GeoDataFrame.
+        
+        Args:
+            gdf: GeoDataFrame to filter.
+            id_list: Optional list of IDs to filter by.
+            name_attribute: Column name to use for filtering.
+            
+        Returns:
+            Filtered GeoDataFrame.
+        """
+        if id_list is None or len(id_list) == 0:
+            self._log_info("No ID filtering applied")
+            return gdf
+            
+        self._log_info(f"Applying ID filter: {len(id_list)} IDs specified")
+
+        # Check which IDs are available in the dataset
+        available_ids = set(gdf[name_attribute].values)
+        requested_ids = set(id_list)
+        found_ids = available_ids.intersection(requested_ids)
+        missing_ids = requested_ids - found_ids
+
+        if len(missing_ids) > 0:
+            if len(found_ids) == 0:
+                # None of the requested IDs found
+                raise ValueError(
+                    f"None of the {len(requested_ids)} requested IDs found in the dataset. "
+                    f"Missing IDs: {list(missing_ids)[:10]}{'...' if len(missing_ids) > 10 else ''}"
+                )
+            else:
+                # Some IDs found, some missing - log warning
+                self._log_warning(
+                    f"Only {len(found_ids)} of {len(requested_ids)} requested IDs found in dataset. "
+                    f"Missing IDs ({len(missing_ids)}): {list(missing_ids)[:10]}{'...' if len(missing_ids) > 10 else ''}"
+                )
+
+        gdf_filtered = gdf[gdf[name_attribute].isin(id_list)]
+        n_after_id_filter = len(gdf_filtered)
+        self._log_info(f"After ID filter: {n_after_id_filter} features")
+        return gdf_filtered
+
     def _extract_time_series(self, imlist: list, gdf_chunk, name_attribute: str, scale: float = 10) -> pd.DataFrame:
         """Extract time series data for a single chunk.
 
@@ -316,6 +359,10 @@ class EarthEngineDownloader:
             KeyError: If the specified name_attribute column is not found in the
                 vector dataset.
         """
+        # Announce no_download mode at the top
+        if no_download:
+            self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
+
         # Read vector data using the reusable function
         gdf = load_vector_dataset(vector_dataset, logger=self.logger)
         if name_attribute not in gdf.columns:
@@ -325,35 +372,8 @@ class EarthEngineDownloader:
         n_features_initial = len(gdf)
         self._log_info(f"Initial dataset has {n_features_initial} features")
 
-        # Apply ID filter if id_list is provided (before spatial filter)
-        if id_list is not None and len(id_list) > 0:
-            self._log_info(f"Applying ID filter: {len(id_list)} IDs specified")
-
-            # Check which IDs are available in the dataset
-            available_ids = set(gdf[name_attribute].values)
-            requested_ids = set(id_list)
-            found_ids = available_ids.intersection(requested_ids)
-            missing_ids = requested_ids - found_ids
-
-            if len(missing_ids) > 0:
-                if len(found_ids) == 0:
-                    # None of the requested IDs found
-                    raise ValueError(
-                        f"None of the {len(requested_ids)} requested IDs found in the dataset. "
-                        f"Missing IDs: {list(missing_ids)[:10]}{'...' if len(missing_ids) > 10 else ''}"
-                    )
-                else:
-                    # Some IDs found, some missing - log warning
-                    self._log_warning(
-                        f"Only {len(found_ids)} of {len(requested_ids)} requested IDs found in dataset. "
-                        f"Missing IDs ({len(missing_ids)}): {list(missing_ids)[:10]}{'...' if len(missing_ids) > 10 else ''}"
-                    )
-
-            gdf = gdf[gdf[name_attribute].isin(id_list)]
-            n_after_id_filter = len(gdf)
-            self._log_info(f"After ID filter: {n_after_id_filter} features")
-        else:
-            self._log_info("No ID filtering applied")
+        # Apply ID filter if id_list is provided
+        gdf = self._apply_id_filter(gdf, id_list, name_attribute)
 
         # Apply spatial bbox filter if any bbox parameter is provided and differs from defaults
         if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]) and not (
@@ -412,10 +432,10 @@ class EarthEngineDownloader:
         n_dates = len(imlist)
         gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates)
         
-        # Return early if no_download is True - just log the parameters
+        # Return early if no_download is True - skip downloading but show summary
         if no_download:
-            self._log_info("no_download=True - Skipping actual download, only logging parameters")
             self._log_info(f"Would process {len(gdf)} features with {len(gdf_chunks)} chunks")
+            self._log_info("=== END NO DOWNLOAD MODE ===")
             return None
         
         # Ensure n_parallel is not greater than number of chunks
