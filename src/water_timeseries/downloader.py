@@ -195,6 +195,7 @@ class EarthEngineDownloader:
         bbox_east: float = 180,
         bbox_north: float = 90,
         bbox_south: float = -90,
+        id_list: Optional[List] = None,
     ) -> pd.DataFrame:
         """Download monthly Dynamic World land cover data for specified periods.
 
@@ -210,6 +211,9 @@ class EarthEngineDownloader:
             bbox_east: Eastern boundary for spatial filtering (default: 180).
             bbox_north: Northern boundary for spatial filtering (default: 90).
             bbox_south: Southern boundary for spatial filtering (default: -90).
+            id_list: Optional list of IDs to filter by (values from name_attribute column).
+                If provided, only features matching these IDs will be processed.
+                Default is None (no ID filtering).
 
         Returns:
             xr.Dataset: Xarray dataset with land cover areas indexed by name
@@ -228,10 +232,41 @@ class EarthEngineDownloader:
         n_features_initial = len(gdf)
         self._log_info(f"Initial dataset has {n_features_initial} features")
 
+        # Apply ID filter if id_list is provided (before spatial filter)
+        if id_list is not None and len(id_list) > 0:
+            self._log_info(f"Applying ID filter: {len(id_list)} IDs specified")
+
+            # Check which IDs are available in the dataset
+            available_ids = set(gdf[name_attribute].values)
+            requested_ids = set(id_list)
+            found_ids = available_ids.intersection(requested_ids)
+            missing_ids = requested_ids - found_ids
+
+            if len(missing_ids) > 0:
+                if len(found_ids) == 0:
+                    # None of the requested IDs found
+                    raise ValueError(
+                        f"None of the {len(requested_ids)} requested IDs found in the dataset. "
+                        f"Missing IDs: {list(missing_ids)[:10]}{'...' if len(missing_ids) > 10 else ''}"
+                    )
+                else:
+                    # Some IDs found, some missing - log warning
+                    self._log_warning(
+                        f"Only {len(found_ids)} of {len(requested_ids)} requested IDs found in dataset. "
+                        f"Missing IDs ({len(missing_ids)}): {list(missing_ids)[:10]}{'...' if len(missing_ids) > 10 else ''}"
+                    )
+
+            gdf = gdf[gdf[name_attribute].isin(id_list)]
+            n_after_id_filter = len(gdf)
+            self._log_info(f"After ID filter: {n_after_id_filter} features")
+        else:
+            self._log_info("No ID filtering applied")
+
         # Apply spatial bbox filter if any bbox parameter is provided and differs from defaults
         if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]) and not (
             bbox_west == -180 and bbox_east == 180 and bbox_north == 90 and bbox_south == -90
         ):
+            n_before_bbox_filter = len(gdf)
             self._log_info(
                 f"Applying bbox filter: west={bbox_west}, south={bbox_south}, east={bbox_east}, north={bbox_north}"
             )
@@ -244,7 +279,7 @@ class EarthEngineDownloader:
             )
             n_features_filtered = len(gdf)
             self._log_info(
-                f"After bbox filter: {n_features_filtered} features (removed {n_features_initial - n_features_filtered})"
+                f"After bbox filter: {n_features_filtered} features (removed {n_before_bbox_filter - n_features_filtered})"
             )
         else:
             self._log_info("No spatial bbox filtering applied (using default global bounds)")
