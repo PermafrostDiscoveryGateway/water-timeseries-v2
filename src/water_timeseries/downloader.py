@@ -253,7 +253,6 @@ class EarthEngineDownloader:
             gdf: GeoDataFrame to filter.
             id_list: Optional list of IDs to filter by.
             name_attribute: Column name to use for filtering.
-
         Returns:
             Filtered GeoDataFrame.
         """
@@ -288,11 +287,13 @@ class EarthEngineDownloader:
         self._log_info(f"After ID filter: {n_after_id_filter} features")
         return gdf_filtered
 
-    def _extract_time_series(self, imlist: list, gdf_chunk, name_attribute: str, scale: float = 10) -> pd.DataFrame:
+    def _extract_time_series(self, dates: List[str], gdf_chunk, name_attribute: str, scale: float = 10) -> pd.DataFrame:
         """Extract time series data for a single chunk.
 
+        Processes each date within this method to avoid memory issues with large imlists.
+
         Args:
-            imlist: List of EE images to process.
+            dates: List of dates to process.
             gdf_chunk: GeoDataFrame chunk to extract data for.
             name_attribute: Column name to use as the feature index.
             scale: Pixel scale in meters.
@@ -302,6 +303,26 @@ class EarthEngineDownloader:
         """
 
         fc, reducer_dict = self._setup_gee_reducer(gdf_chunk, name_attribute, scale=scale)
+
+        # Process each date inside this method to avoid large imlist in memory
+        imlist = []
+        for date in dates:
+            try:
+                # Calculate monthly Dynamic World land cover for the date
+                im = calc_monthly_dw(start_date=date, polygons=fc)
+                if im is None:
+                    self._log_warning(f"No data for date: {date}")
+                    continue
+                # Create masks for land cover classes
+                im_classes = create_dw_classes_mask(ee.Image(im))
+                imlist.append(im_classes)
+            except Exception:
+                # Skip dates with errors
+                continue
+
+        if not imlist:
+            self._log_warning("No images processed for chunk")
+            return pd.DataFrame()
 
         # Create an ImageCollection from the processed images
         ic_classes = ee.ImageCollection(imlist)
@@ -412,29 +433,7 @@ class EarthEngineDownloader:
         self._log_info(f"Processing {n_features} features x {n_dates} dates = {n_total_requests} total requests")
         self._log_info(f"Processing dates: {dates}")
 
-        # Setup GEE processing
-        fc, reducer_dict = self._setup_gee_reducer(gdf, name_attribute, scale=scale)
-        imlist = []
-        self._log_info("Start downloading process")
-        # Iterate through each date and process monthly land cover data
-        for date in dates:
-            try:
-                # Calculate monthly Dynamic World land cover for the date
-                im = calc_monthly_dw(start_date=date, polygons=fc)
-                # assert isinstance(im, ee.Image)
-                if im is None:
-                    self._log_warning(f"No data for date: {date}")
-                    continue
-                # Create masks for land cover classes
-                im_classes = create_dw_classes_mask(ee.Image(im))
-                imlist.append(im_classes)
-            except Exception:
-                # Skip dates with errors
-                continue
-        self._log_info(f"Total images collected: {len(imlist)}")
-
         # Chunk the GeoDataFrame into smaller pieces based on number of dates
-        n_dates = len(imlist)
         gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates)
 
         # Return early if no_download is True - skip downloading but show summary
@@ -452,7 +451,7 @@ class EarthEngineDownloader:
         # Use tqdm for progress bar
         df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
             joblib.delayed(self._extract_time_series)(
-                imlist=imlist, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
+                dates=dates, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
             )
             for chunk in tqdm(gdf_chunks, desc="Downloading chunks", unit="chunk")
         )
