@@ -19,8 +19,8 @@ import xarray as xr
 from loguru import logger
 from tqdm import tqdm
 
-from water_timeseries.utils.data import load_vector_dataset
 from water_timeseries.utils.earthengine import calc_monthly_dw, create_dw_classes_mask, drop_z_from_gdf
+from water_timeseries.utils.io import load_vector_dataset, save_xarray_dataset
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
 
 
@@ -330,6 +330,7 @@ class EarthEngineDownloader:
         max_total_requests: int = 500,
         n_parallel: int = 1,
         no_download: bool = False,
+        save_to_file: Optional[str] = None,
     ) -> xr.Dataset:
         """Download monthly Dynamic World land cover data for specified periods.
 
@@ -350,6 +351,10 @@ class EarthEngineDownloader:
                 Default is None (no ID filtering).
             no_download: If True, only log the download parameters without actually
                 downloading data (default: False).
+            save_to_file: Optional path to save the downloaded dataset. If provided, the
+                dataset will be saved to this path. The format is determined by the file
+                extension: '.zarr' for Zarr format, '.nc' for NetCDF format. If a relative
+                path is provided, it will be saved in the output directory (default: None).
 
         Returns:
             xr.Dataset: Xarray dataset with land cover areas indexed by name
@@ -466,7 +471,17 @@ class EarthEngineDownloader:
         n_dates = len(ds.coords["date"])
         self._log_info(f"Download complete: {n_items} items, {n_dates} dates collected")
 
-        return ds.drop_vars("reducer")
+        # Remove the 'reducer' variable if present
+        ds = ds.drop_vars("reducer")
+
+        # Save to file if requested
+        if save_to_file is not None:
+            # Determine output_dir for relative paths
+            save_path = Path(save_to_file)
+            output_dir = str(self.output_dir) if not save_path.is_absolute() else None
+            save_xarray_dataset(ds, save_to_file, output_dir=output_dir, logger=self.logger)
+
+        return ds
 
 
 # Example usage

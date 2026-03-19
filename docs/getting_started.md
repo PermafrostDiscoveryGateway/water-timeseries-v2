@@ -77,6 +77,7 @@ The `download_dw_monthly()` method supports the following parameters:
 | `max_total_requests` | int | Max requests per chunk (controls chunking) | 500 |
 | `n_parallel` | int | Number of parallel workers (1 = sequential) | 1 |
 | `no_download` | bool | If True, only log parameters without downloading | False |
+| `save_to_file` | str | Path to save dataset (.zarr or .nc). Relative paths go to output dir | None |
 
 ### Usage Examples
 
@@ -155,9 +156,53 @@ ds = dl.download_dw_monthly(
 )
 ```
 
+#### Save to File
+
+Automatically save the downloaded dataset to file. The format is determined by the file extension:
+
+```python
+# Save to Zarr format (relative path goes to output directory)
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    years=[2024],
+    months=[7, 8],
+    save_to_file="data.zarr",  # Saves to downloads/data.zarr
+)
+
+# Save to NetCDF format (absolute path)
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    years=[2024],
+    months=[7, 8],
+    save_to_file="/path/to/output/data.nc",
+)
+```
+
 ### Test Dataset
 
 The package includes a test dataset at `tests/data/lake_polygons.parquet` with 118 lake polygons in Alaska.
+
+### Saving and Loading Datasets
+
+The package provides utility functions for saving and loading xarray datasets:
+
+```python
+from water_timeseries.utils import save_xarray_dataset, load_xarray_dataset
+
+# Save to Zarr format
+save_xarray_dataset(ds, "output.zarr", output_dir="./data")
+
+# Save to NetCDF format
+save_xarray_dataset(ds, "/full/path/output.nc")
+
+# Load from Zarr
+ds = load_xarray_dataset("output.zarr")
+
+# Load from NetCDF
+ds = load_xarray_dataset("output.nc", format="netcdf")
+```
 
 ## Command Line Interface
 

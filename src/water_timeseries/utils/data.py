@@ -1,53 +1,5 @@
-from pathlib import Path
-from typing import Optional, Union
-
-import geopandas as gpd
 import numpy as np
 import pandas as pd
-from loguru import logger
-
-
-def load_vector_dataset(
-    file_path: Union[str, Path],
-    logger: Optional[logger] = None,
-) -> Optional[gpd.GeoDataFrame]:
-    """Load a vector dataset from file based on file extension.
-
-    Supports GeoPackage, Shapefile, GeoJSON, and Parquet formats.
-
-    Args:
-        file_path: Path to the vector dataset file.
-        logger: Optional logger instance for logging messages.
-
-    Returns:
-        GeoDataFrame if successful, None otherwise.
-
-    Raises:
-        FileNotFoundError: If the file does not exist.
-    """
-    file_path = Path(file_path)
-
-    if not file_path.exists():
-        if logger:
-            logger.warning(f"Vector dataset file not found: {file_path}")
-        raise FileNotFoundError(f"Vector dataset file not found: {file_path}")
-
-    suffix = file_path.suffix.lower()
-
-    if logger:
-        logger.info(f"Loading vector dataset from {file_path}")
-
-    # GeoPackage, Shapefile, GeoJSON formats
-    if suffix in [".gpkg", ".shp", ".geojson", ".gjson"]:
-        vector_ds = gpd.read_file(file_path)
-    elif suffix in [".parquet"]:
-        vector_ds = gpd.read_parquet(file_path)
-    else:
-        if logger:
-            logger.warning(f"Unsupported vector file format: {suffix}")
-        return None
-
-    return vector_ds
 
 
 def calculate_water_area_after(

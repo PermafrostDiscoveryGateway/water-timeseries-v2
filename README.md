@@ -92,6 +92,24 @@ ds = dl.download_dw_monthly(
     name_attribute="id_geohash",
     no_download=True,  # Only logs parameters, skips actual download
 )
+
+# Save to file (auto-detects format from extension: .zarr or .nc)
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    years=[2024],
+    months=[7, 8],
+    save_to_file="data.zarr",  # Saves to downloads/data.zarr (relative path)
+)
+
+# Absolute path example
+ds = dl.download_dw_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    years=[2024],
+    months=[7, 8],
+    save_to_file="/path/to/output/data.nc",  # Saves to absolute path as NetCDF
+)
 ```
 
 ### Command Line Interface
