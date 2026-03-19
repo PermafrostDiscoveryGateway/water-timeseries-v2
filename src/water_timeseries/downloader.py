@@ -18,6 +18,7 @@ from loguru import logger
 from water_timeseries.utils.data import load_vector_dataset
 from water_timeseries.utils.earthengine import calc_monthly_dw, create_dw_classes_mask, drop_z_from_gdf
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
+import pandas as pd
 
 
 def setup_monthly_dates(years: List[int], months: List[int]) -> List[str]:
@@ -185,6 +186,90 @@ class EarthEngineDownloader:
             self._log_warning("Earth Engine initialization check failed")
         return self.ee_is_initialized
 
+    def _setup_gee_reducer(self, gdf, feature_index_name: str, scale: float = 10) -> tuple:
+        """Setup Google Earth Engine reducer configuration.
+
+        Args:
+            gdf: GeoDataFrame with features to process.
+            feature_index_name: Column name to use as the feature index.
+            scale: Pixel scale in meters (default: 10).
+
+        Returns:
+            tuple: (fc, reducer_dict) - GEE FeatureCollection and reducer configuration.
+        """
+        fc = geemap.gdf_to_ee(drop_z_from_gdf(gdf[:]))
+
+        reducer = ee.Reducer.sum()
+        CRS = "EPSG:3572"  # Coordinate reference system
+        reducer_dict = {
+            "reducer": reducer,
+            "collection": fc.select(feature_index_name),
+            "crs": CRS,
+            "scale": scale,
+            "bands": self.dw_bandnames,
+        }
+        return fc, reducer_dict
+
+    def _chunk_gdf(self, gdf, max_total_requests: int, n_dates: int = 1) -> list:
+        """Split a GeoDataFrame into chunks based on max_total_requests.
+
+        Chunks the GeoDataFrame into smaller subsets to manage API request limits.
+        Each chunk will contain approximately max_total_requests / n_dates features.
+
+        Args:
+            gdf: GeoDataFrame to chunk.
+            max_total_requests: Maximum number of total requests per chunk (features * dates).
+            n_dates: Number of dates/time periods being processed.
+
+        Returns:
+            List of GeoDataFrames, each representing a chunk.
+        """
+        n_features = len(gdf)
+
+        # Calculate chunk size based on max_total_requests and number of dates
+        # Each chunk should have max_total_requests / n_dates features
+        features_per_chunk = max_total_requests // n_dates if n_dates > 0 else max_total_requests
+        chunk_size = max(1, min(n_features, features_per_chunk))
+
+        self._log_info(
+            f"Chunking: n_features={n_features}, max_total_requests={max_total_requests}, n_dates={n_dates}, features_per_chunk={chunk_size}"
+        )
+
+        chunks = []
+        for i in range(0, n_features, chunk_size):
+            chunk = gdf.iloc[i : i + chunk_size]
+            chunks.append(chunk)
+
+        self._log_info(f"Split {n_features} features into {len(chunks)} chunks (chunk_size={chunk_size})")
+        return chunks
+
+    def _extract_time_series(self, imlist: list, gdf_chunk, name_attribute: str, scale: float = 10) -> pd.DataFrame:
+        """Extract time series data for a single chunk.
+
+        Args:
+            imlist: List of EE images to process.
+            gdf_chunk: GeoDataFrame chunk to extract data for.
+            name_attribute: Column name to use as the feature index.
+            scale: Pixel scale in meters.
+
+        Returns:
+            pd.DataFrame: DataFrame with land cover areas for this chunk, indexed by name_attribute and date.
+        """
+
+        fc, reducer_dict = self._setup_gee_reducer(gdf_chunk, name_attribute, scale=scale)
+
+        # Create an ImageCollection from the processed images
+        ic_classes = ee.ImageCollection(imlist)
+
+        # Extract time series data by regions
+        fc_out = ic_classes.getTimeSeriesByRegions(**reducer_dict)
+
+        # Convert FeatureCollection to pandas DataFrame
+        df_out = geemap.ee_to_df(fc_out)
+
+        # Return DataFrame with multi-index
+        return df_out  # .set_index([name_attribute, "date"])
+
     def download_dw_monthly(
         self,
         vector_dataset: str | Path,
@@ -196,6 +281,8 @@ class EarthEngineDownloader:
         bbox_north: float = 90,
         bbox_south: float = -90,
         id_list: Optional[List] = None,
+        scale: float = 10,
+        max_total_requests: int = 500,
     ) -> xr.Dataset:
         """Download monthly Dynamic World land cover data for specified periods.
 
@@ -287,25 +374,15 @@ class EarthEngineDownloader:
         n_features = len(gdf)
         self._log_info(f"Processing {n_features} features")
 
-        fc = geemap.gdf_to_ee(drop_z_from_gdf(gdf[:]))
-
-        # Configuration for reduction operation
-        feature_index_name = name_attribute
-        reducer = ee.Reducer.sum()
-        CRS = "EPSG:3572"  # Coordinate reference system
-        SCALE = 10  # Pixel scale in meters
-        reducer_dict = {
-            "reducer": reducer,
-            "collection": fc.select(feature_index_name),
-            "crs": CRS,
-            "scale": SCALE,
-            "bands": self.dw_bandnames,
-        }
-
         # Generate date range based on years and months
         dates = setup_monthly_dates(years=years, months=months)
-        self._log_info(f"Processing date: {dates}")
+        n_dates = len(dates)
+        n_total_requests = n_features * n_dates
+        self._log_info(f"Processing {n_features} features x {n_dates} dates = {n_total_requests} total requests")
+        self._log_info(f"Processing dates: {dates}")
 
+        # Setup GEE processing
+        fc, reducer_dict = self._setup_gee_reducer(gdf, name_attribute, scale=scale)
         imlist = []
         self._log_info("Start downloading process")
         # Iterate through each date and process monthly land cover data
@@ -323,22 +400,31 @@ class EarthEngineDownloader:
             except Exception:
                 # Skip dates with errors
                 continue
-
         self._log_info(f"Total images collected: {len(imlist)}")
-        # Create an ImageCollection from the processed images
-        ic_classes = ee.ImageCollection(imlist)
 
-        # Extract time series data by regions
-        fc_out = ic_classes.getTimeSeriesByRegions(**reducer_dict)
+        # Chunk the GeoDataFrame into smaller pieces based on number of dates
+        n_dates = len(imlist)
+        gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates)
 
-        # Convert FeatureCollection to pandas DataFrame
-        df_out = geemap.ee_to_df(fc_out)
+        # Process each chunk and collect results
+        df_out_list = []
+        for i, chunk in enumerate(gdf_chunks):
+            self._log_info(f"Processing chunk {i + 1}/{len(gdf_chunks)} with {len(chunk)} features")
+            df_out_chunk = self._extract_time_series(
+                imlist=imlist, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
+            )
+            if df_out_chunk is not None and not df_out_chunk.empty:
+                df_out_list.append(df_out_chunk)
 
-        # Convert to xarray dataset with proper indexing
-        ds = df_out.set_index([feature_index_name, "date"]).to_xarray()
+        # Combine all chunks
+        if not df_out_list:
+            raise ValueError("No data was extracted from any chunk. Check GEE request parameters.")
+
+        df_out = pd.concat(df_out_list)
+        ds = df_out.set_index([name_attribute, "date"]).to_xarray()
 
         # Log summary statistics using the dataset coordinates (indexes)
-        n_items = len(ds.coords[feature_index_name])
+        n_items = len(ds.coords[name_attribute])
         n_dates = len(ds.coords["date"])
         self._log_info(f"Download complete: {n_items} items, {n_dates} dates collected")
 
