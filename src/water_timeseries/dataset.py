@@ -44,7 +44,6 @@ class LakeDataset:
             id_field (str): Name of the coordinate field that identifies individual time series (default: "id_geohash").
         """
         self.ds = ds
-        # self.ds_normalized = None
         self.preprocessed_ = False
         self.normalized_available_ = False
         self.water_column = None
@@ -55,6 +54,24 @@ class LakeDataset:
         self._preprocess()
         self._normalize_ds()
         self._mask_invalid()
+
+    @property
+    def object_ids_(self) -> list:
+        """Get all valid object IDs from the dataset.
+
+        Returns:
+            list: List of all object IDs from the id_field coordinate.
+        """
+        return list(self.ds.coords[self.id_field].values)
+
+    @property
+    def dates_(self) -> list:
+        """Get all valid dates from the dataset.
+
+        Returns:
+            list: List of all dates from the 'date' coordinate.
+        """
+        return list(self.ds.coords["date"].values)
 
     def _preprocess(self):
         """Preprocess the dataset.
@@ -70,7 +87,6 @@ class LakeDataset:
         Scales all data to 0-1 range based on the maximum area value per time series.
         This ensures comparability across different spatial extents.
         """
-        # ds_normed = self.ds / self.ds.max(dim="date")["area_data"]
         self.ds_normalized = self.ds.copy()
         self.ds_normalized = self.ds / self.ds.max(dim="date")["area_data"]
         self.normalized_available_ = True
