@@ -137,18 +137,18 @@ class TestSetupDatesFromOptions:
 
     def test_date_list_valid_format(self):
         """Test that date_list in YYYY-MM format is converted correctly."""
-        dates = setup_dates_from_options(date_list=['2017-06', '2018-07', '2019-08'])
-        assert dates == ['2017-06-01', '2018-07-01', '2019-08-01']
+        dates = setup_dates_from_options(date_list=["2017-06", "2018-07", "2019-08"])
+        assert dates == ["2017-06-01", "2018-07-01", "2019-08-01"]
 
     def test_date_list_single_date(self):
         """Test date_list with a single date."""
-        dates = setup_dates_from_options(date_list=['2020-12'])
-        assert dates == ['2020-12-01']
+        dates = setup_dates_from_options(date_list=["2020-12"])
+        assert dates == ["2020-12-01"]
 
     def test_years_and_months(self):
         """Test that years and months are combined correctly."""
         dates = setup_dates_from_options(years=[2017, 2018], months=[6, 7])
-        assert dates == ['2017-06-01', '2017-07-01', '2018-06-01', '2018-07-01']
+        assert dates == ["2017-06-01", "2017-07-01", "2018-06-01", "2018-07-01"]
 
     def test_years_and_months_defaults(self):
         """Test that default years and months are applied."""
@@ -164,17 +164,17 @@ class TestSetupDatesFromOptions:
     def test_date_list_and_years_raises_error(self):
         """Test that providing both date_list and years raises ValueError."""
         with pytest.raises(ValueError, match="mutually exclusive"):
-            setup_dates_from_options(date_list=['2017-06'], years=[2017])
+            setup_dates_from_options(date_list=["2017-06"], years=[2017])
 
     def test_date_list_and_months_raises_error(self):
         """Test that providing both date_list and months raises ValueError."""
         with pytest.raises(ValueError, match="mutually exclusive"):
-            setup_dates_from_options(date_list=['2017-06'], months=[6])
+            setup_dates_from_options(date_list=["2017-06"], months=[6])
 
     def test_date_list_and_both_years_months_raises_error(self):
         """Test that providing date_list with years AND months raises ValueError."""
         with pytest.raises(ValueError, match="mutually exclusive"):
-            setup_dates_from_options(date_list=['2017-06'], years=[2017], months=[6])
+            setup_dates_from_options(date_list=["2017-06"], years=[2017], months=[6])
 
     def test_only_years_raises_error(self):
         """Test that providing only years (without months) raises ValueError."""
