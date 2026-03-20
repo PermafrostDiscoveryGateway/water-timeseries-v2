@@ -1,6 +1,7 @@
 """Run the Streamlit dashboard."""
 
 from pathlib import Path
+
 from water_timeseries.dashboard.map_viewer import create_app
 
 
