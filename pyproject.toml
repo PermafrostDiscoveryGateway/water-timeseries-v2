@@ -47,6 +47,8 @@ dependencies = [
     "tk>=0.1.0",
     "geemap>=0.37.1",
     "eemont>=2025.7.1",
+    "streamlit>=1.40.0",
+    "plotly>=6.0.0",
 ]
 
 [project.optional-dependencies]
