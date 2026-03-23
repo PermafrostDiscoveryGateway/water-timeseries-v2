@@ -47,6 +47,93 @@ print(processor.data_columns)
 total_area = processor.ds["area_data"]
 ```
 
+## Merging Datasets
+
+The `merge()` method allows combining two LakeDataset instances. This is useful for combining data from different time periods or adding new lakes to an existing dataset.
+
+### Merge Along Both Dimensions
+
+The default strategy merges along both date and id_geohash dimensions:
+
+```python
+from water_timeseries.dataset import DWDataset
+import xarray as xr
+
+# Load two datasets from different time periods
+ds1 = xr.open_zarr("data_2020_2022.zarr")
+ds2 = xr.open_zarr("data_2023_2024.zarr")
+
+dataset1 = DWDataset(ds1)
+dataset2 = DWDataset(ds2)
+
+# Merge along both dimensions
+merged = dataset1.merge(dataset2, how="both")
+
+print(f"Original dates: {len(dataset1.dates_)} + {len(dataset2.dates_)}")
+print(f"Merged dates: {len(merged.dates_)}")
+```
+
+### Add New Dates (Same Lakes)
+
+Use `how="date"` to extend the time series of existing lakes:
+
+```python
+# Both datasets must have the same lakes (id_geohash)
+ds_early = xr.open_zarr("data_2020_2021.zarr")
+ds_late = xr.open_zarr("data_2022_2023.zarr")
+
+dataset_early = DWDataset(ds_early)
+dataset_late = DWDataset(ds_late)
+
+# Add new dates to existing time series
+merged = dataset_early.merge(dataset_late, how="date")
+
+# Check that we have all dates
+print(f"Total dates: {len(merged.dates_)}")
+# Output: Combined dates from both datasets
+```
+
+### Add New Lakes (Same Time Period)
+
+Use `how="id_geohash"` to add new lakes with the same temporal coverage:
+
+```python
+# Both datasets must have the same dates
+ds_region1 = xr.open_zarr("region_a.zarr")  # Lakes in region A
+ds_region2 = xr.open_zarr("region_b.zarr")  # Lakes in region B
+
+dataset1 = DWDataset(ds_region1)
+dataset2 = DWDataset(ds_region2)
+
+# Add new lakes
+merged = dataset1.merge(dataset2, how="id_geohash")
+
+print(f"Total lakes: {len(merged.object_ids_)}")
+# Output: Combined lake count from both datasets
+```
+
+### Handling Overlapping Data
+
+When there are overlapping dates or id_geohash values, a warning is issued:
+
+```python
+import warnings
+
+# Enable warnings to be displayed
+warnings.filterwarnings("default")
+
+# This will issue a warning about overlapping dates
+merged = dataset1.merge(dataset2, how="date")
+# UserWarning: Datasets have X overlapping dates...
+```
+
+### Requirements
+
+- Both datasets must be the same type (both `DWDataset` or both `JRCDataset`)
+- Both datasets must have the same variables
+- For `how="date"`: Same id_geohash values required
+- For `how="id_geohash"`: Same dates required
+
 ## Data Normalization
 
 Both dataset classes automatically normalize data by the maximum area:
