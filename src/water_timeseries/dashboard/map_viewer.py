@@ -435,8 +435,23 @@ def create_app(
             if st.session_state.dw_dataset is not None and id_available:
                 try:
                     fig = st.session_state.dw_dataset.plot_timeseries(current)
-                    # Display matplotlib figure in Streamlit
+                    
+                    # Save figure to bytes buffer for download
+                    from io import BytesIO
+                    img_buffer = BytesIO()
+                    fig.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
+                    img_buffer.seek(0)
+                    
+                    # Display and offer download
                     st.pyplot(fig)
+                    
+                    st.download_button(
+                        label="💾 Save Figure",
+                        data=img_buffer,
+                        file_name=f"timeseries_{current}.png",
+                        mime="image/png",
+                    )
+                    
                     plt.close(fig)  # Close figure to free memory
                 except Exception as e:
                     st.error(f"Error plotting time series: {e}")
@@ -495,7 +510,25 @@ def create_app(
                 if st.session_state.dw_dataset is not None and id_available:
                     try:
                         fig = st.session_state.dw_dataset.plot_timeseries(current)
+                        
+                        # Save figure to bytes buffer for download
+                        from io import BytesIO
+                        img_buffer = BytesIO()
+                        fig.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
+                        img_buffer.seek(0)
+                        
+                        # Display and offer download
                         st.pyplot(fig)
+                        
+                        col1, col2 = st.columns([1, 4])
+                        with col1:
+                            st.download_button(
+                                label="💾 Save Figure",
+                                data=img_buffer,
+                                file_name=f"timeseries_{current}.png",
+                                mime="image/png",
+                            )
+                        
                         plt.close(fig)
                     except Exception as e:
                         st.error(f"Error plotting time series: {e}")
