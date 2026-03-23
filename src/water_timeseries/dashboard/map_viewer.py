@@ -405,9 +405,23 @@ def create_app(
                     )
 
                     if ds_downloaded is not None:
-                        # Store and convert to DWDataset
+                        # Convert downloaded data to DWDataset
+                        downloaded_dataset = DWDataset(ds_downloaded)
+
+                        # Merge with existing cached data if available
+                        if st.session_state.dw_dataset is not None:
+                            try:
+                                st.session_state.dw_dataset = st.session_state.dw_dataset.merge(
+                                    downloaded_dataset, how="id_geohash"
+                                )
+                            except Exception as merge_e:
+                                # If merge fails, use downloaded data only
+                                st.sidebar.warning(f"Could not merge data: {merge_e}")
+                                st.session_state.dw_dataset = downloaded_dataset
+                        else:
+                            st.session_state.dw_dataset = downloaded_dataset
+
                         st.session_state.downloaded_ds = ds_downloaded
-                        st.session_state.dw_dataset = DWDataset(ds_downloaded)
                         id_available = True
                         st.rerun()
                     else:
