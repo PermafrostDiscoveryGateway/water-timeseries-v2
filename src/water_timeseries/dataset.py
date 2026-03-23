@@ -5,8 +5,11 @@ land cover and water classification data. It includes specialized handlers for
 different data sources and processing pipelines.
 """
 
+import warnings
+
 import matplotlib.pyplot as plt
 import pandas as pd
+import xarray as xr
 
 from water_timeseries.utils.plotting import (
     plot_water_time_series_dw,
@@ -111,6 +114,112 @@ class LakeDataset:
     def calculate_changes(self, break_df: pd.DataFrame, id_geohash: str) -> pd.DataFrame:
 
         pass
+
+    def merge(
+        self,
+        other: "LakeDataset",
+        how: str = "both",
+    ) -> "LakeDataset":
+        """Merge this LakeDataset with another LakeDataset.
+
+        Combines the .ds attributes of both datasets. Both datasets must have the same
+        variables. The merge strategy is determined by the `how` parameter.
+        Both datasets must be of the same type (e.g., both DWDataset or both JRCDataset).
+
+        Args:
+            other (LakeDataset): Another LakeDataset instance to merge with.
+            how (str): Merge strategy. Options:
+                - "both": Merge along both dimensions (date and id_geohash). Combines all
+                  data from both datasets, keeping all unique dates and id_geohashes.
+                - "date": Merge along the "date" dimension only. Both datasets must have
+                  the same id_geohash values, but can have different dates. New dates are
+                  appended to the existing time series.
+                - "id_geohash": Merge along the "id_geohash" dimension only. Both datasets
+                  must have the same dates, but can have different id_geohashes. New
+                  id_geohashes (lakes) are added with their time series.
+
+        Returns:
+            LakeDataset: A new LakeDataset with merged .ds data.
+
+        Raises:
+            TypeError: If the datasets are of different types.
+            ValueError: If the merge strategy is invalid or datasets are incompatible.
+
+        Example:
+            >>> merged = dataset1.merge(dataset2, how="both")
+            >>> merged = dataset1.merge(dataset2, how="date")  # Add new dates
+            >>> merged = dataset1.merge(dataset2, how="id_geohash")  # Add new lakes
+        """
+        self._validate_merge(other, how)
+
+        if how == "both":
+            merged_ds = self._merge_both(self.ds, other.ds)
+        elif how == "date":
+            merged_ds = self._merge_by_date(self.ds, other.ds)
+        else:  # how == "id_geohash"
+            merged_ds = self._merge_by_id(self.ds, other.ds)
+
+        merged = self.__class__(merged_ds)
+        merged.id_field = self.id_field
+        return merged
+
+    def _validate_merge(self, other: "LakeDataset", how: str):
+        """Validate datasets before merging."""
+
+        if how not in {"both", "date", "id_geohash"}:
+            raise ValueError(f"Invalid merge strategy '{how}'. Must be 'both', 'date', or 'id_geohash'.")
+
+        if type(self) != type(other):
+            raise TypeError(
+                f"Cannot merge {type(self).__name__} with {type(other).__name__}. Both datasets must be the same type."
+            )
+
+        if set(self.ds.data_vars) != set(other.ds.data_vars):
+            raise ValueError("Datasets have different variables.")
+
+    def _merge_both(self, ds1, ds2):
+        """Merge along both dimensions."""
+
+        return xr.merge([ds1, ds2])
+
+    def _merge_by_date(self, ds1, ds2):
+        """Merge along date dimension (same id_geohash, new dates)."""
+
+        if set(ds1.coords[self.id_field].values) != set(ds2.coords[self.id_field].values):
+            raise ValueError(f"For merge how='date', both datasets must have the same {self.id_field} values.")
+
+        # Check for duplicate dates
+        dates1 = set(ds1.coords["date"].values)
+        dates2 = set(ds2.coords["date"].values)
+        duplicate_dates = dates1 & dates2
+        if duplicate_dates:
+            warnings.warn(
+                f"Datasets have {len(duplicate_dates)} overlapping dates. "
+                f"Data from the second dataset will overwrite the first for these dates.",
+                UserWarning,
+            )
+
+        merged = xr.concat([ds1, ds2], dim="date")
+        return merged.sortby("date")
+
+    def _merge_by_id(self, ds1, ds2):
+        """Merge along id_geohash dimension (same dates, new id_geohashes)."""
+
+        if set(ds1.coords["date"].values) != set(ds2.coords["date"].values):
+            raise ValueError("For merge how='id_geohash', both datasets must have the same dates.")
+
+        # Check for duplicate id_geohashes
+        ids1 = set(ds1.coords[self.id_field].values)
+        ids2 = set(ds2.coords[self.id_field].values)
+        duplicate_ids = ids1 & ids2
+        if duplicate_ids:
+            warnings.warn(
+                f"Datasets have {len(duplicate_ids)} overlapping {self.id_field} values. "
+                f"Data from the second dataset will overwrite the first for these values.",
+                UserWarning,
+            )
+
+        return xr.concat([ds1, ds2], dim=self.id_field)
 
 
 class DWDataset(LakeDataset):
