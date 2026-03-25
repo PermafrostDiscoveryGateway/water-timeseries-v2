@@ -244,6 +244,14 @@ uv run water-timeseries breakpoint-analysis \
 # Run with a config file
 uv run water-timeseries breakpoint-analysis --config-file configs/config.yaml
 
+# Run with parallel backend (joblib or ray)
+uv run water-timeseries breakpoint-analysis \
+    data.zarr \
+    output.parquet \
+    --parallel-backend joblib \
+    --chunksize 50 \
+    --n-jobs 20
+
 # Plot lake timeseries
 uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
 
@@ -282,6 +290,7 @@ bbox_south: 66
 chunksize: 100
 n_jobs: 20
 min_chunksize: 10
+parallel_backend: joblib  # or "ray"
 ```
 
 CLI arguments take priority over config file values.

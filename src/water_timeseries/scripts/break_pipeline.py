@@ -1,9 +1,11 @@
 # imports
 import json
 import os
+import threading
 from pathlib import Path
 from typing import Optional
 
+import joblib
 import pandas as pd
 import ray
 import typer
@@ -11,6 +13,7 @@ import xarray as xr
 import yaml
 from loguru import logger
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
+from tqdm import tqdm
 
 from water_timeseries.breakpoint import BeastBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
@@ -77,6 +80,19 @@ def process_chunk_remote(chunk: xr.Dataset, water_dataset_type: str) -> pd.DataF
     return bp.calculate_breaks_batch(ds)
 
 
+def process_chunk(chunk: xr.Dataset, water_dataset_type: str) -> pd.DataFrame:
+    """Process a single chunk (for use with joblib)."""
+    if water_dataset_type == "dynamic_world":
+        ds = DWDataset(chunk)
+    elif water_dataset_type == "jrc":
+        ds = JRCDataset(chunk)
+    else:
+        raise ValueError(f"Unknown water dataset type: {water_dataset_type}")
+
+    bp = BeastBreakpoint()
+    return bp.calculate_breaks_batch(ds)
+
+
 class BreakpointPipeline:
     """Pipeline for running Rbeast break detection on water dataset time series.
 
@@ -89,6 +105,7 @@ class BreakpointPipeline:
         output_file: Path to output parquet file for results.
         vector_dataset_file: Optional path to vector dataset (gpkg, shp, geojson).
         chunksize: Number of IDs per chunk (default: 100).
+        parallel_backend: Parallelization backend (default: joblib)
         n_jobs: Number of parallel jobs for Ray (default: 1, sequential).
         min_chunksize: Minimum chunk size (default: 10).
         bbox_west: Minimum longitude for bbox filter.
@@ -105,6 +122,7 @@ class BreakpointPipeline:
         vector_dataset_file: Optional[str] = None,
         n_chunks: int = 1,
         chunksize: int = 100,
+        parallel_backend: str = "joblib",
         n_jobs: int = 1,
         logger: Optional[logger] = None,
         min_chunksize: int = 10,
@@ -121,6 +139,7 @@ class BreakpointPipeline:
         self.n_chunks = n_chunks
         self.chunksize = chunksize
         self.n_jobs = n_jobs
+        self.parallel_backend = parallel_backend
         self.min_chunksize = min_chunksize
         self.bbox_west = bbox_west
         self.bbox_south = bbox_south
@@ -323,7 +342,7 @@ class BreakpointPipeline:
         use_parallel = self.n_jobs > 1
 
         # Initialize Ray if using parallel processing
-        if use_parallel:
+        if use_parallel and (self.parallel_backend == "ray"):
             if not ray.is_initialized():
                 # Copy environment and remove VIRTUAL_ENV to avoid the warning
                 env_vars = os.environ.copy()
@@ -346,42 +365,63 @@ class BreakpointPipeline:
                 )
             if self.logger:
                 self.logger.info(f"Starting parallel processing with Ray using {self.n_jobs} jobs")
+        elif use_parallel and (self.parallel_backend == "joblib"):
+            if self.logger:
+                self.logger.info(f"Starting parallel processing with joblib using {self.n_jobs} jobs")
         else:
             if self.logger:
-                self.logger.info("Starting sequential processing (n_jobs=1)")
+                self.logger.info(f"Starting sequential processing (n_jobs={self.n_jobs})")
 
         # load data
         break_list = []
 
-        # Progress bar with rich
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
-        ) as progress:
-            task = progress.add_task("[cyan]Processing chunks...", total=len(self.chunked_ds))
+        # For joblib, use tqdm with callback; for ray/sequential, use rich Progress
+        if use_parallel and self.parallel_backend == "joblib":
+            # joblib parallel processing with tqdm progress bar
+            # Use threading backend so tqdm progress bar works across workers
+            pbar = tqdm(total=len(self.chunked_ds), desc="Processing chunks", unit="chunk")
+            pbar_lock = threading.Lock()
 
-            if use_parallel:
-                # Parallel processing with Ray
-                # Submit all tasks
-                futures = [process_chunk_remote.remote(chunk, self.water_dataset_type) for chunk in self.chunked_ds]
-                # Collect results with progress updates
-                for future in futures:
-                    result = ray.get(future)
-                    break_list.append(result)
-                    progress.advance(task)
-            else:
-                # Sequential processing
-                for chunk in self.chunked_ds:
-                    if self.water_dataset_type == "dynamic_world":
-                        ds = DWDataset(chunk)
-                    elif self.water_dataset_type == "jrc":
-                        ds = JRCDataset(chunk)
-                    bp = BeastBreakpoint()
-                    break_list.append(bp.calculate_breaks_batch(ds))
-                    progress.advance(task)
+            def process_with_pbar(chunk):
+                result = process_chunk(chunk, self.water_dataset_type)
+                with pbar_lock:
+                    pbar.update(1)
+                return result
+
+            break_list = joblib.Parallel(n_jobs=self.n_jobs, backend="threading")(
+                joblib.delayed(process_with_pbar)(chunk) for chunk in self.chunked_ds
+            )
+            pbar.close()
+        else:
+            # Progress bar with rich for Ray or sequential
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeRemainingColumn(),
+            ) as progress:
+                task = progress.add_task("[cyan]Processing chunks...", total=len(self.chunked_ds))
+
+                if use_parallel and self.parallel_backend == "ray":
+                    # Parallel processing with Ray
+                    # Submit all tasks
+                    futures = [process_chunk_remote.remote(chunk, self.water_dataset_type) for chunk in self.chunked_ds]
+                    # Collect results with progress updates
+                    for future in futures:
+                        result = ray.get(future)
+                        break_list.append(result)
+                        progress.advance(task)
+                else:
+                    # Sequential processing
+                    for chunk in self.chunked_ds:
+                        if self.water_dataset_type == "dynamic_world":
+                            ds = DWDataset(chunk)
+                        elif self.water_dataset_type == "jrc":
+                            ds = JRCDataset(chunk)
+                        bp = BeastBreakpoint()
+                        break_list.append(bp.calculate_breaks_batch(ds))
+                        progress.advance(task)
 
         self.breaks = pd.concat(break_list, axis=0)
         if self.logger:
