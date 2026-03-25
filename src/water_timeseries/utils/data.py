@@ -40,7 +40,7 @@ def calculate_temporal_stats(df: pd.DataFrame) -> pd.DataFrame:
     df["date_break_year"] = breaks.dt.year
     df["date_break_month"] = breaks.dt.month
     # change area ha
-    df["water_change_ha"] = df["pre_break_median"] - df["post_break_median"]
+    df["water_change_ha"] = df["post_break_median"] - df["pre_break_median"]
     # change area perc
     df["water_change_perc"] = df["water_change_ha"].div(df["pre_break_median"].replace(0, np.nan)) * 100
     return df

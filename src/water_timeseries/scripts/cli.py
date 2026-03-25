@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 import cyclopts
+import yaml
 from loguru import logger
 
 # Import pipeline and utilities from break_pipeline
@@ -116,6 +117,7 @@ def breakpoint_analysis(
     vector_dataset_file: Optional[Path] = None,
     chunksize: Optional[int] = None,
     parallel_backend: Optional[str] = None,
+    break_method: Optional[str] = None,
     n_jobs: Optional[int] = None,
     min_chunksize: Optional[int] = None,
     bbox_west: Optional[float] = None,
@@ -129,28 +131,109 @@ def breakpoint_analysis(
 ):
     """Run breakpoint analysis on water dataset.
 
-    Args:
-        water_dataset_file: Path to water dataset file (zarr or parquet)
-        output_file: Path to output parquet file
-        config_file: Path to config YAML/JSON file
-        vector_dataset_file: Path to vector dataset file
-        chunksize: Number of IDs per chunk
-        n_jobs: Number of parallel jobs (use >1 for Ray)
-        parallel_backend: Parallelization backend (joblib or ray)
-        min_chunksize: Minimum chunk size
-        bbox_west: Minimum longitude (west)
-        bbox_south: Minimum latitude (south)
-        bbox_east: Maximum longitude (east)
-        bbox_north: Maximum latitude (north)
-        output_geometry: Whether to include geometry in output (default: True)
-        output_geometry_all: Whether to include geometry for all lakes (default: True)
-        logfile: Path to log file
-        verbose: Verbosity level (-v for DEBUG)
+    This command performs breakpoint detection on lake water area time series
+    data to identify significant changes in water availability. It supports
+    multiple detection methods (simple statistical and Bayesian RBEAST) and
+    can process datasets in parallel using Ray or Joblib.
 
-    Example usage:
+    The analysis identifies points where water area undergoes significant
+    changes, which can indicate events like drought, water diversion, or
+    land use changes affecting the lake.
+
+    Parameters
+    ----------
+    water_dataset_file : Path, optional
+        Path to water dataset file in zarr or parquet format. Can be
+        specified via CLI argument or config file.
+    output_file : Path, optional
+        Path to output parquet file where results will be saved.
+        A YAML config file with the same name will also be created
+        with the parameters used.
+    config_file : Path, optional
+        Path to a YAML or JSON configuration file containing default
+        parameters. CLI arguments take priority over config file values.
+    vector_dataset_file : Path, optional
+        Path to vector dataset file (e.g., GeoParquet) containing
+        lake boundary geometries for spatial analysis.
+    chunksize : int, optional
+        Number of lake IDs to process per chunk. Controls memory
+        usage during parallel processing. Default is 100.
+    parallel_backend : str, optional
+        Parallelization backend to use. Options: "joblib" or "ray".
+        Default is "ray" for better performance with large datasets.
+    break_method : str, optional
+        Breakpoint detection method. Options: "simple" (rolling window
+        statistical detector) or "beast" (Bayesian RBEAST-based detector).
+        Default is "beast".
+    n_jobs : int, optional
+        Number of parallel jobs. Use >1 for parallel processing.
+        Default is 1 (sequential).
+    min_chunksize : int, optional
+        Minimum chunk size for parallel processing. Default is 10.
+    bbox_west : float, optional
+        Western boundary of bounding box for spatial filtering
+        (minimum longitude).
+    bbox_south : float, optional
+        Southern boundary of bounding box for spatial filtering
+        (minimum latitude).
+    bbox_east : float, optional
+        Eastern boundary of bounding box for spatial filtering
+        (maximum longitude).
+    bbox_north : float, optional
+        Northern boundary of bounding box for spatial filtering
+        (maximum latitude).
+    output_geometry : bool, optional
+        Whether to include geometry data in the output. Default is True.
+    output_geometry_all : bool, optional
+        Whether to include geometry for all lakes (not just those with
+        breakpoints). Default is True.
+    logfile : str, optional
+        Path to log file. If not provided, a default logfile is created
+        with the format `{subcommand}_{timestamp}.log`.
+    verbose : int, optional
+        Verbosity level. 0 = INFO (default), 1 or more = DEBUG.
+
+    Returns
+    -------
+    None
+        Results are written directly to the output parquet file.
+        A companion YAML file with the same name (but .yaml extension)
+        is also created containing the parameters used for the run.
+
+    Raises
+    ------
+    SystemExit
+        If required arguments (water_dataset_file and output_file) are
+        not provided via CLI or config file.
+
+    Notes
+    -----
+    The SimpleBreakpoint method uses a rolling window statistical approach
+    comparing current values against rolling mean/median/max to detect drops
+    in water area.
+
+    The BeastBreakpoint method uses the RBEAST library for Bayesian
+    change-point detection, which can identify more nuanced changes in
+    time series properties.
+
+    Example usage
+    ------------
+    Basic usage with required arguments::
+
         water-timeseries breakpoint-analysis tests/data/lakes_dw_test.zarr output.parquet
+
+    With custom chunk size and parallel jobs::
+
         water-timeseries breakpoint-analysis tests/data/lakes_dw_test.zarr output.parquet -c 100 -j 20
+
+    Using a configuration file::
+
         water-timeseries breakpoint-analysis --config-file configs/config.yaml
+
+    Spatial filtering with bounding box::
+
+        water-timeseries breakpoint-analysis data.zarr output.parquet \\
+            --bbox-west 100 --bbox-south 20 --bbox-east 110 --bbox-north 30
     """
     # Load config file if provided
     config_dict = load_config(config_file) if config_file else {}
@@ -164,6 +247,7 @@ def breakpoint_analysis(
         chunksize=chunksize,
         n_jobs=n_jobs,
         parallel_backend=parallel_backend,
+        break_method=break_method,
         min_chunksize=min_chunksize,
         bbox_west=bbox_west,
         bbox_south=bbox_south,
@@ -176,13 +260,13 @@ def breakpoint_analysis(
     )
 
     # Get values from merged config
-    water_ds = config_dict.get("water_dataset_file")
-    output_ds = config_dict.get("output_file")
+    water_dataset_file = config_dict.get("water_dataset_file")
+    output_file = config_dict.get("output_file")
     logfile_val = config_dict.get("logfile")
     verbose_val = config_dict.get("verbose", 0)
 
     # Validate required arguments
-    if not water_ds or not output_ds:
+    if not water_dataset_file or not output_file:
         logger.error("water_dataset_file and output_file are required. Provide via CLI arguments or config file.")
         raise SystemExit(1)
 
@@ -191,11 +275,12 @@ def breakpoint_analysis(
 
     # Run the pipeline
     pipeline = BreakpointPipeline(
-        water_dataset_file=water_ds,
-        output_file=output_ds,
+        water_dataset_file=water_dataset_file,
+        output_file=output_file,
         vector_dataset_file=config_dict.get("vector_dataset_file"),
         chunksize=config_dict.get("chunksize") or 100,
-        parallel_backend=config_dict.get("parallel_backend") or "joblib",
+        parallel_backend=config_dict.get("parallel_backend") or "ray",
+        break_method=config_dict.get("break_method") or "beast",
         n_jobs=config_dict.get("n_jobs") or 1,
         min_chunksize=config_dict.get("min_chunksize") or 10,
         bbox_west=config_dict.get("bbox_west"),
@@ -208,6 +293,29 @@ def breakpoint_analysis(
     )
     pipeline.run_breaks()
     pipeline.save_to_parquet()
+
+    # Save the used parameters to a config file next to the output file
+    output_path = Path(output_file)
+    config_output_path = output_path.with_suffix(".yaml")
+    used_config = {
+        "water_dataset_file": water_dataset_file,
+        "output_file": output_file,
+        "vector_dataset_file": config_dict.get("vector_dataset_file"),
+        "chunksize": config_dict.get("chunksize"),
+        "parallel_backend": config_dict.get("parallel_backend"),
+        "break_method": config_dict.get("break_method"),
+        "n_jobs": pipeline.n_jobs,  # Use actual n_jobs (may have been reduced)
+        "min_chunksize": config_dict.get("min_chunksize"),
+        "bbox_west": config_dict.get("bbox_west"),
+        "bbox_south": config_dict.get("bbox_south"),
+        "bbox_east": config_dict.get("bbox_east"),
+        "bbox_north": config_dict.get("bbox_north"),
+        "output_geometry": config_dict.get("output_geometry"),
+        "output_geometry_all": config_dict.get("output_geometry_all"),
+    }
+    with open(config_output_path, "w") as f:
+        yaml.dump(used_config, f, default_flow_style=False)
+    logger.info(f"Saved used parameters to {config_output_path}")
 
 
 # Subcommand: plot timeseries
@@ -254,15 +362,15 @@ def plot_timeseries(
     )
 
     # Get values from merged config
-    water_ds = config_dict.get("water_dataset_file")
-    lake_id_val = config_dict.get("lake_id")
-    output_fig = config_dict.get("output_figure")
-    break_method_val = config_dict.get("break_method")
+    water_dataset_file = config_dict.get("water_dataset_file")
+    lake_id = config_dict.get("lake_id")
+    output_figure = config_dict.get("output_figure")
+    break_method = config_dict.get("break_method")
     logfile_val = config_dict.get("logfile")
     verbose_val = config_dict.get("verbose", 0)
 
     # Validate required arguments
-    if not water_ds or not lake_id_val:
+    if not water_dataset_file or not lake_id:
         logger.error("water_dataset_file and lake_id are required. Provide via CLI arguments or config file.")
         raise SystemExit(1)
 
@@ -272,19 +380,19 @@ def plot_timeseries(
     # Log key parameters
     logger.info(
         f"Plotting lake timeseries with parameters: "
-        f"water_dataset_file={water_ds}, "
-        f"lake_id={lake_id_val}, "
-        f"output_figure={output_fig}, "
-        f"break_method={break_method_val}, "
+        f"water_dataset_file={water_dataset_file}, "
+        f"lake_id={lake_id}, "
+        f"output_figure={output_figure}, "
+        f"break_method={break_method}, "
         f"show={show}"
     )
 
     # Use the imported function
     plot_lake_timeseries(
-        water_dataset_file=water_ds,
-        lake_id=lake_id_val,
-        output_figure=output_fig,
-        break_method=break_method_val,
+        water_dataset_file=water_dataset_file,
+        lake_id=lake_id,
+        output_figure=output_figure,
+        break_method=break_method,
         show=show,
     )
 

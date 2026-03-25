@@ -244,13 +244,27 @@ uv run water-timeseries breakpoint-analysis \
 # Run with a config file
 uv run water-timeseries breakpoint-analysis --config-file configs/config.yaml
 
-# Run with parallel backend (joblib or ray)
+# Run with ray backend (default) using all available CPUs
+uv run water-timeseries breakpoint-analysis \
+    data.zarr \
+    output.parquet \
+    --chunksize 50 \
+    --n-jobs -1
+
+# Run with joblib backend and simple break method
 uv run water-timeseries breakpoint-analysis \
     data.zarr \
     output.parquet \
     --parallel-backend joblib \
+    --break-method simple \
     --chunksize 50 \
     --n-jobs 20
+
+# Run without geometry in output
+uv run water-timeseries breakpoint-analysis \
+    data.zarr \
+    output.parquet \
+    --no-output-geometry
 
 # Plot lake timeseries
 uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
@@ -290,10 +304,34 @@ bbox_south: 66
 chunksize: 100
 n_jobs: 20
 min_chunksize: 10
-parallel_backend: joblib  # or "ray"
+parallel_backend: ray  # or "joblib"
+break_method: beast  # or "simple"
+
+# Output options
+output_geometry: true  # include geometry in output
+output_geometry_all: false  # include geometry for all IDs
 ```
 
 CLI arguments take priority over config file values.
+
+### Break Methods
+
+The pipeline supports two breakpoint detection methods:
+
+- **beast** (default): Uses RBEAST (Bayesian change-point detection) for more accurate but slower analysis
+- **simple**: Uses rolling window statistical method (mean/median/max) for faster analysis
+
+```yaml
+break_method: beast  # or "simple"
+```
+
+### Auto-saved Configuration
+
+After running the pipeline, a YAML file with the **used parameters** is automatically saved next to the output file. This includes:
+- All CLI arguments with their final values (after config merging and any automatic adjustments like n_jobs reduction)
+- The actual n_jobs value (may be less than requested if it exceeded number of chunks)
+
+For example, if output is `output.parquet`, the config is saved as `output.yaml`.
 
 ## Key Classes
 

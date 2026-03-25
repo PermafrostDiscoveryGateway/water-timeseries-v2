@@ -8,11 +8,9 @@ from typing import Optional
 import joblib
 import pandas as pd
 import ray
-import typer
 import xarray as xr
 import yaml
 from loguru import logger
-from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
 from tqdm import tqdm
 
 from water_timeseries.breakpoint import BeastBreakpoint
@@ -61,14 +59,11 @@ def merge_config_with_args(config: dict, **kwargs) -> dict:
     return result
 
 
-# Logger configuration - controlled by the main CLI's setup_logging()
-# For standalone usage, logging will not be configured
-app = typer.Typer(help="Run Rbeast break detection on Dynamic World lakes")
-
-
 @ray.remote
-def process_chunk_remote(chunk: xr.Dataset, water_dataset_type: str) -> pd.DataFrame:
+def process_chunk_remote(chunk: xr.Dataset, water_dataset_type: str, break_method: str = "beast") -> pd.DataFrame:
     """Ray remote function to process a single chunk."""
+    from water_timeseries.breakpoint import SimpleBreakpoint
+
     if water_dataset_type == "dynamic_world":
         ds = DWDataset(chunk)
     elif water_dataset_type == "jrc":
@@ -76,12 +71,20 @@ def process_chunk_remote(chunk: xr.Dataset, water_dataset_type: str) -> pd.DataF
     else:
         raise ValueError(f"Unknown water dataset type: {water_dataset_type}")
 
-    bp = BeastBreakpoint()
+    if break_method == "beast":
+        bp = BeastBreakpoint()
+    elif break_method == "simple":
+        bp = SimpleBreakpoint()
+    else:
+        raise ValueError(f"Unknown break method: {break_method}")
+
     return bp.calculate_breaks_batch(ds)
 
 
-def process_chunk(chunk: xr.Dataset, water_dataset_type: str) -> pd.DataFrame:
+def process_chunk(chunk: xr.Dataset, water_dataset_type: str, break_method: str = "beast") -> pd.DataFrame:
     """Process a single chunk (for use with joblib)."""
+    from water_timeseries.breakpoint import SimpleBreakpoint
+
     if water_dataset_type == "dynamic_world":
         ds = DWDataset(chunk)
     elif water_dataset_type == "jrc":
@@ -89,7 +92,13 @@ def process_chunk(chunk: xr.Dataset, water_dataset_type: str) -> pd.DataFrame:
     else:
         raise ValueError(f"Unknown water dataset type: {water_dataset_type}")
 
-    bp = BeastBreakpoint()
+    if break_method == "beast":
+        bp = BeastBreakpoint()
+    elif break_method == "simple":
+        bp = SimpleBreakpoint()
+    else:
+        raise ValueError(f"Unknown break method: {break_method}")
+
     return bp.calculate_breaks_batch(ds)
 
 
@@ -105,7 +114,8 @@ class BreakpointPipeline:
         output_file: Path to output parquet file for results.
         vector_dataset_file: Optional path to vector dataset (gpkg, shp, geojson).
         chunksize: Number of IDs per chunk (default: 100).
-        parallel_backend: Parallelization backend (default: joblib)
+        parallel_backend: Parallelization backend (default: ray)
+        break_method: Breakpoint detection method (default: "beast", also "simple").
         n_jobs: Number of parallel jobs for Ray (default: 1, sequential).
         min_chunksize: Minimum chunk size (default: 10).
         bbox_west: Minimum longitude for bbox filter.
@@ -122,7 +132,8 @@ class BreakpointPipeline:
         vector_dataset_file: Optional[str] = None,
         n_chunks: int = 1,
         chunksize: int = 100,
-        parallel_backend: str = "joblib",
+        parallel_backend: str = "ray",
+        break_method: str = "beast",
         n_jobs: int = 1,
         logger: Optional[logger] = None,
         min_chunksize: int = 10,
@@ -138,6 +149,11 @@ class BreakpointPipeline:
         self.vector_dataset_file = vector_dataset_file
         self.n_chunks = n_chunks
         self.chunksize = chunksize
+        # Handle n_jobs=-1 to use all available CPUs
+        if n_jobs == -1:
+            n_jobs = os.cpu_count()
+        # Store initial n_jobs for logging before we potentially reduce it
+        self._requested_n_jobs = n_jobs
         self.n_jobs = n_jobs
         self.parallel_backend = parallel_backend
         self.min_chunksize = min_chunksize
@@ -160,17 +176,32 @@ class BreakpointPipeline:
         if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]):
             self.input_ds = self.apply_bbox_filter()
 
+        # Store break method
+        self.break_method = break_method
+
         self.chunked_ds = self.chunk_dataset()
+
+        # Limit n_jobs to the number of chunks if it exceeds
+        if self.n_jobs > len(self.chunked_ds):
+            self.n_jobs = len(self.chunked_ds)
+            if logger:
+                logger.info(f"Reduced n_jobs to {self.n_jobs} (number of chunks)")
 
         # Log initialization if logger is provided
         if logger:
+            # Show requested n_jobs if it was reduced
+            n_jobs_info = self._requested_n_jobs
+            if self._requested_n_jobs > self.n_jobs:
+                n_jobs_info = f"{self._requested_n_jobs} -> {self.n_jobs} (limited by chunks)"
             logger.info(
                 f"Initialized BreakpointPipeline with:\n"
                 f"water_dataset={self.water_dataset_file}\n"
                 f"output_file={self.output_file}\n"
                 f"n_chunks={self.n_chunks}\n"
                 f"chunksize={self.chunksize}\n"
-                f"n_jobs={self.n_jobs}\n"
+                f"n_jobs={n_jobs_info}\n"
+                f"parallel_backend={self.parallel_backend}\n"
+                f"break_method={self.break_method}\n"
             )
 
     def load_water_data(self) -> xr.Dataset:
@@ -364,13 +395,17 @@ class BreakpointPipeline:
                     log_to_driver=False,
                 )
             if self.logger:
-                self.logger.info(f"Starting parallel processing with Ray using {self.n_jobs} jobs")
+                logger.info(
+                    f"Starting parallel processing with Ray using {self.n_jobs} jobs (backend={self.parallel_backend})"
+                )
         elif use_parallel and (self.parallel_backend == "joblib"):
             if self.logger:
-                self.logger.info(f"Starting parallel processing with joblib using {self.n_jobs} jobs")
+                logger.info(
+                    f"Starting parallel processing with joblib using {self.n_jobs} jobs (backend={self.parallel_backend})"
+                )
         else:
             if self.logger:
-                self.logger.info(f"Starting sequential processing (n_jobs={self.n_jobs})")
+                logger.info(f"Starting sequential processing (n_jobs={self.n_jobs}, backend={self.parallel_backend})")
 
         # load data
         break_list = []
@@ -383,7 +418,7 @@ class BreakpointPipeline:
             pbar_lock = threading.Lock()
 
             def process_with_pbar(chunk):
-                result = process_chunk(chunk, self.water_dataset_type)
+                result = process_chunk(chunk, self.water_dataset_type, self.break_method)
                 with pbar_lock:
                     pbar.update(1)
                 return result
@@ -393,106 +428,44 @@ class BreakpointPipeline:
             )
             pbar.close()
         else:
-            # Progress bar with rich for Ray or sequential
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeRemainingColumn(),
-            ) as progress:
-                task = progress.add_task("[cyan]Processing chunks...", total=len(self.chunked_ds))
+            # Progress bar with tqdm for Ray, rich for sequential
+            if use_parallel and self.parallel_backend == "ray":
+                # Ray parallel processing with tqdm progress bar
+                pbar = tqdm(total=len(self.chunked_ds), desc="Processing chunks", unit="chunk")
 
-                if use_parallel and self.parallel_backend == "ray":
-                    # Parallel processing with Ray
-                    # Submit all tasks
-                    futures = [process_chunk_remote.remote(chunk, self.water_dataset_type) for chunk in self.chunked_ds]
-                    # Collect results with progress updates
-                    for future in futures:
-                        result = ray.get(future)
-                        break_list.append(result)
-                        progress.advance(task)
-                else:
-                    # Sequential processing
-                    for chunk in self.chunked_ds:
-                        if self.water_dataset_type == "dynamic_world":
-                            ds = DWDataset(chunk)
-                        elif self.water_dataset_type == "jrc":
-                            ds = JRCDataset(chunk)
+                # Submit all tasks
+                futures = [
+                    process_chunk_remote.remote(chunk, self.water_dataset_type, self.break_method)
+                    for chunk in self.chunked_ds
+                ]
+                # Collect results with progress updates
+                for future in futures:
+                    result = ray.get(future)
+                    break_list.append(result)
+                    pbar.update(1)
+                pbar.close()
+            else:
+                # Sequential processing with tqdm
+                from water_timeseries.breakpoint import SimpleBreakpoint
+
+                pbar = tqdm(total=len(self.chunked_ds), desc="Processing chunks", unit="chunk")
+
+                # Sequential processing
+                for chunk in self.chunked_ds:
+                    if self.water_dataset_type == "dynamic_world":
+                        ds = DWDataset(chunk)
+                    elif self.water_dataset_type == "jrc":
+                        ds = JRCDataset(chunk)
+
+                    if self.break_method == "beast":
                         bp = BeastBreakpoint()
-                        break_list.append(bp.calculate_breaks_batch(ds))
-                        progress.advance(task)
+                    elif self.break_method == "simple":
+                        bp = SimpleBreakpoint()
+
+                    break_list.append(bp.calculate_breaks_batch(ds))
+                    pbar.update(1)
+                pbar.close()
 
         self.breaks = pd.concat(break_list, axis=0)
         if self.logger:
             self.logger.info(f"Processed {len(self.breaks)} breakpoints")
-
-
-@app.command()
-def main(
-    config_file: Path = typer.Option(None, "--config", "-C", help="Path to config YAML/JSON file"),
-    water_dataset_file: str = typer.Option(
-        None, "--water-dataset-file", help="Path to water dataset file (zarr or parquet format)"
-    ),
-    output_file: str = typer.Option(None, "--output-file", help="Path to output parquet file"),
-    vector_dataset_file: str = typer.Option(
-        None, "--vector-dataset-file", "-v", help="Path to vector dataset file (gpkg, shp, geojson)"
-    ),
-    chunksize: int = typer.Option(100, "--chunksize", "-c", help="Number of IDs per chunk"),
-    n_jobs: int = typer.Option(1, "--n-jobs", "-j", help="Number of parallel jobs (use >1 for Ray parallelization)"),
-    min_chunksize: int = typer.Option(10, "--min-chunksize", "-m", help="Minimum chunk size"),
-    bbox_west: float = typer.Option(-180, "--bbox-west", help="Minimum longitude (west) in degrees"),
-    bbox_south: float = typer.Option(-90, "--bbox-south", help="Minimum latitude (south) in degrees"),
-    bbox_east: float = typer.Option(180, "--bbox-east", help="Maximum longitude (east) in degrees"),
-    bbox_north: float = typer.Option(90, "--bbox-north", help="Maximum latitude (north) in degrees"),
-):
-    """Run Rbeast break detection on water dataset.
-
-    Example usage:
-        uv run water-timeseries-bp data/lakes_dw_test.zarr output/breaks.parquet
-        uv run water-timeseries-bp data/lakes_dw_test.zarr output/breaks.parquet --chunksize 50
-        uv run water-timeseries-bp data/lakes_dw_test.zarr output/breaks.parquet -c 50 -j 4
-        uv run water-timeseries-bp -C config.yaml
-    """
-    # Load config file if provided
-    config_dict = load_config(config_file) if config_file else {}
-
-    # Get values from config, with CLI args taking priority
-    water_dataset_file = water_dataset_file or config_dict.get("water_dataset_file")
-    output_file = output_file or config_dict.get("output_file")
-    vector_dataset_file = vector_dataset_file or config_dict.get("vector_dataset_file")
-    chunksize = chunksize if chunksize != 100 else config_dict.get("chunksize", chunksize)
-    n_jobs = n_jobs if n_jobs != 1 else config_dict.get("n_jobs", n_jobs)
-    min_chunksize = min_chunksize if min_chunksize != 10 else config_dict.get("min_chunksize", min_chunksize)
-    bbox_west = bbox_west if bbox_west != -180 else config_dict.get("bbox_west", bbox_west)
-    bbox_south = bbox_south if bbox_south != -90 else config_dict.get("bbox_south", bbox_south)
-    bbox_east = bbox_east if bbox_east != 180 else config_dict.get("bbox_east", bbox_east)
-    bbox_north = bbox_north if bbox_north != 90 else config_dict.get("bbox_north", bbox_north)
-
-    # Validate required arguments
-    if water_dataset_file is None or output_file is None:
-        typer.echo(
-            "Error: water-dataset-file and output-file are required. Use --help for usage information.", err=True
-        )
-        raise typer.Exit(code=1)
-
-    # Run the pipeline
-    pipeline = BreakpointPipeline(
-        water_dataset_file=water_dataset_file,
-        output_file=output_file,
-        vector_dataset_file=vector_dataset_file,
-        chunksize=chunksize,
-        n_jobs=n_jobs,
-        min_chunksize=min_chunksize,
-        bbox_west=bbox_west,
-        bbox_south=bbox_south,
-        bbox_east=bbox_east,
-        bbox_north=bbox_north,
-        logger=logger,
-    )
-    pipeline.run_breaks()
-    pipeline.save_to_parquet()
-
-
-if __name__ == "__main__":
-    app()
