@@ -115,6 +115,7 @@ def breakpoint_analysis(
     config_file: Optional[Path] = None,
     vector_dataset_file: Optional[Path] = None,
     chunksize: Optional[int] = None,
+    parallel_backend: Optional[str] = None,
     n_jobs: Optional[int] = None,
     min_chunksize: Optional[int] = None,
     bbox_west: Optional[float] = None,
@@ -135,6 +136,7 @@ def breakpoint_analysis(
         vector_dataset_file: Path to vector dataset file
         chunksize: Number of IDs per chunk
         n_jobs: Number of parallel jobs (use >1 for Ray)
+        parallel_backend: Parallelization backend (joblib or ray)
         min_chunksize: Minimum chunk size
         bbox_west: Minimum longitude (west)
         bbox_south: Minimum latitude (south)
@@ -161,6 +163,7 @@ def breakpoint_analysis(
         vector_dataset_file=str(vector_dataset_file) if vector_dataset_file else None,
         chunksize=chunksize,
         n_jobs=n_jobs,
+        parallel_backend=parallel_backend,
         min_chunksize=min_chunksize,
         bbox_west=bbox_west,
         bbox_south=bbox_south,
@@ -192,6 +195,7 @@ def breakpoint_analysis(
         output_file=output_ds,
         vector_dataset_file=config_dict.get("vector_dataset_file"),
         chunksize=config_dict.get("chunksize") or 100,
+        parallel_backend=config_dict.get("parallel_backend") or "joblib",
         n_jobs=config_dict.get("n_jobs") or 1,
         min_chunksize=config_dict.get("min_chunksize") or 10,
         bbox_west=config_dict.get("bbox_west"),

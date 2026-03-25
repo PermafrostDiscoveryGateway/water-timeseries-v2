@@ -10,8 +10,11 @@ import ray
 import typer
 import xarray as xr
 import yaml
+import threading
+
 from loguru import logger
 from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeRemainingColumn
+from tqdm import tqdm
 
 from water_timeseries.breakpoint import BeastBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
@@ -373,44 +376,53 @@ class BreakpointPipeline:
         # load data
         break_list = []
 
-        # Progress bar with rich
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeRemainingColumn(),
-        ) as progress:
-            task = progress.add_task("[cyan]Processing chunks...", total=len(self.chunked_ds))
+        # For joblib, use tqdm with callback; for ray/sequential, use rich Progress
+        if use_parallel and self.parallel_backend == "joblib":
+            # joblib parallel processing with tqdm progress bar
+            # Use threading backend so tqdm progress bar works across workers
+            pbar = tqdm(total=len(self.chunked_ds), desc="Processing chunks", unit="chunk")
+            pbar_lock = threading.Lock()
 
-            if use_parallel:
-                # Parallel processing with Ray
-                # Submit all tasks
-                if self.parallel_backend == "ray":
+            def process_with_pbar(chunk):
+                result = process_chunk(chunk, self.water_dataset_type)
+                with pbar_lock:
+                    pbar.update(1)
+                return result
+
+            break_list = joblib.Parallel(n_jobs=self.n_jobs, backend="threading")(
+                joblib.delayed(process_with_pbar)(chunk) for chunk in self.chunked_ds
+            )
+            pbar.close()
+        else:
+            # Progress bar with rich for Ray or sequential
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeRemainingColumn(),
+            ) as progress:
+                task = progress.add_task("[cyan]Processing chunks...", total=len(self.chunked_ds))
+
+                if use_parallel and self.parallel_backend == "ray":
+                    # Parallel processing with Ray
+                    # Submit all tasks
                     futures = [process_chunk_remote.remote(chunk, self.water_dataset_type) for chunk in self.chunked_ds]
                     # Collect results with progress updates
                     for future in futures:
                         result = ray.get(future)
                         break_list.append(result)
                         progress.advance(task)
-                elif self.parallel_backend == "joblib":
-                    # Parallel processing with joblib
-                    break_list = joblib.Parallel(n_jobs=self.n_jobs)(
-                        joblib.delayed(process_chunk)(chunk, self.water_dataset_type) for chunk in self.chunked_ds
-                    )
-                    # All results collected, update progress
-                    progress.update(task, completed=len(self.chunked_ds))
-
-            else:
-                # Sequential processing
-                for chunk in self.chunked_ds:
-                    if self.water_dataset_type == "dynamic_world":
-                        ds = DWDataset(chunk)
-                    elif self.water_dataset_type == "jrc":
-                        ds = JRCDataset(chunk)
-                    bp = BeastBreakpoint()
-                    break_list.append(bp.calculate_breaks_batch(ds))
-                    progress.advance(task)
+                else:
+                    # Sequential processing
+                    for chunk in self.chunked_ds:
+                        if self.water_dataset_type == "dynamic_world":
+                            ds = DWDataset(chunk)
+                        elif self.water_dataset_type == "jrc":
+                            ds = JRCDataset(chunk)
+                        bp = BeastBreakpoint()
+                        break_list.append(bp.calculate_breaks_batch(ds))
+                        progress.advance(task)
 
         self.breaks = pd.concat(break_list, axis=0)
         if self.logger:
