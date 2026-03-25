@@ -469,6 +469,3 @@ class BreakpointPipeline:
         self.breaks = pd.concat(break_list, axis=0)
         if self.logger:
             self.logger.info(f"Processed {len(self.breaks)} breakpoints")
-
-
-
