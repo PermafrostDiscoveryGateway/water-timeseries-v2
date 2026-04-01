@@ -6,7 +6,6 @@ import pandas as pd
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-
 # Color mapping for Dynamic World land cover classes
 DW_COLOR_MAP = {
     "water": "#4a90e2",  # Blue
@@ -92,7 +91,9 @@ def plot_water_time_series_dw_interactive(
                 marker=dict(size=marker_size, symbol="circle"),
                 connectgaps=True,
                 customdata=customdata,
-                hovertemplate="%{y:.2f} ha | %{customdata:.1f}%<extra></extra>" if customdata is not None else "%{y:.2f} ha<extra></extra>",
+                hovertemplate="%{y:.2f} ha | %{customdata:.1f}%<extra></extra>"
+                if customdata is not None
+                else "%{y:.2f} ha<extra></extra>",
             ),
             secondary_y=False,
         )
@@ -223,7 +224,9 @@ def plot_water_time_series_jrc_interactive(
                 fill=None,  # No fill for any variable
                 connectgaps=True,
                 customdata=customdata,
-                hovertemplate="%{y:.2f} ha | %{customdata:.1f}%<extra></extra>" if customdata is not None else "%{y:.2f} ha<extra></extra>",
+                hovertemplate="%{y:.2f} ha | %{customdata:.1f}%<extra></extra>"
+                if customdata is not None
+                else "%{y:.2f} ha<extra></extra>",
             ),
             secondary_y=False,
         )
