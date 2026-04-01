@@ -292,46 +292,22 @@ def create_app(
     # Create sidebar for controls
     st.sidebar.header("Settings")
 
-    # Check EE_PROJECT environment variable
-    import os
-
-    default_ee_project = os.environ.get("EE_PROJECT", "")
-
-    # EE Project input
-    ee_project = st.sidebar.text_input(
-        "Google Earth Engine Project", value=default_ee_project, placeholder="Enter your GEE project ID"
-    )
-
-    # Button to set EE_PROJECT
-    if st.sidebar.button("Set EE Project"):
-        if ee_project:
-            os.environ["EE_PROJECT"] = ee_project
-            st.sidebar.success(f"EE_PROJECT set to: {ee_project}")
-        else:
-            st.sidebar.warning("Please enter a project ID")
-
-    # Data path input
-    default_path = str(data_path)
-    data_path_input = st.sidebar.text_input("Parquet File Path", value=default_path)
-
-    # Zarr data path input
-    default_zarr_path = str(zarr_path)
-    zarr_path_input = st.sidebar.text_input("Zarr Time Series Path", value=default_zarr_path)
-
-    # ID column input
-    id_column = st.sidebar.text_input("ID Column Name", value="id_geohash")
-
-    # Zoom level
-    zoom_level = st.sidebar.slider("Initial Zoom Level", min_value=1, max_value=20, value=10)
-
-    # Plotting mode selection (static vs dynamic/interactive)
+    # Plotting mode selection (static vs dynamic/interactive) - defaults to interactive
     is_interactive = st.sidebar.toggle(
         "Interactive Plotting",
-        value=False,
+        value=True,
         help="Enable interactive Plotly plots (hover for details, zoom, pan)",
     )
     if is_interactive:
-        st.sidebar.caption("🖱️ Interactive mode enabled - hover to see values, zoom & pan available")
+        st.sidebar.caption("🖱️ Interactive mode - hover to see values, zoom & pan available")
+    else:
+        st.sidebar.caption("📊 Static mode - matplotlib plots")
+
+    # Use function parameters for data paths
+    data_path_input = str(data_path)
+    zarr_path_input = str(zarr_path)
+    id_column = "id_geohash"
+    zoom_level = 10
 
     # Initialize dataset in session state if not already
     if "dw_dataset" not in st.session_state:
@@ -369,12 +345,6 @@ def create_app(
         if st.sidebar.button("Clear Selection"):
             viewer.clear_selection()
             st.rerun()
-
-        # Data info
-        st.sidebar.divider()
-        st.sidebar.subheader("Data Info")
-        st.sidebar.write(f"Total features: {len(viewer.gdf)}")
-        st.sidebar.write(f"Columns: {list(viewer.gdf.columns)}")
 
         # Time Series Plot Section
         if current:
