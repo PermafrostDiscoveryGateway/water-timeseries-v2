@@ -512,7 +512,7 @@ class JRCDataset(LakeDataset):
 
         Args:
             id_geohash (str): The geohash identifier for the location.
-            breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
+            breakpoints (BreakpointMethod, optional): Breakpoint detection method to use (not used currently).
 
         Returns:
             plotly.graph_objects.Figure: Interactive Plotly figure.
@@ -520,12 +520,8 @@ class JRCDataset(LakeDataset):
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
 
-        if breakpoints is not None:
-            breaks = breakpoints.calculate_break(self, object_id=id_geohash)
-            if breaks is not None:
-                bp = breaks["date_break"].iloc[0]
-        else:
-            bp = None
+        # Breakpoint processing disabled for now
+        bp = None
 
         fig = plot_water_time_series_jrc_interactive(
             df,

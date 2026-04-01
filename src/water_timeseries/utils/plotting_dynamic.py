@@ -77,6 +77,11 @@ def plot_water_time_series_dw_interactive(
         line_width = 2.5 if variable == "water" else 1.5
         marker_size = 8 if variable == "water" else 6
 
+        # Calculate relative values if normalization factor is provided
+        customdata = None
+        if normalization_factor is not None and normalization_factor > 0:
+            customdata = (data["value"] / normalization_factor * 100).values
+
         fig.add_trace(
             go.Scatter(
                 x=data["date"],
@@ -86,7 +91,8 @@ def plot_water_time_series_dw_interactive(
                 line=dict(color=color, width=line_width),
                 marker=dict(size=marker_size, symbol="circle"),
                 connectgaps=True,
-                hovertemplate="%{y:.2f} ha<extra></extra>",
+                customdata=customdata,
+                hovertemplate="%{y:.2f} ha | %{customdata:.1f}%<extra></extra>" if customdata is not None else "%{y:.2f} ha<extra></extra>",
             ),
             secondary_y=False,
         )
@@ -136,8 +142,8 @@ def plot_water_time_series_dw_interactive(
     # Update x-axis to show years nicely
     fig.update_xaxes(
         dtick="M12",  # Tick every 12 months
+        ticklabelmode="period",  # Labels in the middle of the period
         tickformat="%Y",
-        ticklabelmode="period",
         hoverformat="%Y-%m",  # Show YYYY-MM on hover
         showgrid=True,
         gridwidth=1,
@@ -186,8 +192,8 @@ def plot_water_time_series_jrc_interactive(
     if "area_data" in df.columns and "area_nodata" in df.columns:
         df["area_total"] = df["area_data"] + df["area_nodata"]
 
-    # Create figure
-    fig = go.Figure()
+    # Create figure with secondary y-axis support
+    fig = make_subplots(specs=[[{"secondary_y": normalization_factor is not None}]])
 
     # Plot each variable
     for variable in plot_variables:
@@ -201,6 +207,11 @@ def plot_water_time_series_jrc_interactive(
         # Create nice display name
         display_name = variable.replace("area_", "").replace("_", " ").title()
 
+        # Calculate relative values if normalization factor is provided
+        customdata = None
+        if normalization_factor is not None and normalization_factor > 0:
+            customdata = (df[variable] / normalization_factor * 100).values
+
         fig.add_trace(
             go.Scatter(
                 x=df["date"],
@@ -209,25 +220,12 @@ def plot_water_time_series_jrc_interactive(
                 mode="lines+markers",
                 line=dict(color=color, width=line_width),
                 marker=dict(size=marker_size, symbol="circle"),
-                fill="none" if variable != "area_land" else None,
+                fill=None,  # No fill for any variable
                 connectgaps=True,
-                hovertemplate="%{y:.2f} ha<extra></extra>",
-            )
-        )
-
-    # Add no-data area as gray shading
-    if "area_total" in df.columns and "area_nodata" in df.columns:
-        fig.add_trace(
-            go.Scatter(
-                x=df["date"],
-                y=df["area_nodata"],
-                name="No Data",
-                mode="none",
-                fill="tonexty",
-                fillcolor="rgba(180, 180, 180, 0.3)",
-                showlegend=True,
-                hoverinfo="skip",
-            )
+                customdata=customdata,
+                hovertemplate="%{y:.2f} ha | %{customdata:.1f}%<extra></extra>" if customdata is not None else "%{y:.2f} ha<extra></extra>",
+            ),
+            secondary_y=False,
         )
 
     # Update layout
@@ -249,7 +247,7 @@ def plot_water_time_series_jrc_interactive(
         template="plotly_white",
     )
 
-    # Add grid to y-axis (only for primary/left axis with absolute values)
+    # Add grid to y-axis
     fig.update_yaxes(
         showgrid=True,
         gridwidth=1,
@@ -259,21 +257,15 @@ def plot_water_time_series_jrc_interactive(
 
     # Add secondary y-axis for normalized values
     if normalization_factor is not None:
-        fig.update_layout(
-            yaxis2=dict(
-                title="Relative Area [%]",
-                overlaying="y",
-                side="right",
-                range=[0, 100],
-            )
-        )
+        fig.update_yaxes(title="Relative Area [%]", secondary_y=True, range=[0, 100])
 
-    # Update x-axis
+    # Update x-axis to show years nicely
     fig.update_xaxes(
-        dtick="M12",
+        dtick="M12",  # Tick every 12 months
+        tick0=df["date"].min(),  # Start ticks at first data point
+        tickmode="linear",
         tickformat="%Y",
-        ticklabelmode="period",
-        hoverformat="%Y-%m",  # Show YYYY-MM on hover
+        hoverformat="%Y",  # Show YYYY on hover
     )
 
     return fig
