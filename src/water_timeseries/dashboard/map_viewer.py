@@ -14,12 +14,12 @@ from water_timeseries.dataset import DWDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.io import load_vector_dataset
 from water_timeseries.utils.visualization import (
-    build_hover_template,
     DEFAULT_HOVER_COLUMNS,
+    MAP_STYLING,
+    build_hover_template,
+    gdf_to_geojson_feature_collection,
     get_colorbar_config,
     get_z_values_for_coloring,
-    gdf_to_geojson_feature_collection,
-    MAP_STYLING,
     prepare_custom_data_for_plotly,
 )
 
