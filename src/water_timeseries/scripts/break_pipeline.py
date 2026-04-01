@@ -393,6 +393,7 @@ class BreakpointPipeline:
                     logging_level="WARNING",  # Only show WARNING and ERROR level logs from Ray workers
                     include_dashboard=False,  # Disable Ray dashboard to reduce output
                     log_to_driver=False,
+                    object_store_memory=10*1e9
                 )
             if self.logger:
                 logger.info(

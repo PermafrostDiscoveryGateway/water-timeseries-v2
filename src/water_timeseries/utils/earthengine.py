@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import ee
 import eemont  # noqa: F401
+import geemap
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -426,3 +428,87 @@ def normalize_values(df: pd.DataFrame, name_field: str) -> pd.DataFrame:
         non_numeric_cols.append("month")
     df_normed = df.drop(columns=non_numeric_cols).divide(df[["area_data", "area_nodata"]].sum(axis=1), axis=0)
     return df[non_numeric_cols].join(df_normed)
+
+
+def create_S2_timelapse(
+    input_lake_gdf: gpd.GeoDataFrame,
+    id_geohash: str,
+    gif_outdir: str | Path = "gifs",
+    buffer: float = 100,
+    start_year: int = 2016,
+    end_year: int = 2025,
+    start_date: str = "07-01",
+    end_date: str = "08-31",
+    frames_per_second: int = 1,
+    dimensions: int = 512,
+    overwrite_exists: bool = False,
+) -> Path | None:
+    """
+    Create a Sentinel-2 timelapse GIF for a specific lake.
+
+    This function generates an animated GIF showing Sentinel-2 satellite imagery
+    over a date range for a lake identified by its geohash. The timelapse captures
+    the summer period (July-August) each year to maximize cloud-free observations.
+
+    Args:
+        input_lake_gdf: GeoDataFrame containing lake geometries with an 'id_geohash' column.
+        id_geohash: The geohash identifier for the specific lake to visualize.
+        gif_outdir: Output directory for the GIF file (default: 'gifs').
+        buffer: Buffer distance in meters to expand the lake bounding box (default: 100).
+        start_year: Start year for the timelapse (default: 2016).
+        end_year: End year for the timelapse (default: 2025).
+        start_date: Start date within each year (MM-DD format, default: '07-01').
+        end_date: End date within each year (MM-DD format, default: '08-31').
+        frames_per_second: Animation speed (default: 1).
+        dimensions: Pixel dimensions for the output GIF (default: 512).
+        overwrite_exists: If False (default), skip download if output file already exists.
+                          If True, always re-download and overwrite existing file.
+
+    Returns:
+        Path | None: Path to the generated GIF file, or None if skipped due to existing file.
+    """
+    # Ensure output directory exists
+    gif_outdir = Path(gif_outdir)
+    gif_outdir.mkdir(exist_ok=True, parents=True)
+
+    # Construct output filename
+    outfile = gif_outdir / f"{id_geohash}_S2.gif"
+
+    # Check if output file already exists
+    if outfile.exists() and not overwrite_exists:
+        print(f"[INFO] Output file already exists: {outfile}")
+        print("[INFO] Skipping download (use overwrite_exists=True to re-download)")
+        return None
+
+    # Filter to the specific lake feature by geohash
+    feature = input_lake_gdf[input_lake_gdf["id_geohash"] == id_geohash]
+
+    if feature.empty:
+        raise ValueError(f"No feature found with id_geohash: {id_geohash}")
+
+    # Create a bounding box around the lake with a buffer:
+    # 1. Project to EPSG:3995 (World Mercator) for accurate meter-based buffering
+    # 2. Apply buffer in meters
+    # 3. Convert back to WGS84 (EPSG:4326) for geemap compatibility
+    bbox = feature.to_crs(3995).buffer(buffer).to_crs(4326).bounds
+
+    # Convert bbox to Earth Engine FeatureCollection via geemap utilities
+    # Note: geemap.bbox_to_gdf creates a GeoDataFrame, then gdf_to_ee converts to EE
+    fc = geemap.gdf_to_ee(geemap.bbox_to_gdf(bbox.iloc[0]))
+
+    # Generate the Sentinel-2 timelapse GIF
+    # Uses summer months (Jul-Aug) to maximize cloud-free observations
+    geemap.sentinel2_timelapse(
+        roi=fc,
+        start_year=start_year,
+        end_year=end_year,
+        start_date=start_date,
+        end_date=end_date,
+        out_gif=str(outfile),  # geemap expects string path
+        frames_per_second=frames_per_second,
+        dimensions=dimensions,
+        title=f"{id_geohash}",
+        text_sequence=range(start_year, end_year + 1),
+    )
+
+    return outfile

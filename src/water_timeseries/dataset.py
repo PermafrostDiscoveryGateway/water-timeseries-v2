@@ -6,11 +6,14 @@ different data sources and processing pipelines.
 """
 
 import warnings
+from pathlib import Path
 
+import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
 import xarray as xr
 
+from water_timeseries.utils.earthengine import create_S2_timelapse
 from water_timeseries.utils.plotting import (
     plot_water_time_series_dw,
     plot_water_time_series_jrc,
@@ -329,6 +332,58 @@ class DWDataset(LakeDataset):
         )
 
         return figure
+
+    def create_timelapse(
+        self,
+        lake_gdf: gpd.GeoDataFrame,
+        id_geohash: str,
+        gif_outdir: str | Path = "gifs",
+        buffer: float = 100,
+        start_year: int = 2016,
+        end_year: int = 2025,
+        start_date: str = "07-01",
+        end_date: str = "08-31",
+        frames_per_second: int = 1,
+        dimensions: int = 512,
+        overwrite_exists: bool = False,
+    ) -> Path | None:
+        """
+        Create a Sentinel-2 timelapse GIF for a specific lake.
+
+        This method generates an animated GIF showing Sentinel-2 satellite imagery
+        over a date range for a lake identified by its geohash. The timelapse captures
+        the summer period (July-August) each year to maximize cloud-free observations.
+
+        Args:
+            lake_gdf: GeoDataFrame containing lake geometries with an 'id_geohash' column.
+            id_geohash: The geohash identifier for the specific lake to visualize.
+            gif_outdir: Output directory for the GIF file (default: 'gifs').
+            buffer: Buffer distance in meters to expand the lake bounding box (default: 100).
+            start_year: Start year for the timelapse (default: 2016).
+            end_year: End year for the timelapse (default: 2025).
+            start_date: Start date within each year (MM-DD format, default: '07-01').
+            end_date: End date within each year (MM-DD format, default: '08-31').
+            frames_per_second: Animation speed (default: 1).
+            dimensions: Pixel dimensions for the output GIF (default: 512).
+            overwrite_exists: If False (default), skip download if output file already exists.
+                              If True, always re-download and overwrite existing file.
+
+        Returns:
+            Path | None: Path to the generated GIF file, or None if skipped due to existing file.
+        """
+        return create_S2_timelapse(
+            input_lake_gdf=lake_gdf,
+            id_geohash=id_geohash,
+            gif_outdir=gif_outdir,
+            buffer=buffer,
+            start_year=start_year,
+            end_year=end_year,
+            start_date=start_date,
+            end_date=end_date,
+            frames_per_second=frames_per_second,
+            dimensions=dimensions,
+            overwrite_exists=overwrite_exists,
+        )
 
 
 class JRCDataset(LakeDataset):

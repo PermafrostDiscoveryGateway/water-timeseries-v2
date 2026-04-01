@@ -454,6 +454,69 @@ def create_app(
                     )
 
                     plt.close(fig)  # Close figure to free memory
+
+                    # ============================================
+                    # Timelapse Section
+                    # ============================================
+                    st.divider()
+                    st.subheader("🛰️ Sentinel-2 Timelapse")
+
+                    # Button to create timelapse with default settings (2016-2025, Jul-Aug, 512px)
+                    if st.button("🎬 Create Timelapse", key="create_timelapse"):
+                        with st.spinner("Generating timelapse... This may take a few minutes."):
+                            try:
+                                gif_path = st.session_state.dw_dataset.create_timelapse(
+                                    lake_gdf=viewer.gdf,
+                                    id_geohash=current,
+                                    gif_outdir="gifs",
+                                    buffer=100,
+                                    start_year=2016,
+                                    end_year=2025,
+                                    start_date="07-01",
+                                    end_date="08-31",
+                                    frames_per_second=1,
+                                    dimensions=512,
+                                    overwrite_exists=False,
+                                )
+
+                                if gif_path is not None:
+                                    st.success(f"Timelapse created: {gif_path}")
+                                    # Display the GIF at original 512px resolution
+                                    st.image(str(gif_path), caption=f"Sentinel-2 Timelapse: {current}", width=512)
+
+                                    # Add download button for GIF
+                                    with open(gif_path, "rb") as f:
+                                        st.download_button(
+                                            label="💾 Download GIF",
+                                            data=f,
+                                            file_name=gif_path.name,
+                                            mime="image/gif",
+                                        )
+                                else:
+                                    st.info("Timelapse was skipped (file already exists). Set overwrite_exists=True to regenerate.")
+
+                            except Exception as e:
+                                st.error(f"Error creating timelapse: {e}")
+                                st.info("Make sure you have Google Earth Engine authentication configured.")
+
+                    # Check if GIF already exists and display it
+                    else:
+                        from pathlib import Path
+
+                        gif_dir = Path("gifs")
+                        potential_gif = gif_dir / f"{current}_S2.gif"
+                        if potential_gif.exists():
+                            st.info(f"Timelapse already exists: {potential_gif.name}")
+                            st.image(str(potential_gif), caption=f"Sentinel-2 Timelapse: {current}", width=512)
+
+                            # Add download button for existing GIF
+                            with open(potential_gif, "rb") as f:
+                                st.download_button(
+                                    label="💾 Download Existing GIF",
+                                    data=f,
+                                    file_name=potential_gif.name,
+                                    mime="image/gif",
+                                )
                 except Exception as e:
                     st.error(f"Error plotting time series: {e}")
 
