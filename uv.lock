@@ -5230,7 +5230,7 @@ requires-dist = [
     { name = "geemap", specifier = ">=0.37.1" },
     { name = "geopandas", specifier = ">=0.8.0" },
     { name = "gh", marker = "extra == 'dev'", specifier = ">=0.0.4" },
-    { name = "h3", specifier = ">=4.0.0" },
+    { name = "h3", specifier = ">=4.0.0,<5.0.0" },
     { name = "h3pandas" },
     { name = "h5netcdf", specifier = ">=1.4.1" },
     { name = "ipykernel" },
