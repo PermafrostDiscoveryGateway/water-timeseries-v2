@@ -16,13 +16,14 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 
-# Add small sleep to ensure filesystem sync (logging might have caused this naturally)
-RUN sleep 1 && uv pip install "h3>=4.0.0"
+# Use --system flag to install globally (no venv needed)
+RUN uv pip install --system "h3>=4.0.0"
 
-RUN sleep 1 && uv sync --frozen --no-dev
+# Sync with --system flag
+RUN uv sync --frozen --no-dev --system
 
 COPY . .
 
-RUN uv pip install -e .
+RUN uv pip install --system -e .
 
 ENTRYPOINT ["uv", "run", "water-timeseries"]
