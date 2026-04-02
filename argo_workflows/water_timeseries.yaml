@@ -1,0 +1,181 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Workflow
+metadata:
+  name: water-timeseries-breakpoint-analysis
+  namespace: argo
+  annotations:
+    workflows.argoproj.io/pod-keep: "OnCompletion"
+spec:
+  ttlStrategy:
+    secondsAfterCompletion: 86400  # Keep for 1 day after completion
+  entrypoint: main
+  imagePullSecrets:
+  - name: ghcr-secret
+  volumes:
+  - name: water-timeseries-volume
+    persistentVolumeClaim:
+      claimName: argo-workflows-share
+  - name: gcp-creds
+    secret:
+      secretName: personal-gcp-creds
+      items:
+      - key: key.json
+        path: application_default_credentials.json
+  - name: earth-engine-creds
+    secret:
+      secretName: earth-engine-creds
+      items:
+      - key: credentials
+        path: credentials
+  - name: config-file
+    configMap:
+      name: water-series-configmap
+      items:
+      - key: config.yaml  # Adjust based on your configmap structure
+        path: config.yaml
+  templates:
+  - name: main
+    metadata:
+      labels:
+        long-running-job: "true"
+    container:
+      # IMPORTANT: Your Dockerfile needs to have uv, python, and cmake installed
+      # Build this image using your GitHub Action workflow
+      image: ghcr.io/permafrostdiscoverygateway/water-timeseries:latest
+      imagePullPolicy: Always
+      resources:
+        requests:
+          memory: "16Gi"
+          cpu: "4"
+          ephemeral-storage: "10Gi"  # Geospatial data needs more storage
+        limits:
+          memory: "16Gi"
+          cpu: "4"
+          ephemeral-storage: "20Gi"  # Allow more for temp files
+      command: ["bash", "-c"]
+      args:
+        - |
+          set -e  # Exit on error
+          set -x  # Print commands as they execute
+          
+          echo "=== STARTING WATER TIMESERIES BREAKPOINT ANALYSIS ==="
+          echo "Timestamp: $(date)"
+          echo "Hostname: $(hostname)"
+          echo "Pod: ${POD_NAME:-unknown}"
+          
+          # Create required directories
+          mkdir -p /data/input /data/output /data/checkpoint /data/temp
+          mkdir -p /data/cache /data/logs
+          
+          # Check available space and system info
+          echo "=== SYSTEM INFORMATION ==="
+          df -h /data
+          echo "Memory info:"
+          free -h
+          echo "CPU info:"
+          lscpu | grep -E "^(CPU\(s\):|Model name:|Architecture:)"
+          echo "Python version:"
+          python --version
+          echo "uv version:"
+          uv --version
+          echo "CMake version:"
+          cmake --version || echo "CMake not found - h3 might fail!"
+          
+          # Set permissions
+          chmod -R 755 /data/checkpoint /data/temp /data/cache
+          
+          # Environment variables dump (excluding secrets)
+          echo "=== ENVIRONMENT VARIABLES ==="
+          env | grep -v "KEY\|TOKEN\|SECRET\|PASSWORD\|CREDENTIAL" | sort
+          
+          # Check credentials
+          echo "=== CREDENTIALS CHECK ==="
+          ls -la /root/.config/gcloud/ || echo "GCloud creds not found"
+          ls -la /root/.config/earthengine/ || echo "Earth Engine creds not found"
+          echo "Config file check:"
+          ls -la /app/config.yaml || echo "Config file not found"
+          
+          # Sync dependencies with uv (ensure everything is installed)
+          echo "=== SYNCING DEPENDENCIES WITH UV ==="
+          cd /app  # Assuming your code is mounted or built into /app
+          uv sync --frozen  # Use --frozen for production, or remove if you need to update
+          
+          # Check that h3 installed correctly
+          echo "=== VERIFYING H3 INSTALLATION ==="
+          uv run python -c "import h3; print(f'h3 version: {h3.__version__}')" || echo "WARNING: h3 import failed!"
+          
+          # Create debug directory
+          DEBUG_DIR="/data/debug_$(date +%Y%m%d_%H%M%S)"
+          mkdir -p "$DEBUG_DIR"
+          
+          # Run the breakpoint analysis
+          echo "=== RUNNING BREAKPOINT ANALYSIS ==="
+          
+          uv run water-timeseries breakpoint-analysis --config-file /app/config.yaml 2>&1 | tee "$DEBUG_DIR/script_output.log"
+          
+          SCRIPT_EXIT_CODE=${PIPESTATUS[0]}
+          
+          echo "=== SCRIPT COMPLETED ==="
+          echo "Exit code: $SCRIPT_EXIT_CODE"
+          echo "Timestamp: $(date)"
+          
+          # Capture diagnostics if script failed
+          if [ $SCRIPT_EXIT_CODE -ne 0 ]; then
+            echo "=== SCRIPT FAILED - CAPTURING DEBUG INFO ==="
+            
+            # Check running processes
+            ps auxf > "$DEBUG_DIR/processes.log"
+            
+            # Check memory usage
+            cat /proc/meminfo > "$DEBUG_DIR/meminfo.log"
+            
+            # Check disk usage
+            du -sh /data/* > "$DEBUG_DIR/disk_usage.log"
+            
+            # List Python packages
+            uv pip list > "$DEBUG_DIR/pip_list.log"
+            
+            # Check for h3 specific issues
+            uv run python -c "import sys; print(sys.path)" > "$DEBUG_DIR/python_path.log"
+            
+            echo "Debug information saved to: $DEBUG_DIR"
+            
+            # Keep pod alive for debugging (6 hours)
+            echo "=== ENTERING DEBUG MODE ==="
+            echo "Pod will stay running for 6 hours. Use 'kubectl exec' to debug."
+            sleep 21600
+          fi
+          
+          exit $SCRIPT_EXIT_CODE
+      env:
+      - name: GOOGLE_APPLICATION_CREDENTIALS
+        value: /root/.config/gcloud/application_default_credentials.json
+      - name: EARTHENGINE_TOKEN
+        value: /root/.config/earthengine/credentials
+      - name: EE_CLOUD_PROJECT
+        value: "pdg-wg-workflow"
+      - name: POD_NAME
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.name
+      - name: POD_NAMESPACE
+        valueFrom:
+          fieldRef:
+            fieldPath: metadata.namespace
+      - name: UV_CACHE_DIR  # Optional: control uv cache location
+        value: /data/uv_cache
+      - name: UV_NO_CACHE  # Optional: disable cache in production
+        value: "0"  # Set to "1" to disable caching
+      volumeMounts:
+      - name: gcp-creds
+        mountPath: /root/.config/gcloud
+        readOnly: true
+      - name: earth-engine-creds
+        mountPath: /root/.config/earthengine
+        readOnly: true
+      - name: water-timeseries-volume
+        mountPath: /data
+      - name: config-file
+        mountPath: /app/config.yaml
+        subPath: config.yaml
+        readOnly: true
