@@ -23,6 +23,8 @@ on:
 jobs:
   update-version:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.bump != ''
+
 
     permissions:
       contents: write
