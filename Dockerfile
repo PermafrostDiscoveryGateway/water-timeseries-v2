@@ -1,6 +1,5 @@
 FROM python:3.12-slim
 
-# Install build dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
@@ -11,25 +10,19 @@ RUN apt-get update && apt-get install -y \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Set working directory
 WORKDIR /app
 
-# Copy dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install h3 first (this was key in the working version)
-RUN uv pip install --verbose "h3>=4.0.0"
+# Add small sleep to ensure filesystem sync (logging might have caused this naturally)
+RUN sleep 1 && uv pip install "h3>=4.0.0"
 
-# Now run uv sync
-RUN uv sync --frozen --no-dev
+RUN sleep 1 && uv sync --frozen --no-dev
 
-# Copy the rest
 COPY . .
 
-# Install the package
 RUN uv pip install -e .
 
 ENTRYPOINT ["uv", "run", "water-timeseries"]
