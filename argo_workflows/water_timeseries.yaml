@@ -41,7 +41,7 @@ spec:
     container:
       # IMPORTANT: Your Dockerfile needs to have uv, python, and cmake installed
       # Build this image using your GitHub Action workflow
-      image: ghcr.io/permafrostdiscoverygateway/water-timeseries:latest
+      image: ghcr.io/ncsa/water-timeseries:ncsa
       imagePullPolicy: Always
       resources:
         requests:
@@ -64,7 +64,8 @@ spec:
           echo "Pod: ${POD_NAME:-unknown}"
           
           # Create required directories
-          mkdir -p /data/input /data/output /data/checkpoint /data/temp
+          mkdir -p /data/water_timeseries/input_data
+          mkdir -p /data/water_timeseries/output_data
           mkdir -p /data/cache /data/logs
           
           # Check available space and system info
@@ -82,7 +83,7 @@ spec:
           cmake --version || echo "CMake not found - h3 might fail!"
           
           # Set permissions
-          chmod -R 755 /data/checkpoint /data/temp /data/cache
+          chmod -R 755 /data/water_timeseries /data/temp /data/cache
           
           # Environment variables dump (excluding secrets)
           echo "=== ENVIRONMENT VARIABLES ==="

@@ -1,0 +1,39 @@
+FROM python:3.12-slim
+
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    make \
+    curl \
+    cmake \
+    git \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+WORKDIR /app
+
+# Copy files needed for dependency installation
+COPY pyproject.toml uv.lock README.md ./
+
+# Create virtual environment
+RUN uv venv
+ENV PATH="/app/.venv/bin:$PATH"
+
+# Install h3 first
+RUN uv pip install "h3>=4.0.0"
+
+# Sync dependencies (package won't be installed yet because code is missing)
+RUN uv sync --frozen --no-dev --no-install
+
+# Now copy the rest of the code
+COPY . .
+
+# Install the package
+RUN uv pip install -e .
+
+ENV PATH="/app/.venv/bin:$PATH"
+ENV VIRTUAL_ENV=/app/.venv
+
+ENTRYPOINT ["uv", "run", "water-timeseries"]
