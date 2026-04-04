@@ -15,11 +15,13 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 WORKDIR /app
 
 # Copy everything at once
-COPY . .
-#COPY /src .
-#COPY /google_cloud_utils .
-#COPY pyproject.toml .
-#COPY uv.lock .
+# COPY . .
+COPY /src .
+COPY /google_cloud_utils .
+COPY pyproject.toml .
+COPY uv.lock .
+COPY README.md .
+
 
 # Create virtual environment
 RUN uv venv
