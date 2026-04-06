@@ -7,7 +7,7 @@ metadata:
     workflows.argoproj.io/pod-keep: "OnCompletion"
 spec:
   ttlStrategy:
-    secondsAfterCompletion: 86400  # Keep for 1 day after completion
+    secondsAfterCompletion: 86400
   entrypoint: main
   imagePullSecrets:
   - name: ghcr-secret
@@ -45,27 +45,24 @@ spec:
         requests:
           memory: "16Gi"
           cpu: "4"
-          ephemeral-storage: "10Gi"
+          ephemeral-storage: "5Gi"  # Reduced from 10Gi to leave room
         limits:
           memory: "16Gi"
           cpu: "4"
-          ephemeral-storage: "20Gi"
+          ephemeral-storage: "10Gi"  # Changed from 20Gi to 10Gi (Autopilot max)
 
-      # Key change: Use uv run directly with specific script
       command: ["uv", "run"]
       args:
-      - "water-timeseries"  # The script name
+      - "water-timeseries"
       - "breakpoint-analysis"
       - "--config-file"
       - "/app/config.yaml"
 
-      # Alternative: If you want to run a different script
-      # args:
-      # - "your-other-script"
-      # - "--your-flag"
-      # - "value"
-
       env:
+      - name: UV_CACHE_DIR
+        value: /app/.uv_cache  # Put cache inside /app instead of /data
+      - name: UV_LINK_MODE
+        value: "hardlink"  # Will work if same filesystem
       - name: GOOGLE_APPLICATION_CREDENTIALS
         value: /root/.config/gcloud/application_default_credentials.json
       - name: EARTHENGINE_TOKEN
