@@ -6,4 +6,8 @@
 
 ### Set up config
 
+kubectl create configmap water-series-configmap \
+  --from-file=config.yaml=/Users/helium/ncsa/pdg/water-timeseries-v2/config.yaml \
+  --namespace=argo
+
 ###
