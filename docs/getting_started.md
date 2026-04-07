@@ -390,6 +390,81 @@ The dashboard provides a graphical interface for:
    - Enter your EE project in the sidebar
    - Click "Set EE Project" to save it
 
+5. **Satellite Timelapse Animation**: Generate animated GIFs showing satellite imagery over time
+   - **Sentinel-2 (2016-2025)**: High-resolution optical imagery (10m resolution)
+   - **Landsat (2000-2025)**: Longer historical record (30m resolution)
+   - Uses summer months (July-August) to maximize cloud-free observations
+   - Creates a buffer around the lake for context
+
+#### Generating Timelapse GIFs
+
+In the dashboard sidebar, you'll find the "Satellite Timelapse" section with:
+
+- **Sentinel-2 (2016-2025)**: Checkbox to generate Sentinel-2 timelapse (default enabled)
+- **Landsat (2000-2025)**: Checkbox to generate Landsat timelapse (default disabled)
+- **Create Timelapse**: Button to start the generation process
+
+The timelapse GIFs are saved to the `gifs/` directory with naming convention:
+- `{geohash}_S2.gif` for Sentinel-2
+- `{geohash}_LS.gif` for Landsat
+
+##### Timelapse Options
+
+The timelapse generation can be customized via the `create_timelapse()` function:
+
+| Parameter | Type | Description | Default |
+|-----------|------|-------------|---------|
+| `input_lake_gdf` | GeoDataFrame | Lake geometries with id_geohash column | Required |
+| `id_geohash` | str | Specific lake to visualize | Required |
+| `timelapse_source` | str | Image source ("sentinel2" or "landsat") | "sentinel2" |
+| `gif_outdir` | str/Path | Output directory for GIF files | "gifs" |
+| `buffer` | float | Buffer around lake in meters | 100 |
+| `start_year` | int | Start year for timelapse | 2016 (Sentinel-2) / 2000 (Landsat) |
+| `end_year` | int | End year for timelapse | 2025 |
+| `start_date` | str | Start date within year (MM-DD) | "07-01" |
+| `end_date` | str | End date within year (MM-DD) | "08-31" |
+| `frames_per_second` | int | Animation speed | 1 |
+| `dimensions` | int | GIF pixel dimensions | 512 |
+| `overwrite_exists` | bool | Re-download if file exists | False |
+
+##### Programmatic Usage
+
+You can also generate timelapses programmatically:
+
+```python
+import geopandas as gpd
+from water_timeseries.utils.earthengine import create_timelapse
+
+# Load your lake data
+lakes_gdf = gpd.read_file("lakes.parquet")
+
+# Generate Sentinel-2 timelapse (default)
+gif_path = create_timelapse(
+    input_lake_gdf=lakes_gdf,
+    id_geohash="b7uefy0bvcrc",
+    timelapse_source="sentinel2",
+    gif_outdir="gifs",
+)
+
+# Generate Landsat timelapse (longer historical record)
+gif_path = create_timelapse(
+    input_lake_gdf=lakes_gdf,
+    id_geohash="b7uefy0bvcrc",
+    timelapse_source="landsat",
+    start_year=2000,
+    end_year=2025,
+    gif_outdir="gifs",
+)
+
+# Overwrite existing files
+gif_path = create_timelapse(
+    input_lake_gdf=lakes_gdf,
+    id_geohash="b7uefy0bvcrc",
+    timelapse_source="sentinel2",
+    overwrite_exists=True,  # Re-download even if file exists
+)
+```
+
 ### Dashboard Arguments
 
 The `create_app()` function accepts these parameters:
