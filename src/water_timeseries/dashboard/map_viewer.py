@@ -223,7 +223,7 @@ class MapViewer:
         )
 
         # Render the map
-        selected_points = st.plotly_chart(fig, use_container_width=True, on_select="rerun")
+        selected_points = st.plotly_chart(fig, width='stretch', on_select="rerun")
 
         # Process selection
         if selected_points and len(selected_points.get("selection", {}).get("points", [])) > 0:
@@ -452,7 +452,7 @@ def create_app(
                     # Use interactive or static plotting based on toggle
                     if is_interactive:
                         fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
-                        st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, width='stretch')
 
                         # Convert figure to HTML for download
                         html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
@@ -506,7 +506,7 @@ def create_app(
                         if not create_sentinel2 and not create_landsat:
                             st.warning("Please select at least one data source (Sentinel-2 or Landsat)")
                         else:
-                            with st.spinner("Generating timelapse... This may take a few minutes."):
+                            with st.spinner("Generating timelapse... This may take a up to a minute."):
                                 try:
                                     # Create Sentinel-2 timelapse if checked
                                     gif_path_s2 = None
@@ -698,7 +698,7 @@ def create_app(
                         # Use interactive or static plotting based on toggle
                         if is_interactive:
                             fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
-                            st.plotly_chart(fig, use_container_width=True)
+                            st.plotly_chart(fig, width='stretch')
 
                             # Convert figure to HTML for download
                             html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")

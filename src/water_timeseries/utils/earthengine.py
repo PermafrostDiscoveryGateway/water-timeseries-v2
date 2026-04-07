@@ -500,35 +500,30 @@ def create_timelapse(
     # Convert bbox to Earth Engine FeatureCollection via geemap utilities
     # Note: geemap.bbox_to_gdf creates a GeoDataFrame, then gdf_to_ee converts to EE
     fc = geemap.gdf_to_ee(geemap.bbox_to_gdf(bbox.iloc[0]))
+    fc_lake =  geemap.gdf_to_ee(feature)
+
+    # Common kwargs shared between sentinel2_timelapse and landsat_timelapse
+    timelapse_kwargs = {
+        "roi": fc,
+        "start_year": start_year,
+        "end_year": end_year,
+        "start_date": start_date,
+        "end_date": end_date,
+        "out_gif": str(outfile),
+        "frames_per_second": frames_per_second,
+        "dimensions": dimensions,
+        "title": id_geohash,
+        "text_sequence": list(range(start_year, end_year + 1)),
+        "overlay_data": fc_lake,
+        "overlay_color": "#eeeeee",
+    }
 
     if timelapse_source == "sentinel2":
         # Generate the Sentinel-2 timelapse GIF
         # Uses summer months (Jul-Aug) to maximize cloud-free observations
-        geemap.sentinel2_timelapse(
-            roi=fc,
-            start_year=start_year,
-            end_year=end_year,
-            start_date=start_date,
-            end_date=end_date,
-            out_gif=str(outfile),  # geemap expects string path
-            frames_per_second=frames_per_second,
-            dimensions=dimensions,
-            title=f"{id_geohash}",
-            text_sequence=range(start_year, end_year + 1),
-        )
+        geemap.sentinel2_timelapse(**timelapse_kwargs)
 
     elif timelapse_source == "landsat":
-        geemap.landsat_timelapse(
-            roi=fc,
-            start_year=start_year,
-            end_year=end_year,
-            start_date=start_date,
-            end_date=end_date,
-            out_gif=str(outfile),  # geemap expects string path
-            frames_per_second=frames_per_second,
-            dimensions=dimensions,
-            title=f"{id_geohash}",
-            text_sequence=range(start_year, end_year + 1),
-        )
+        geemap.landsat_timelapse(**timelapse_kwargs)
 
     return outfile
