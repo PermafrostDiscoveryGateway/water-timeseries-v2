@@ -30,14 +30,17 @@ Documentation is automatically built and deployed on every push to `main` using 
 Interactive Streamlit dashboard for visualizing lake polygons and time series data:
 
 ```bash
-streamlit run src/water_timeseries/dashboard/app.py
+export EE_PROJECT=<YOUR GEE PROJECT>
+uv run water-timeseries dashboard
 ```
+
 
 Features:
 - Interactive map with lake polygons from parquet files
 - Hover to see attributes (id_geohash, area, net change)
 - Click to select and view time series
 - Automatic download from Google Earth Engine if data not available
+- Satellite timelapse animations (Sentinel-2 and Landsat)
 
 ![Dashboard](figures/dashboard.png)
 
@@ -131,6 +134,10 @@ ds = dl.download_dw_monthly(
 ### Command Line Interface
 
 ```bash
+# Launch the interactive dashboard
+uv run water-timeseries dashboard
+
+# Run breakpoint analysis
 uv run water-timeseries breakpoint-analysis \
     data.zarr \
     output.parquet \
