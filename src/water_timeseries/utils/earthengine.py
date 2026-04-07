@@ -430,9 +430,10 @@ def normalize_values(df: pd.DataFrame, name_field: str) -> pd.DataFrame:
     return df[non_numeric_cols].join(df_normed)
 
 
-def create_S2_timelapse(
+def create_timelapse(
     input_lake_gdf: gpd.GeoDataFrame,
     id_geohash: str,
+    timelapse_source: str = "sentinel2",
     gif_outdir: str | Path = "gifs",
     buffer: float = 100,
     start_year: int = 2016,
@@ -453,6 +454,7 @@ def create_S2_timelapse(
     Args:
         input_lake_gdf: GeoDataFrame containing lake geometries with an 'id_geohash' column.
         id_geohash: The geohash identifier for the specific lake to visualize.
+        timelapse_source: Image source for timelapse imagery ('sentinel2' or 'landsat')
         gif_outdir: Output directory for the GIF file (default: 'gifs').
         buffer: Buffer distance in meters to expand the lake bounding box (default: 100).
         start_year: Start year for the timelapse (default: 2016).
@@ -471,8 +473,11 @@ def create_S2_timelapse(
     gif_outdir = Path(gif_outdir)
     gif_outdir.mkdir(exist_ok=True, parents=True)
 
-    # Construct output filename
-    outfile = gif_outdir / f"{id_geohash}_S2.gif"
+    # Construct output filename based on data source
+    if timelapse_source == "landsat":
+        outfile = gif_outdir / f"{id_geohash}_LS.gif"
+    else:
+        outfile = gif_outdir / f"{id_geohash}_S2.gif"
 
     # Check if output file already exists
     if outfile.exists() and not overwrite_exists:
@@ -496,19 +501,34 @@ def create_S2_timelapse(
     # Note: geemap.bbox_to_gdf creates a GeoDataFrame, then gdf_to_ee converts to EE
     fc = geemap.gdf_to_ee(geemap.bbox_to_gdf(bbox.iloc[0]))
 
-    # Generate the Sentinel-2 timelapse GIF
-    # Uses summer months (Jul-Aug) to maximize cloud-free observations
-    geemap.sentinel2_timelapse(
-        roi=fc,
-        start_year=start_year,
-        end_year=end_year,
-        start_date=start_date,
-        end_date=end_date,
-        out_gif=str(outfile),  # geemap expects string path
-        frames_per_second=frames_per_second,
-        dimensions=dimensions,
-        title=f"{id_geohash}",
-        text_sequence=range(start_year, end_year + 1),
-    )
+    if timelapse_source == "sentinel2":
+        # Generate the Sentinel-2 timelapse GIF
+        # Uses summer months (Jul-Aug) to maximize cloud-free observations
+        geemap.sentinel2_timelapse(
+            roi=fc,
+            start_year=start_year,
+            end_year=end_year,
+            start_date=start_date,
+            end_date=end_date,
+            out_gif=str(outfile),  # geemap expects string path
+            frames_per_second=frames_per_second,
+            dimensions=dimensions,
+            title=f"{id_geohash}",
+            text_sequence=range(start_year, end_year + 1),
+        )
+
+    elif timelapse_source == "landsat":
+        geemap.landsat_timelapse(
+            roi=fc,
+            start_year=start_year,
+            end_year=end_year,
+            start_date=start_date,
+            end_date=end_date,
+            out_gif=str(outfile),  # geemap expects string path
+            frames_per_second=frames_per_second,
+            dimensions=dimensions,
+            title=f"{id_geohash}",
+            text_sequence=range(start_year, end_year + 1),
+        )
 
     return outfile
