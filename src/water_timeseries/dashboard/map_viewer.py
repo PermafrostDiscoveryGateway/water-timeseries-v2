@@ -11,6 +11,18 @@ import plotly.graph_objects as go
 import streamlit as st
 import xarray as xr
 
+import geemap
+import os
+
+if "EARTHENGINE_TOKEN" in os.environ.keys():
+    print("setting up with TOKEN")
+    geemap.ee_initialize()
+
+elif "EARTHENGINE_TOKEN" in st.secrets.keys():
+    print("setting up with TOKEN from secrets")
+    os.environ["EARTHENGINE_TOKEN"] = st.secrets["EARTHENGINE_TOKEN"]
+    geemap.ee_initialize()
+
 from water_timeseries.dataset import DWDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.io import load_vector_dataset
