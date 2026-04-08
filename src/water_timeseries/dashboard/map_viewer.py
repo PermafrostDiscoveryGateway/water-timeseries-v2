@@ -1,4 +1,4 @@
-"""Map Viewer dashboard component using Streamlit and Plotly."""
+"""Map Viewer dashboard component using Streamlit and lonboard for high-performance mapping."""
 
 import os
 from io import BytesIO
@@ -9,18 +9,154 @@ import geemap
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 import xarray as xr
+import numpy as np
+from lonboard import Map, PolygonLayer
 
+# Try to import stlonboard for Streamlit integration
+stlonboard = None
+
+try:
+    from lonboard import stlonboard
+except ImportError:
+    # stlonboard not available - will use HTML fallback
+    pass
+
+
+def render_map_html(map_view: Map) -> None:
+    """Fallback: Render lonboard map as HTML component."""
+    # Get the HTML representation of the map
+    html = map_view.to_html()
+    st.components.v1.html(html, height=600)
+
+
+def visualize_gdf(
+    gdf: gpd.GeoDataFrame,
+    fill_color: List[int] = [0, 120, 255, 180],
+    line_color: List[int] = [255, 255, 255, 255],
+    line_width: float = 1.0,
+    height: int = 600,
+    zoom: Optional[int] = None,
+    map_center: Optional[List[float]] = None,
+    use_st_map: bool = False,
+    use_folium: bool = True,
+) -> None:
+    """Visualize a GeoDataFrame with polygons using folium, lonboard, or st.map.
+
+    A simple function to display your polygon GeoDataFrame on an interactive map.
+
+    Args:
+        gdf: GeoDataFrame containing polygon geometries.
+        fill_color: RGBA fill color for polygons [r, g, b, a] (only for lonboard/folium).
+        line_color: RGBA line color for polygon edges [r, g, b, a] (only for lonboard/folium).
+        line_width: Width of polygon edges.
+        height: Height of the map in pixels.
+        zoom: Initial zoom level. If None, auto-calculated from bounds.
+        map_center: [lat, lon] center of the map. If None, auto-calculated from centroid.
+        use_st_map: If True, use Streamlit's native st.map() (shows points at centroids).
+        use_folium: If True and use_st_map is False, use folium for full polygon rendering.
+
+    Example:
+        >>> import geopandas as gpd
+        >>> from water_timeseries.dashboard.map_viewer import visualize_gdf
+        >>> gdf = gpd.read_file("lakes.parquet")
+        >>> visualize_gdf(gdf)
+    """
+    import streamlit as st
+
+    # Filter out invalid geometries
+    valid_mask = gdf.geometry.notna() & ~gdf.geometry.is_empty
+    valid_gdf = gdf[valid_mask].copy().reset_index(drop=True)
+
+    if len(valid_gdf) == 0:
+        st.warning("No valid geometries found in the GeoDataFrame.")
+        return
+
+    # Use Streamlit's native st.map for simple visualization
+    if use_st_map:
+        st.map(valid_gdf)
+        return
+
+    # Use folium for full polygon rendering
+    if use_folium:
+        import folium
+        from streamlit_folium import st_folium
+
+        # Calculate center
+        if map_center is None:
+            centroid = valid_gdf.geometry.unary_union.centroid
+            center = [centroid.y, centroid.x]  # [lat, lon]
+        else:
+            center = map_center
+
+        # Create folium map
+        m = folium.Map(location=center, zoom_start=zoom if zoom else 10)
+
+        # Add polygons with simple styling
+        folium.GeoJson(
+            valid_gdf,
+            style_function=lambda x: {
+                "fillColor": "blue",
+                "color": "black",
+                "weight": line_width,
+                "fillOpacity": 0.5,
+            },
+        ).add_to(m)
+
+        st_folium(m, height=height, width="100%")
+        return
+
+    # Calculate center if not provided
+    if map_center is None:
+        centroid = valid_gdf.geometry.unary_union.centroid
+        center = [centroid.y, centroid.x]  # [lat, lon]
+    else:
+        center = map_center
+
+    # Create the polygon layer
+    polygon_layer = PolygonLayer.from_geopandas(
+        valid_gdf,
+        get_fill_color=fill_color,
+        get_line_color=line_color,
+        get_line_width=line_width,
+        pickable=True,
+        auto_highlight=True,
+        highlight_color=[255, 255, 0, 150],  # Yellow highlight on hover
+    )
+
+    # Create the map
+    map_view = Map(
+        polygon_layer=polygon_layer,
+        center=center,
+        zoom=zoom if zoom is not None else 10,
+    )
+
+    # Try to use stlonboard for Streamlit integration
+    try:
+        from lonboard import stlonboard
+
+        stlonboard(map_view, height=height)
+    except ImportError:
+        # Fallback: render as HTML
+        html = map_view.to_html()
+        st.components.v1.html(html, height=height)
+
+# Initialize Earth Engine - only if running in Streamlit context
+# Check environment variable first (works outside Streamlit)
 if "EARTHENGINE_TOKEN" in os.environ.keys():
     print("setting up with TOKEN")
     geemap.ee_initialize()
-
-elif "EARTHENGINE_TOKEN" in st.secrets.keys():
-    print("setting up with TOKEN from secrets")
-    os.environ["EARTHENGINE_TOKEN"] = st.secrets["EARTHENGINE_TOKEN"]
-    geemap.ee_initialize()
+else:
+    # Try Streamlit secrets (only works when running in Streamlit)
+    try:
+        if "EARTHENGINE_TOKEN" in st.secrets.keys():
+            print("setting up with TOKEN from secrets")
+            os.environ["EARTHENGINE_TOKEN"] = st.secrets["EARTHENGINE_TOKEN"]
+            geemap.ee_initialize()
+    except Exception:
+        # Not running in Streamlit context, skip initialization
+        pass
 
 from water_timeseries.dataset import DWDataset
 from water_timeseries.downloader import EarthEngineDownloader
@@ -28,19 +164,15 @@ from water_timeseries.utils.io import load_vector_dataset
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     MAP_STYLING,
-    build_hover_template,
-    gdf_to_geojson_feature_collection,
-    get_colorbar_config,
     get_z_values_for_coloring,
-    prepare_custom_data_for_plotly,
 )
 
 
 class MapViewer:
-    """Interactive map viewer for GeoDataFrames using Streamlit and Plotly.
+    """Interactive map viewer for GeoDataFrames using Streamlit and lonboard.
 
     Features:
-    - Display GeoDataFrame on an interactive map
+    - Display GeoDataFrame on an interactive map (high performance for large datasets)
     - Hover tooltips showing feature attributes
     - Click to select features and store their id_geohash value
     """
@@ -132,11 +264,14 @@ class MapViewer:
         return plot_df
 
     def render(self) -> Optional[str]:
-        """Render the interactive map in Streamlit.
+        """Render the interactive map in Streamlit using folium.
 
         Returns:
             The selected id_geohash value if a feature was clicked, None otherwise.
         """
+        import folium
+        from streamlit_folium import st_folium
+
         st.subheader("Interactive Map Viewer")
 
         # Get valid indices (after filtering out invalid geometries)
@@ -144,120 +279,50 @@ class MapViewer:
         valid_gdf = self.gdf[valid_mask].copy()
         valid_indices = valid_gdf.index.tolist()
 
-        # Prepare hover data
-        hover_df_all = self._prepare_hover_data()
-        all_indices = self.gdf.index.tolist()
-        positions = [all_indices.index(idx) for idx in valid_indices]
-        plot_df = hover_df_all.iloc[positions].reset_index(drop=True)
+        # Ensure geometry is in proper shapely format
+        valid_gdf = valid_gdf.reset_index(drop=True)
+
+        if len(valid_gdf) == 0:
+            st.warning("No valid geometries found.")
+            return None
 
         # Determine center of map
         if self.map_center is None:
             centroid = valid_gdf.geometry.unary_union.centroid
-            center = {"lat": centroid.y, "lon": centroid.x}
+            center = [centroid.y, centroid.x]  # [lat, lon]
         else:
-            center = self.map_center
+            center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
 
-        # Build hover fields list
-        hover_fields = [col for col in plot_df.columns if col != self.id_column]
+        # Create folium map with simple hardcoded styling
+        m = folium.Map(location=center, zoom_start=self.zoom)
 
-        # Use utility function to build hover template
-        hover_template = build_hover_template(self.id_column, hover_fields)
+        # Add polygons with simple blue fill
+        folium.GeoJson(
+            valid_gdf,
+            style_function=lambda x: {
+                "fillColor": "blue",
+                "color": "black",
+                "weight": 1,
+                "fillOpacity": 0.5,
+            },
+        ).add_to(m)
 
-        # Use utility function to prepare custom data
-        custom_data = prepare_custom_data_for_plotly(plot_df, self.id_column, hover_fields)
+        # Render the map and get click data
+        result = st_folium(m, height=600, width="100%", key="map_viewer")
 
-        # Use utility function to convert to GeoJSON
-        geojson = gdf_to_geojson_feature_collection(valid_gdf)
+        # Extract id_geohash from clicked feature
+        clicked_id = None
+        if result and "last_active_drawing" in result:
+            clicked_data = result["last_active_drawing"]
+            if clicked_data and "properties" in clicked_data:
+                clicked_id = clicked_data["properties"].get(self.id_column)
 
-        # Use utility function to get z-values for coloring
-        z_values = get_z_values_for_coloring(valid_gdf, "NetChange_perc", clip_range=(-50, 50))
-
-        # Create the map using Plotly graph_objects for polygon rendering
-        # Get styling from visualization module
-        unselected_style = MAP_STYLING["unselected"]
-        colorbar_config = get_colorbar_config("NetChange %", "RdYlBu", zmid=0)
-
-        fig = go.Figure(
-            go.Choroplethmapbox(
-                geojson=geojson,
-                locations=valid_gdf.index.tolist(),
-                z=z_values,
-                customdata=custom_data,
-                hovertemplate=hover_template,
-                marker_opacity=unselected_style["opacity"],
-                marker_line_width=unselected_style["line_width"],
-                marker_line_color=unselected_style["line_color"],
-                colorscale=colorbar_config["colorscale"],
-                zmid=colorbar_config.get("zmid"),
-                showscale=colorbar_config["showscale"],
-                colorbar_title=colorbar_config["colorbar_title"],
-            )
-        )
-
-        # Add a second layer to highlight selected polygon with slightly thicker/darker outline
-        # This layer will be updated when selection changes
-        selected_geohash = st.session_state.get("selected_geohash")
-        if selected_geohash and selected_geohash in valid_gdf[self.id_column].values:
-            # Get the selected feature
-            selected_feature = valid_gdf[valid_gdf[self.id_column] == selected_geohash]
-            selected_geojson = gdf_to_geojson_feature_collection(selected_feature)
-            selected_idx = valid_gdf[valid_gdf[self.id_column] == selected_geohash].index.tolist()
-
-            # Use utility to get z-values for selected feature
-            selected_z = get_z_values_for_coloring(selected_feature, "NetChange_perc", clip_range=(-50, 50))
-
-            # Get styling from visualization module
-            selected_style = MAP_STYLING["selected"]
-
-            # Add highlight layer with slightly thicker and darker outline
-            fig.add_trace(
-                go.Choroplethmapbox(
-                    geojson=selected_geojson,
-                    locations=selected_idx,
-                    z=selected_z,
-                    marker_opacity=selected_style["opacity"],
-                    marker_line_width=selected_style["line_width"],
-                    marker_line_color=selected_style["line_color"],
-                    colorscale="RdYlBu",
-                    zmid=0,
-                    showscale=False,
-                    hoverinfo="skip",
-                )
-            )
-
-        # Update layout
-        fig.update_layout(
-            mapbox=dict(style="open-street-map", zoom=self.zoom, center=center),
-            height=600,
-            margin={"r": 0, "t": 0, "l": 0, "b": 0},
-            clickmode="event+select",
-        )
-
-        # Render the map
-        selected_points = st.plotly_chart(fig, width="stretch", on_select="rerun")
-
-        # Process selection
-        if selected_points and len(selected_points.get("selection", {}).get("points", [])) > 0:
-            # Get the first selected point's index
-            point = selected_points["selection"]["points"][0]
-            point_index = point.get("point_index")
-
-            if point_index is not None and point_index < len(valid_indices):
-                # Map back to original dataframe index
-                original_index = valid_indices[point_index]
-                # Get the id_geohash value
-                selected_geohash = self.gdf.iloc[original_index][self.id_column]
-
-                # Store in session state
-                st.session_state.selected_geohash = selected_geohash
-
-                # Add to clicked features list if not already there
-                if selected_geohash not in st.session_state.clicked_features:
-                    st.session_state.clicked_features.append(selected_geohash)
-
-                st.success(f"Selected feature: {selected_geohash}")
-
-                return selected_geohash
+        # Update session state only if a NEW feature was clicked (not the same one)
+        if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
+            st.session_state.selected_geohash = clicked_id
+            if clicked_id not in st.session_state.clicked_features:
+                st.session_state.clicked_features.append(clicked_id)
+            st.rerun()
 
         return None
 
@@ -556,10 +621,7 @@ def create_app(
                                             overwrite_exists=False,
                                         )
 
-                                    # Display GIFs side by side (single row)
-                                    display_col_s2, display_col_ls = st.columns(2)
-
-                                    # Display GIFs with headers
+                                    # Display GIFs side by side with headers
                                     display_col_s2, display_col_ls = st.columns(2)
 
                                     # Sentinel-2 GIF
