@@ -1,0 +1,147 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pvc-inspector-1
+  namespace: argo
+spec:
+  containers:
+  - name: inspector
+    image: python:3.12-slim
+    command: ["sh", "-c"]
+    args:
+    - |
+      # Install ONLY netcdf-bin (ncdump)
+      apt-get update
+      apt-get install -y netcdf-bin
+      
+      echo "ncdump installed: $(ncdump --version 2>/dev/null | head -1)"
+      echo ""
+      echo "To analyze NetCDF file:"
+      echo "ncdump -h /data/file.nc"
+      
+      tail -f /dev/null
+    volumeMounts:
+    - name: argo-workflow-volume
+      mountPath: /data
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+  volumes:
+  - name: argo-workflow-volume
+    persistentVolumeClaim:
+      claimName: argo-workflows-share
+  restartPolicy: Never
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pvc-inspector-2
+  namespace: argo
+spec:
+  containers:
+  - name: inspector
+    image: ubuntu:22.04  # Using LTS version for stability
+    command: ["sh", "-c"]
+    args:
+    - |
+      # Update package list
+      apt-get update
+      
+      # Install packages ONE BY ONE with no recommendations
+      # This prevents memory spikes
+      apt-get install -y --no-install-recommends netcdf-bin
+      apt-get install -y --no-install-recommends nco
+      
+      # Optional tools - comment out if still having issues
+      # apt-get install -y --no-install-recommends cdo
+      # apt-get install -y --no-install-recommends vim-tiny  # smaller than full vim
+      
+      # Verify installations
+      echo ""
+      echo "=== Installed netCDF tools ==="
+      echo "ncdump version: $(ncdump --version 2>&1 | head -1 || echo 'not found')"
+      echo "ncks version: $(ncks --version 2>&1 | head -1 || echo 'not found')"
+      
+      # Show available commands
+      echo ""
+      echo "Available commands:"
+      echo "  ncdump -h /data/file.nc  # View file header"
+      echo "  ncks -m /data/file.nc     # Show metadata"
+      echo "  ncl_filedump /data/file.nc # Detailed info (if installed)"
+      
+      # Keep pod running
+      tail -f /dev/null
+    volumeMounts:
+    - name: argo-workflow-volume
+      mountPath: /data
+    resources:
+      requests:
+        memory: "512Mi"  # Reduced request
+        cpu: "250m"
+      limits:
+        memory: "1Gi"     # Clear limit
+        cpu: "1"
+  volumes:
+  - name: argo-workflow-volume
+    persistentVolumeClaim:
+      claimName: argo-workflows-share
+  restartPolicy: Never
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pvc-inspector-3
+  namespace: argo
+spec:
+  containers:
+  - name: inspector
+    image: ubuntu:22.04  # Using LTS version for stability
+    command: ["sh", "-c"]
+    args:
+    - |
+      # Update package list
+      apt-get update
+      
+      # Install packages ONE BY ONE with no recommendations
+      # This prevents memory spikes
+      apt-get install -y --no-install-recommends netcdf-bin
+      apt-get install -y --no-install-recommends nco
+      
+      # Optional tools - comment out if still having issues
+      # apt-get install -y --no-install-recommends cdo
+      # apt-get install -y --no-install-recommends vim-tiny  # smaller than full vim
+      
+      # Verify installations
+      echo ""
+      echo "=== Installed netCDF tools ==="
+      echo "ncdump version: $(ncdump --version 2>&1 | head -1 || echo 'not found')"
+      echo "ncks version: $(ncks --version 2>&1 | head -1 || echo 'not found')"
+      
+      # Show available commands
+      echo ""
+      echo "Available commands:"
+      echo "  ncdump -h /data/file.nc  # View file header"
+      echo "  ncks -m /data/file.nc     # Show metadata"
+      echo "  ncl_filedump /data/file.nc # Detailed info (if installed)"
+      
+      # Keep pod running
+      tail -f /dev/null
+    volumeMounts:
+    - name: argo-workflow-volume
+      mountPath: /data
+    resources:
+      requests:
+        memory: "512Mi"  # Reduced request
+        cpu: "250m"
+      limits:
+        memory: "1Gi"     # Clear limit
+        cpu: "1"
+  volumes:
+  - name: argo-workflow-volume
+    persistentVolumeClaim:
+      claimName: argo-workflows-share
+  restartPolicy: Never
