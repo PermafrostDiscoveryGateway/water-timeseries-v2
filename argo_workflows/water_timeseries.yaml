@@ -14,7 +14,7 @@ spec:
   volumes:
   - name: water-timeseries-volume
     persistentVolumeClaim:
-      claimName: argo-workflows-share
+      claimName: argo-workflows-share  # ✅ This matches your PVC name
   - name: gcp-creds
     secret:
       secretName: personal-gcp-creds
@@ -45,11 +45,11 @@ spec:
         requests:
           memory: "16Gi"
           cpu: "4"
-          ephemeral-storage: "5Gi"  # Reduced from 10Gi to leave room
+          ephemeral-storage: "5Gi"
         limits:
           memory: "16Gi"
           cpu: "4"
-          ephemeral-storage: "10Gi"  # Changed from 20Gi to 10Gi (Autopilot max)
+          ephemeral-storage: "10Gi"  # Good for Autopilot
 
       command: ["uv", "run"]
       args:
@@ -58,10 +58,16 @@ spec:
       - "--config-file"
       - "/app/config.yaml"
       env:
+      - name: TMPDIR
+        value: /data/tmp  # Add this to redirect system temp to Filestore
+      - name: TEMP
+        value: /data/tmp  # For Windows compatibility
+      - name: TMP
+        value: /data/tmp
       - name: UV_CACHE_DIR
-        value: /app/.uv_cache  # Put cache inside /app instead of /data
+        value: /data/.uv_cache  # ✅ Single definition, inside mounted volume
       - name: UV_LINK_MODE
-        value: "hardlink"  # Will work if same filesystem
+        value: "hardlink"
       - name: GOOGLE_APPLICATION_CREDENTIALS
         value: /root/.config/gcloud/application_default_credentials.json
       - name: EARTHENGINE_TOKEN
@@ -76,8 +82,6 @@ spec:
         valueFrom:
           fieldRef:
             fieldPath: metadata.namespace
-      - name: UV_CACHE_DIR
-        value: /data/uv_cache
       - name: UV_NO_CACHE
         value: "0"
 
@@ -89,7 +93,7 @@ spec:
         mountPath: /root/.config/earthengine
         readOnly: true
       - name: water-timeseries-volume
-        mountPath: /data
+        mountPath: /data  # ✅ This matches UV_CACHE_DIR location
       - name: config-file
         mountPath: /app/config.yaml
         subPath: config.yaml
