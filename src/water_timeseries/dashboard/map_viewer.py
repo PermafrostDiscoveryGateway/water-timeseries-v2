@@ -14,15 +14,6 @@ import xarray as xr
 import numpy as np
 from lonboard import Map, PolygonLayer
 
-# Try to import stlonboard for Streamlit integration
-stlonboard = None
-
-try:
-    from lonboard import stlonboard
-except ImportError:
-    # stlonboard not available - will use HTML fallback
-    pass
-
 
 def render_map_html(map_view: Map) -> None:
     """Fallback: Render lonboard map as HTML component."""
@@ -71,7 +62,6 @@ def visualize_gdf(
         >>> gdf = gpd.read_file("lakes.parquet")
         >>> visualize_gdf(gdf, max_features=1000)  # Load max 1000 features
     """
-    import streamlit as st
 
     # Filter out invalid geometries
     valid_mask = gdf.geometry.notna() & ~gdf.geometry.is_empty
@@ -294,7 +284,7 @@ def visualize_gdf(
             center = map_center
 
         # Create folium map
-        m = folium.Map(location=center, zoom_start=zoom if zoom else 10)
+        m = folium.Map(location=center, zoom_start=zoom if zoom else 10, tiles='Esri.WorldImagery')
 
         # Add polygons with simple styling
         folium.GeoJson(
@@ -509,7 +499,7 @@ class MapViewer:
         if self.show_centroids_only:
             # If satellite mode, use folium instead (better tile support)
             if getattr(self, 'map_style', 'light') == "satellite":
-                return self._render_folium(valid_gdf, use_satellite=True, layer_column=getattr(self, 'layer_column', None))
+                return self._render_folium(valid_gdf, layer_column=getattr(self, 'layer_column', None))
             return self._render_centroids(valid_gdf, map_style=getattr(self, 'map_style', 'light'))
 
         # Use pydeck for large datasets
@@ -527,11 +517,10 @@ class MapViewer:
         # Default: use folium
         return self._render_folium(
             valid_gdf, 
-            use_satellite=getattr(self, 'map_style', 'light') == "satellite",
             layer_column=getattr(self, 'layer_column', None)
         )
 
-    def _render_folium(self, valid_gdf: gpd.GeoDataFrame, use_satellite: bool = False, layer_column: Optional[str] = None) -> Optional[str]:
+    def _render_folium(self, valid_gdf: gpd.GeoDataFrame, layer_column: Optional[str] = None) -> Optional[str]:
         """Render using folium with optional layer selection.
         
         Args:
@@ -553,16 +542,10 @@ class MapViewer:
         else:
             center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
 
-        # Create folium map with ESRI satellite tiles if requested
-        if use_satellite:
-            m = folium.Map(
-                location=center,
-                zoom_start=self.zoom,
-                tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                attr="ESRI World Imagery",
-            )
-        else:
-            m = folium.Map(location=center, zoom_start=self.zoom)
+        m = folium.Map(location=center, zoom_start=self.zoom)
+        folium.TileLayer('CartoDB.DarkMatter').add_to(m)
+        folium.TileLayer('Esri.WorldImagery').add_to(m)
+
         
         # Color palette for layers
         colors = [
@@ -578,66 +561,66 @@ class MapViewer:
             "#66c2a5",  # Teal
         ]
 
-        # If layer_column is specified, create separate layers for each value
-        if layer_column and layer_column in valid_gdf.columns:
-            # Get unique values
-            unique_values = valid_gdf[layer_column].dropna().unique()
+        # # If layer_column is specified, create separate layers for each value
+        # if layer_column and layer_column in valid_gdf.columns:
+        #     # Get unique values
+        #     unique_values = valid_gdf[layer_column].dropna().unique()
             
-            # Sort values for consistent ordering (try numeric first)
-            try:
-                unique_values = sorted(unique_values, key=lambda x: float(x) if x is not None else float('inf'))
-            except (TypeError, ValueError):
-                unique_values = sorted(unique_values, key=str)
+        #     # Sort values for consistent ordering (try numeric first)
+        #     try:
+        #         unique_values = sorted(unique_values, key=lambda x: float(x) if x is not None else float('inf'))
+        #     except (TypeError, ValueError):
+        #         unique_values = sorted(unique_values, key=str)
             
 
-            # Get layer visibility from session state (set by sidebar checkboxes)
-            # Each unique value gets its own layer
-            for i, value in enumerate(unique_values):
-                # Filter to this layer's data
-                layer_gdf = valid_gdf[valid_gdf[layer_column] == value].copy()
+        #     # Get layer visibility from session state (set by sidebar checkboxes)
+        #     # Each unique value gets its own layer
+        #     for i, value in enumerate(unique_values):
+        #         # Filter to this layer's data
+        #         layer_gdf = valid_gdf[valid_gdf[layer_column] == value].copy()
                 
-                if len(layer_gdf) == 0:
-                    continue
+        #         if len(layer_gdf) == 0:
+        #             continue
                 
-                # Get color for this layer
-                color = colors[i % len(colors)]
+        #         # Get color for this layer
+        #         color = colors[i % len(colors)]
                 
-                # Create feature group for this layer
-                layer_name = f"{layer_column}: {value}"
+        #         # Create feature group for this layer
+        #         layer_name = f"{layer_column}: {value}"
 
-                feature_group = folium.FeatureGroup(name=layer_name, show=True)
+        #         feature_group = folium.FeatureGroup(name=layer_name, show=True)
                 
-                # Add polygons to this layer
-                folium.GeoJson(
-                    layer_gdf,
-                    style_function=lambda x, c=color: {
-                        "fillColor": c,
-                        "color": "black",
-                        "weight": 1,
-                        "fillOpacity": 0.6,
-                    },
-                    tooltip=folium.GeoJsonTooltip(
-                        fields=[layer_column, self.id_column] if self.id_column in layer_gdf.columns else [layer_column],
-                        aliases=[layer_column.title(), "ID:"],
-                    ),
-                ).add_to(feature_group)
+        #         # Add polygons to this layer
+        #         folium.GeoJson(
+        #             layer_gdf,
+        #             style_function=lambda x, c=color: {
+        #                 "fillColor": c,
+        #                 "color": "black",
+        #                 "weight": 1,
+        #                 "fillOpacity": 0.6,
+        #             },
+        #             tooltip=folium.GeoJsonTooltip(
+        #                 fields=[layer_column, self.id_column] if self.id_column in layer_gdf.columns else [layer_column],
+        #                 aliases=[layer_column.title(), "ID:"],
+        #             ),
+        #         ).add_to(feature_group)
             
-                feature_group.add_to(m)
+        #         feature_group.add_to(m)
 
-            # Add layer control to toggle layers on/off
-            # This adds the layers icon in the top-right corner of the map
+        #     # Add layer control to toggle layers on/off
+        #     # This adds the layers icon in the top-right corner of the map
             
-        else:
-            # Single layer without selection (original behavior)
-            folium.GeoJson(
-                valid_gdf,
-                style_function=lambda x: {
-                    "fillColor": "blue",
-                    "color": "black",
-                    "weight": 1,
-                    "fillOpacity": 0.5,
-                },
-            ).add_to(m)
+        # else:
+        # Single layer without selection (original behavior)
+        folium.GeoJson(
+            valid_gdf,
+            style_function=lambda x: {
+                "fillColor": "blue",
+                "color": "black",
+                "weight": 1,
+                "fillOpacity": 0.5,
+            },
+        ).add_to(m)
 
         folium.LayerControl().add_to(m)
         # Render the map and get click data
