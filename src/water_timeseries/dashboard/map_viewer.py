@@ -161,6 +161,12 @@ from water_timeseries.utils.io import load_vector_dataset
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
 )
+from water_timeseries.utils.map_styling import (
+    create_tile_layers,
+    format_tooltip_columns,
+    get_colored_style_function,
+    get_default_style_function,
+)
 
 
 class MapViewer:
@@ -319,80 +325,35 @@ class MapViewer:
             center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
 
         m = folium.Map(location=center, zoom_start=self.zoom)
-        folium.TileLayer("CartoDB.DarkMatter").add_to(m)
-        folium.TileLayer("Esri.WorldImagery").add_to(m)
 
-        # Single layer with color based on NetChange_perc
-        # Check if NetChange_perc column exists
+        # Add tile layers using utility function
+        for tile_name in create_tile_layers():
+            folium.TileLayer(tile_name).add_to(m)
+
+        # Create style function based on whether NetChange_perc column exists
         if "NetChange_perc" in valid_gdf.columns:
-            # Create RdBu colormap from matplotlib
-            # Red at -40, blue at 40
-            cmap = plt.cm.RdYlBu
-            norm = plt.Normalize(vmin=-40, vmax=40)
-
-            def style_function(feature):
-                # Get NetChange_perc value for this feature
-                props = feature.get("properties", {})
-                value = props.get("NetChange_perc", None)
-
-                if value is None or pd.isna(value):
-                    # Default color for missing values
-                    return {
-                        "fillColor": "#cccccc",
-                        "color": "#dddddd",
-                        "weight": 1,
-                        "fillOpacity": 0.5,
-                    }
-
-                # Normalize value and get color from colormap
-                color = cmap(norm(value))
-                # Convert RGBA to hex manually to avoid JSON serialization issues
-                r, g, b, a = color
-                hex_color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
-
-                return {
-                    "fillColor": hex_color,
-                    "color": "#dddddd",
-                    "weight": 1,
-                    "fillOpacity": 0.6,
-                }
+            style_function = get_colored_style_function(
+                color_column="NetChange_perc",
+                vmin=-40,
+                vmax=40,
+                colormap=plt.cm.RdYlBu,
+            )
         else:
-            # Fallback to blue if column doesn't exist
-            def style_function(feature):
-                return {
-                    "fillColor": "blue",
-                    "color": "#dddddd",
-                    "weight": 1,
-                    "fillOpacity": 0.5,
-                }
+            style_function = get_default_style_function()
 
-        # Pre-format NetChange values for tooltip display (to avoid JSON serialization issues)
-        if "NetChange_perc" in valid_gdf.columns:
-            # Define column pairs to display in tooltips: (original_column, display_alias, format_string, unit)
-            tooltip_columns = [
-                ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
-                ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
-                ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
-                ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
-            ]
-
-            valid_gdf = valid_gdf.copy()
-            display_columns = []
-            alias_mapping = []
-
-            for orig_col, alias, fmt, unit in tooltip_columns:
-                display_col = f"{orig_col}_display"
-                valid_gdf[display_col] = valid_gdf[orig_col].apply(
-                    lambda x: f"{fmt.format(x)}{unit}" if pd.notna(x) else "N/A"
-                )
-                display_columns.append(display_col)
-                alias_mapping.append(alias)
-            # Show ID first, then formatted NetChange values
-            fields_to_show = [self.id_column] + display_columns
-            aliases_to_show = ["ID:"] + alias_mapping
-        else:
-            fields_to_show = [self.id_column]
-            aliases_to_show = ["ID:"]
+        # Format tooltip columns using utility function
+        # Include Area columns for full tooltip display
+        tooltip_columns = [
+            ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
+            ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
+            ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
+            ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
+        ]
+        valid_gdf, fields_to_show, aliases_to_show = format_tooltip_columns(
+            valid_gdf,
+            id_column=self.id_column,
+            tooltip_columns=tooltip_columns,
+        )
 
         folium.GeoJson(
             valid_gdf,
