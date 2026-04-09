@@ -44,6 +44,44 @@ DEFAULT_HOVER_COLUMNS = [
 ]
 
 
+# Add legend for NetChange_perc color scale
+def get_legend_html_net_change() -> str:
+    LEGEND_HTML_NET_CHANGE = """
+        <div style="
+            position: fixed;
+            bottom: 40px;
+            right: 10px;
+            width: 180px;
+            height: auto;
+            border: 2px solid grey;
+            z-index: 9999;
+            font-size: 12px;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        ">
+        <p style="margin: 0 0 5px 0; font-weight: bold;">Net Change (%)</p>
+        <div style="
+            background: linear-gradient(to right, #d73027, #f46d43, #fdae61, #fee090, #e0f3f8, #abd9e9, #74add1, #4575b4);
+            width: 100%;
+            height: 20px;
+            border: 1px solid #ccc;
+        "></div>
+        <div style="display: flex; justify-content: space-between; width: 100%; margin-top: 3px;">
+            <span>-40%</span>
+            <span>0%</span>
+            <span>+40%</span>
+        </div>
+        <p style="margin: 8px 0 0 0; font-size: 10px; color: #666;">
+            Red = Decrease<br>
+            Blue = Increase
+        </p>
+        </div>
+    """
+    return LEGEND_HTML_NET_CHANGE
+
+
 def build_hover_template(
     id_column: str,
     hover_fields: List[str],
