@@ -122,6 +122,7 @@ class MapViewer:
 
         # Filter out rows with invalid/empty geometries
         gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
+        gdf.sort_values(by="Area_start_ha", ascending=False, inplace=True)
 
         return gdf
 
@@ -139,8 +140,9 @@ class MapViewer:
 
         # Apply sampling if max_features specified (for faster loading)
         if self.max_features and len(valid_gdf) > self.max_features:
-            valid_gdf = valid_gdf.sample(n=self.max_features, random_state=42).reset_index(drop=True)
-            st.caption(f"Showing {self.max_features} of {len(self.gdf)} features (use max_features to change)")
+            # valid_gdf = valid_gdf.sample(n=self.max_features, random_state=42).reset_index(drop=True)
+            valid_gdf = valid_gdf.head(n=self.max_features).reset_index(drop=True)
+            st.caption(f"Showing largest {self.max_features} of {len(self.gdf)} features (use max_features to change)")
 
         # Ensure geometry is in proper shapely format
         valid_gdf = valid_gdf.reset_index(drop=True)
@@ -319,7 +321,7 @@ def create_app(
         "Max features to load",
         min_value=10,
         max_value=50000,
-        value=5000,
+        value=1000,
         step=100,
         help="Limit number of polygons for faster loading. Set to 0 for no limit.",
     )
