@@ -1,48 +1,57 @@
-"""Map Viewer dashboard component using Streamlit and Plotly."""
+"""Map Viewer dashboard component using Streamlit and lonboard for high-performance mapping."""
 
 import os
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
+import folium
 import geemap
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import pandas as pd
-import plotly.graph_objects as go
 import streamlit as st
 import xarray as xr
-
-if "EARTHENGINE_TOKEN" in os.environ.keys():
-    print("setting up with TOKEN")
-    geemap.ee_initialize()
-
-elif "EARTHENGINE_TOKEN" in st.secrets.keys():
-    print("setting up with TOKEN from secrets")
-    os.environ["EARTHENGINE_TOKEN"] = st.secrets["EARTHENGINE_TOKEN"]
-    geemap.ee_initialize()
+from streamlit_folium import st_folium
 
 from water_timeseries.dataset import DWDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.io import load_vector_dataset
+from water_timeseries.utils.map_styling import (
+    create_tile_layers,
+    format_tooltip_columns,
+    get_colored_style_function,
+    get_default_style_function,
+)
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
-    MAP_STYLING,
-    build_hover_template,
-    gdf_to_geojson_feature_collection,
-    get_colorbar_config,
-    get_z_values_for_coloring,
-    prepare_custom_data_for_plotly,
+    get_legend_html_net_change,
 )
+
+# Initialize Earth Engine - only if running in Streamlit context
+# Check environment variable first (works outside Streamlit)
+if "EARTHENGINE_TOKEN" in os.environ.keys():
+    print("setting up with TOKEN")
+    geemap.ee_initialize()
+else:
+    # Try Streamlit secrets (only works when running in Streamlit)
+    try:
+        if "EARTHENGINE_TOKEN" in st.secrets.keys():
+            print("setting up with TOKEN from secrets")
+            os.environ["EARTHENGINE_TOKEN"] = st.secrets["EARTHENGINE_TOKEN"]
+            geemap.ee_initialize()
+    except Exception:
+        # Not running in Streamlit context, skip initialization
+        pass
 
 
 class MapViewer:
-    """Interactive map viewer for GeoDataFrames using Streamlit and Plotly.
+    """Interactive map viewer for GeoDataFrames using Streamlit and lonboard.
 
     Features:
-    - Display GeoDataFrame on an interactive map
+    - Display GeoDataFrame on an interactive map (high performance for large datasets)
     - Hover tooltips showing feature attributes
     - Click to select features and store their id_geohash value
+    - Supports multiple backends: folium, pydeck (WebGL), st.map
     """
 
     def __init__(
@@ -54,6 +63,8 @@ class MapViewer:
         hover_columns: Optional[List[str]] = None,
         map_center: Optional[dict] = None,
         zoom: int = 10,
+        map_backend: str = "folium",  # "folium", or "st_map"
+        max_features: Optional[int] = None,  # Limit features for faster loading
     ):
         """Initialize the MapViewer.
 
@@ -72,6 +83,8 @@ class MapViewer:
         self.hover_columns = hover_columns or DEFAULT_HOVER_COLUMNS
         self.zoom = zoom
         self.map_center = map_center
+        self.map_backend = map_backend  # "folium" or "st_map"
+        self.max_features = max_features  # Limit features for faster loading
 
         # Load data if parquet_path provided
         if gdf is None and parquet_path is not None:
@@ -109,30 +122,12 @@ class MapViewer:
 
         # Filter out rows with invalid/empty geometries
         gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
+        gdf.sort_values(by="Area_start_ha", ascending=False, inplace=True)
 
         return gdf
 
-    def _prepare_hover_data(self) -> pd.DataFrame:
-        """Prepare hover data for the map.
-
-        Returns:
-            DataFrame with columns to show on hover.
-        """
-        # Get columns to include (exclude geometry)
-        if self.hover_columns:
-            cols = [col for col in self.hover_columns if col in self.gdf.columns and col != self.geometry_column]
-        else:
-            cols = [col for col in self.gdf.columns if col != self.geometry_column]
-
-        # Create a copy with only the needed columns
-        plot_df = self.gdf[cols].copy()
-
-        # Convert all columns to strings and handle NaN/None/arrays
-        # This is handled by prepare_custom_data_for_plotly when rendering
-        return plot_df
-
     def render(self) -> Optional[str]:
-        """Render the interactive map in Streamlit.
+        """Render the interactive map in Streamlit using the selected backend.
 
         Returns:
             The selected id_geohash value if a feature was clicked, None otherwise.
@@ -142,122 +137,120 @@ class MapViewer:
         # Get valid indices (after filtering out invalid geometries)
         valid_mask = self.gdf.geometry.notna() & ~self.gdf.geometry.is_empty
         valid_gdf = self.gdf[valid_mask].copy()
-        valid_indices = valid_gdf.index.tolist()
 
-        # Prepare hover data
-        hover_df_all = self._prepare_hover_data()
-        all_indices = self.gdf.index.tolist()
-        positions = [all_indices.index(idx) for idx in valid_indices]
-        plot_df = hover_df_all.iloc[positions].reset_index(drop=True)
+        # Apply sampling if max_features specified (for faster loading)
+        if self.max_features and len(valid_gdf) > self.max_features:
+            # valid_gdf = valid_gdf.sample(n=self.max_features, random_state=42).reset_index(drop=True)
+            valid_gdf = valid_gdf.head(n=self.max_features).reset_index(drop=True)
+            st.caption(f"Showing largest {self.max_features} of {len(self.gdf)} features (use max_features to change)")
+
+        # Ensure geometry is in proper shapely format
+        valid_gdf = valid_gdf.reset_index(drop=True)
+
+        if len(valid_gdf) == 0:
+            st.warning("No valid geometries found.")
+            return None
+
+        # Use st.map for simple point rendering
+        if self.map_backend == "st_map":
+            st.map(valid_gdf)
+            return None
+
+        # Default: use folium
+        return self._render_folium(valid_gdf, layer_column=getattr(self, "layer_column", None))
+
+    def _render_folium(self, valid_gdf: gpd.GeoDataFrame, layer_column: Optional[str] = None) -> Optional[str]:
+        """Render using folium with optional layer selection.
+
+        Args:
+            valid_gdf: The GeoDataFrame to render.
+            layer_column: Column name to split into separate layers. Each unique
+                         value becomes a toggleable layer. If None, shows single layer.
+
+        Returns:
+            The selected id_geohash value if a feature was clicked, None otherwise.
+        """
 
         # Determine center of map
         if self.map_center is None:
             centroid = valid_gdf.geometry.unary_union.centroid
-            center = {"lat": centroid.y, "lon": centroid.x}
+            center = [centroid.y, centroid.x]  # [lat, lon]
         else:
-            center = self.map_center
+            center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
 
-        # Build hover fields list
-        hover_fields = [col for col in plot_df.columns if col != self.id_column]
+        m = folium.Map(location=center, zoom_start=self.zoom)
 
-        # Use utility function to build hover template
-        hover_template = build_hover_template(self.id_column, hover_fields)
+        # Add tile layers using utility function
+        for tile_name in create_tile_layers():
+            folium.TileLayer(tile_name).add_to(m)
 
-        # Use utility function to prepare custom data
-        custom_data = prepare_custom_data_for_plotly(plot_df, self.id_column, hover_fields)
+        # Add WMS layer for permafrost data
+        wms_url = "https://maps.awi.de/services/common/permafrost/ows"
+        folium.WmsTileLayer(
+            url=wms_url,
+            name="TCVIS Landsat Trends 2005-2024 (AWI)",
+            styles="composite",
+            transparent=True,
+            overlay=False,
+            layers="tcvis",
+        ).add_to(m)
 
-        # Use utility function to convert to GeoJSON
-        geojson = gdf_to_geojson_feature_collection(valid_gdf)
-
-        # Use utility function to get z-values for coloring
-        z_values = get_z_values_for_coloring(valid_gdf, "NetChange_perc", clip_range=(-50, 50))
-
-        # Create the map using Plotly graph_objects for polygon rendering
-        # Get styling from visualization module
-        unselected_style = MAP_STYLING["unselected"]
-        colorbar_config = get_colorbar_config("NetChange %", "RdYlBu", zmid=0)
-
-        fig = go.Figure(
-            go.Choroplethmapbox(
-                geojson=geojson,
-                locations=valid_gdf.index.tolist(),
-                z=z_values,
-                customdata=custom_data,
-                hovertemplate=hover_template,
-                marker_opacity=unselected_style["opacity"],
-                marker_line_width=unselected_style["line_width"],
-                marker_line_color=unselected_style["line_color"],
-                colorscale=colorbar_config["colorscale"],
-                zmid=colorbar_config.get("zmid"),
-                showscale=colorbar_config["showscale"],
-                colorbar_title=colorbar_config["colorbar_title"],
+        # Create style function based on whether NetChange_perc column exists
+        if "NetChange_perc" in valid_gdf.columns:
+            style_function = get_colored_style_function(
+                color_column="NetChange_perc",
+                vmin=-40,
+                vmax=40,
+                colormap=plt.cm.RdYlBu,
             )
+        else:
+            style_function = get_default_style_function()
+
+        # Format tooltip columns using utility function
+        # Include Area columns for full tooltip display
+        tooltip_columns = [
+            ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
+            ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
+            ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
+            ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
+        ]
+        valid_gdf, fields_to_show, aliases_to_show = format_tooltip_columns(
+            valid_gdf,
+            id_column=self.id_column,
+            tooltip_columns=tooltip_columns,
         )
 
-        # Add a second layer to highlight selected polygon with slightly thicker/darker outline
-        # This layer will be updated when selection changes
-        selected_geohash = st.session_state.get("selected_geohash")
-        if selected_geohash and selected_geohash in valid_gdf[self.id_column].values:
-            # Get the selected feature
-            selected_feature = valid_gdf[valid_gdf[self.id_column] == selected_geohash]
-            selected_geojson = gdf_to_geojson_feature_collection(selected_feature)
-            selected_idx = valid_gdf[valid_gdf[self.id_column] == selected_geohash].index.tolist()
+        folium.GeoJson(
+            valid_gdf,
+            name="Lakes",
+            style_function=style_function,
+            tooltip=folium.GeoJsonTooltip(
+                fields=fields_to_show,
+                aliases=aliases_to_show,
+            ),
+        ).add_to(m)
 
-            # Use utility to get z-values for selected feature
-            selected_z = get_z_values_for_coloring(selected_feature, "NetChange_perc", clip_range=(-50, 50))
+        folium.LayerControl().add_to(m)
 
-            # Get styling from visualization module
-            selected_style = MAP_STYLING["selected"]
+        m.get_root().html.add_child(folium.Element(get_legend_html_net_change()))
 
-            # Add highlight layer with slightly thicker and darker outline
-            fig.add_trace(
-                go.Choroplethmapbox(
-                    geojson=selected_geojson,
-                    locations=selected_idx,
-                    z=selected_z,
-                    marker_opacity=selected_style["opacity"],
-                    marker_line_width=selected_style["line_width"],
-                    marker_line_color=selected_style["line_color"],
-                    colorscale="RdYlBu",
-                    zmid=0,
-                    showscale=False,
-                    hoverinfo="skip",
-                )
-            )
+        # Render the map and get click data
+        # Note: returned_objects includes 'last_active_drawing' for click detection
+        result = st_folium(m, height=600, width="100%", key="map_viewer", returned_objects=["last_active_drawing"])
 
-        # Update layout
-        fig.update_layout(
-            mapbox=dict(style="open-street-map", zoom=self.zoom, center=center),
-            height=600,
-            margin={"r": 0, "t": 0, "l": 0, "b": 0},
-            clickmode="event+select",
-        )
+        # Extract id_geohash from clicked feature
+        clicked_id = None
+        if result and "last_active_drawing" in result:
+            clicked_data = result["last_active_drawing"]
+            if clicked_data and "properties" in clicked_data:
+                clicked_id = clicked_data["properties"].get(self.id_column)
 
-        # Render the map
-        selected_points = st.plotly_chart(fig, width="stretch", on_select="rerun")
-
-        # Process selection
-        if selected_points and len(selected_points.get("selection", {}).get("points", [])) > 0:
-            # Get the first selected point's index
-            point = selected_points["selection"]["points"][0]
-            point_index = point.get("point_index")
-
-            if point_index is not None and point_index < len(valid_indices):
-                # Map back to original dataframe index
-                original_index = valid_indices[point_index]
-                # Get the id_geohash value
-                selected_geohash = self.gdf.iloc[original_index][self.id_column]
-
-                # Store in session state
-                st.session_state.selected_geohash = selected_geohash
-
-                # Add to clicked features list if not already there
-                if selected_geohash not in st.session_state.clicked_features:
-                    st.session_state.clicked_features.append(selected_geohash)
-
-                st.success(f"Selected feature: {selected_geohash}")
-
-                return selected_geohash
+        # Update session state only if a NEW feature was clicked (not the same one)
+        if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
+            st.session_state.selected_geohash = clicked_id
+            if clicked_id not in st.session_state.clicked_features:
+                st.session_state.clicked_features.append(clicked_id)
+            st.rerun()
 
         return None
 
@@ -277,8 +270,12 @@ class MapViewer:
         """
         return st.session_state.get("clicked_features", [])
 
-    def clear_selection(self):
-        """Clear the current selection."""
+    def clear_selection(self) -> None:
+        """Clear the current selection.
+
+        Removes the currently selected geohash from the session state,
+        allowing the user to make a new selection.
+        """
         st.session_state.selected_geohash = None
 
 
@@ -315,6 +312,22 @@ def create_app(
     else:
         st.sidebar.caption("📊 Static mode - matplotlib plots")
 
+    map_backend = "folium"
+
+    # Performance settings for large datasets
+    st.sidebar.divider()
+    st.sidebar.subheader("Performance")
+    max_features = st.sidebar.number_input(
+        "Max features to load",
+        min_value=10,
+        max_value=50000,
+        value=1000,
+        step=100,
+        help="Limit number of polygons for faster loading. Set to 0 for no limit.",
+    )
+    if max_features == 0:
+        max_features = None
+
     # Use function parameters for data paths
     data_path_input = str(data_path)
     zarr_path_input = str(zarr_path)
@@ -331,7 +344,14 @@ def create_app(
 
     # Create map viewer
     try:
-        viewer = MapViewer(parquet_path=data_path_input, id_column=id_column, zoom=zoom_level)
+        viewer = MapViewer(
+            parquet_path=data_path_input,
+            id_column=id_column,
+            zoom=zoom_level,
+            map_backend=map_backend,
+            max_features=max_features,
+        )
+        # viewer.layer_column = layer_column  # Set layer column for folium
 
         # Render the map
         selected = viewer.render()  # noqa: F841
@@ -503,7 +523,7 @@ def create_app(
                     col_checkbox = st.container()
                     with col_checkbox:
                         create_sentinel2 = st.checkbox("Sentinel-2 (2016-2025)", value=True, key="sentinel2_checkbox")
-                        create_landsat = st.checkbox("Landsat (2000-2025)", value=False, key="landsat_checkbox")
+                        create_landsat = st.checkbox("Landsat (2000-2025)", value=True, key="landsat_checkbox")
 
                     # Define GIF paths early so they're available for both creation and display
                     gif_dir = Path("gifs")
@@ -556,10 +576,7 @@ def create_app(
                                             overwrite_exists=False,
                                         )
 
-                                    # Display GIFs side by side (single row)
-                                    display_col_s2, display_col_ls = st.columns(2)
-
-                                    # Display GIFs with headers
+                                    # Display GIFs side by side with headers
                                     display_col_s2, display_col_ls = st.columns(2)
 
                                     # Sentinel-2 GIF
