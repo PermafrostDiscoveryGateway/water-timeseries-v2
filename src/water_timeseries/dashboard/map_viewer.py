@@ -9,7 +9,6 @@ import folium
 import geemap
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import pandas as pd
 import streamlit as st
 import xarray as xr
 from streamlit_folium import st_folium
@@ -27,79 +26,6 @@ from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
 )
-
-
-def visualize_gdf(
-    gdf: gpd.GeoDataFrame,
-    fill_color: List[int] = [0, 120, 255, 180],
-    line_color: List[int] = [255, 255, 255, 255],
-    line_width: float = 1.0,
-    height: int = 600,
-    zoom: Optional[int] = None,
-    map_center: Optional[List[float]] = None,
-    use_st_map: bool = False,
-    use_folium: bool = True,
-    max_features: Optional[int] = None,  # Limit features for faster loading
-) -> None:
-    """Visualize a GeoDataFrame with polygons using folium, pydeck, or st.map.
-
-    A simple function to display your polygon GeoDataFrame on an interactive map.
-
-    Args:
-        gdf: GeoDataFrame containing polygon geometries.
-        fill_color: RGBA fill color for polygons [r, g, b, a].
-        line_color: RGBA line color for polygon edges [r, g, b, a].
-        line_width: Width of polygon edges.
-        height: Height of the map in pixels.
-        zoom: Initial zoom level. If None, auto-calculated from bounds.
-        map_center: [lat, lon] center of the map. If None, auto-calculated from centroid.
-        use_st_map: If True, use Streamlit's native st.map() (shows points at centroids).
-        use_folium: If True and use_pydeck is False, use folium for polygon rendering.
-        max_features: Maximum number of features to display (for large datasets).
-
-    Example:
-        >>> import geopandas as gpd
-        >>> from water_timeseries.dashboard.map_viewer import visualize_gdf
-        >>> gdf = gpd.read_file("lakes.parquet")
-        >>> visualize_gdf(gdf, max_features=1000)  # Load max 1000 features
-    """
-
-    # Filter out invalid geometries
-    valid_mask = gdf.geometry.notna() & ~gdf.geometry.is_empty
-    valid_gdf = gdf[valid_mask].copy().reset_index(drop=True)
-
-    if len(valid_gdf) == 0:
-        st.warning("No valid geometries found in the GeoDataFrame.")
-        return
-
-    # Apply sampling if max_features specified (for faster loading)
-    if max_features and len(valid_gdf) > max_features:
-        valid_gdf = valid_gdf.sample(n=max_features, random_state=42).reset_index(drop=True)
-        st.caption(f"Showing {max_features} of {len(gdf)} features (use max_features to change)")
-
-    if map_center is None:
-        centroid = valid_gdf.geometry.unary_union.centroid
-        center = [centroid.y, centroid.x]  # [lat, lon]
-    else:
-        center = map_center
-
-    # Create folium map
-    m = folium.Map(location=center, zoom_start=zoom if zoom else 10, tiles="Esri.WorldImagery")
-
-    # Add polygons with simple styling
-    folium.GeoJson(
-        valid_gdf,
-        style_function=lambda x: {
-            "fillColor": "blue",
-            "color": "black",
-            "weight": line_width,
-            "fillOpacity": 0.5,
-        },
-    ).add_to(m)
-
-    st_folium(m, height=height, width="100%")
-    return
-
 
 # Initialize Earth Engine - only if running in Streamlit context
 # Check environment variable first (works outside Streamlit)
@@ -198,25 +124,6 @@ class MapViewer:
         gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
 
         return gdf
-
-    def _prepare_hover_data(self) -> pd.DataFrame:
-        """Prepare hover data for the map.
-
-        Returns:
-            DataFrame with columns to show on hover.
-        """
-        # Get columns to include (exclude geometry)
-        if self.hover_columns:
-            cols = [col for col in self.hover_columns if col in self.gdf.columns and col != self.geometry_column]
-        else:
-            cols = [col for col in self.gdf.columns if col != self.geometry_column]
-
-        # Create a copy with only the needed columns
-        plot_df = self.gdf[cols].copy()
-
-        # Convert all columns to strings and handle NaN/None/arrays
-        # This is handled by prepare_custom_data_for_plotly when rendering
-        return plot_df
 
     def render(self) -> Optional[str]:
         """Render the interactive map in Streamlit using the selected backend.
