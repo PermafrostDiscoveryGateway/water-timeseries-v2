@@ -12,7 +12,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 import xarray as xr
-from lonboard import Map, PolygonLayer
 from streamlit_folium import st_folium
 
 from water_timeseries.dataset import DWDataset
@@ -28,13 +27,6 @@ from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
 )
-
-
-def render_map_html(map_view: Map) -> None:
-    """Fallback: Render lonboard map as HTML component."""
-    # Get the HTML representation of the map
-    html = map_view.to_html()
-    st.components.v1.html(html, height=600)
 
 
 def visualize_gdf(
@@ -85,61 +77,28 @@ def visualize_gdf(
         valid_gdf = valid_gdf.sample(n=max_features, random_state=42).reset_index(drop=True)
         st.caption(f"Showing {max_features} of {len(gdf)} features (use max_features to change)")
 
-    # Use Streamlit's native st.map for simple visualization
-    if use_st_map:
-        st.map(valid_gdf)
-        return
-
-    # Use folium for full polygon rendering
-    if use_folium:
-        # Calculate center
-        if map_center is None:
-            centroid = valid_gdf.geometry.unary_union.centroid
-            center = [centroid.y, centroid.x]  # [lat, lon]
-        else:
-            center = map_center
-
-        # Create folium map
-        m = folium.Map(location=center, zoom_start=zoom if zoom else 10, tiles="Esri.WorldImagery")
-
-        # Add polygons with simple styling
-        folium.GeoJson(
-            valid_gdf,
-            style_function=lambda x: {
-                "fillColor": "blue",
-                "color": "black",
-                "weight": line_width,
-                "fillOpacity": 0.5,
-            },
-        ).add_to(m)
-
-        st_folium(m, height=height, width="100%")
-        return
-
-    # Calculate center if not provided
     if map_center is None:
         centroid = valid_gdf.geometry.unary_union.centroid
         center = [centroid.y, centroid.x]  # [lat, lon]
     else:
         center = map_center
 
-    # Create the polygon layer
-    polygon_layer = PolygonLayer.from_geopandas(
-        valid_gdf,
-        get_fill_color=fill_color,
-        get_line_color=line_color,
-        get_line_width=line_width,
-        pickable=True,
-        auto_highlight=True,
-        highlight_color=[255, 255, 0, 150],  # Yellow highlight on hover
-    )
+    # Create folium map
+    m = folium.Map(location=center, zoom_start=zoom if zoom else 10, tiles="Esri.WorldImagery")
 
-    # Create the map
-    map_view = Map(
-        polygon_layer=polygon_layer,
-        center=center,
-        zoom=zoom if zoom is not None else 10,
-    )
+    # Add polygons with simple styling
+    folium.GeoJson(
+        valid_gdf,
+        style_function=lambda x: {
+            "fillColor": "blue",
+            "color": "black",
+            "weight": line_width,
+            "fillOpacity": 0.5,
+        },
+    ).add_to(m)
+
+    st_folium(m, height=height, width="100%")
+    return
 
 
 # Initialize Earth Engine - only if running in Streamlit context
@@ -402,8 +361,12 @@ class MapViewer:
         """
         return st.session_state.get("clicked_features", [])
 
-    def clear_selection(self):
-        """Clear the current selection."""
+    def clear_selection(self) -> None:
+        """Clear the current selection.
+
+        Removes the currently selected geohash from the session state,
+        allowing the user to make a new selection.
+        """
         st.session_state.selected_geohash = None
 
 

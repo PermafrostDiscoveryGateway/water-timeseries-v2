@@ -46,6 +46,18 @@ DEFAULT_HOVER_COLUMNS = [
 
 # Add legend for NetChange_perc color scale
 def get_legend_html_net_change() -> str:
+    """Generate HTML legend for net change percentage visualization.
+
+    Returns:
+        HTML string containing a styled legend for the NetChange_perc color scale.
+        The legend displays a gradient from red (decrease) to blue (increase)
+        with labels ranging from -40% to +40%.
+
+    Example:
+        >>> legend_html = get_legend_html_net_change()
+        >>> # Use in folium map
+        >>> m.get_root().html.add_child(folium.Element(legend_html))
+    """
     LEGEND_HTML_NET_CHANGE = """
         <div style="
             position: fixed;
