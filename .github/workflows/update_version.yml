@@ -19,6 +19,7 @@ on:
   push:
     branches:
       - ncsa
+      - add-dockerfile
 
 jobs:
   # Only runs on manual workflow_dispatch
@@ -61,10 +62,10 @@ jobs:
           git commit -m "Update version to $VERSION_NO_V"
           git push
 
-  # Get current version for ncsa branch builds
+  # Get current version for ncsa and add-dockerfile branch builds
   get-current-version:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && github.ref_name == 'ncsa'
+    if: github.event_name == 'push' && (github.ref_name == 'ncsa' || github.ref_name == 'add-dockerfile')
     outputs:
       VERSION: ${{ steps.get_version.outputs.version }}
       VERSION_TAG: ${{ steps.get_version.outputs.version_tag }}
@@ -122,7 +123,7 @@ jobs:
           draft: false
           prerelease: false
 
-  # Runs on: manual dispatch with publish=true OR push to ncsa branch
+  # Runs on: manual dispatch with publish=true OR push to ncsa OR push to add-dockerfile
   build-and-push-docker:
     runs-on: ubuntu-latest
     permissions:
@@ -130,7 +131,7 @@ jobs:
       packages: write
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') ||
-      (github.event_name == 'push' && github.ref_name == 'ncsa')
+      (github.event_name == 'push' && (github.ref_name == 'ncsa' || github.ref_name == 'add-dockerfile'))
 
     steps:
       - name: Checkout repository
@@ -151,10 +152,11 @@ jobs:
             TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:${VERSION}"
             echo "Building versioned image: ${VERSION}"
           else
-            # Push to ncsa branch - use branch name
-            TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:ncsa"
-            TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:ncsa-${GITHUB_SHA::8}"
-            echo "Building ncsa branch image"
+            # Push to ncsa or add-dockerfile branch - use branch name
+            BRANCH_NAME="${{ github.ref_name }}"
+            TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:${BRANCH_NAME}"
+            TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:${BRANCH_NAME}-${GITHUB_SHA::8}"
+            echo "Building ${BRANCH_NAME} branch image"
           fi
           
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
