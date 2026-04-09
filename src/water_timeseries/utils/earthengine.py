@@ -226,6 +226,83 @@ def create_dw_classes_mask(image):
     return ee.Image(image)
 
 
+def create_jrc_classes_mask(image):
+    """
+    Creates area masks for all JRC water classes from the given image.
+
+    The JRC YearlyHistory collection has a 'waterClass' band with values:
+    - 0: No data
+    - 1: Land
+    - 2: Seasonal water
+    - 3: Permanent water
+
+    This function calculates the pixel area in hectares for each class.
+
+    image: ee.Image, the input JRC image with 'waterClass' band.
+
+    Returns:
+        ee.Image, the input image with additional bands for each class area in hectares:
+            - area_nodata
+            - area_land
+            - area_water_seasonal
+            - area_water_permanent
+    """
+    band_names = [
+        "area_nodata",
+        "area_land",
+        "area_water_seasonal",
+        "area_water_permanent",
+    ]
+
+    # Loop through each class ID and calculate pixel area in hectares
+    # pixelArea() returns m², multiply by 1e-4 to get hectares
+    water_class = image.select("waterClass")
+    for i, band_name in enumerate(band_names):
+        area_mask = water_class.eq(i).multiply(ee.Image.pixelArea()).multiply(1e-4).rename(band_name)
+        image = image.addBands(area_mask)
+
+    return image
+
+
+def calc_annual_jrc(
+    year: int,
+    polygons: ee.FeatureCollection,
+    crs: str = "EPSG:4326",
+    scale: float = 30,
+) -> ee.Image:
+    """
+    Generates an annual JRC (Joint Research Centre) water classification composite.
+
+    Args:
+        year: The year to extract data for.
+        polygons: ee.FeatureCollection, the polygons to extract data for.
+        crs: str, optional. The coordinate reference system (default: EPSG:4326).
+        scale: float, optional. The pixel scale in meters (default: 30).
+
+    Returns:
+        ee.Image: An image with JRC water classification bands for the specified year.
+    """
+    start_date = ee.Date(f"{year}-01-01")
+    end_date = ee.Date(f"{year + 1}-01-01")
+
+    jrc_collection = (
+        ee.ImageCollection("JRC/GSW1_4/YearlyHistory")
+        .filterBounds(polygons)
+        .filterDate(start_date, end_date)
+    )
+
+    # Use ee.Algorithms.If to handle empty collections on the server side
+    image = ee.Algorithms.If(
+        jrc_collection.size().eq(0),
+        create_no_data_image(),
+        jrc_collection.first()
+        .set("system:time_start", start_date.millis())
+        .setDefaultProjection(crs=crs, scale=scale),
+    )
+
+    return ee.Image(image)
+
+
 def make_date_window(date, window, mode="each", fmt="%Y-%m-%d"):
     """
     Create start/end dates around a central date.
