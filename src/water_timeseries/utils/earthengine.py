@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import List, Optional
 
 import ee
 import eemont  # noqa: F401
@@ -286,18 +287,14 @@ def calc_annual_jrc(
     end_date = ee.Date(f"{year + 1}-01-01")
 
     jrc_collection = (
-        ee.ImageCollection("JRC/GSW1_4/YearlyHistory")
-        .filterBounds(polygons)
-        .filterDate(start_date, end_date)
+        ee.ImageCollection("JRC/GSW1_4/YearlyHistory").filterBounds(polygons).filterDate(start_date, end_date)
     )
 
     # Use ee.Algorithms.If to handle empty collections on the server side
     image = ee.Algorithms.If(
         jrc_collection.size().eq(0),
         create_no_data_image(),
-        jrc_collection.first()
-        .set("system:time_start", start_date.millis())
-        .setDefaultProjection(crs=crs, scale=scale),
+        jrc_collection.first().set("system:time_start", start_date.millis()).setDefaultProjection(crs=crs, scale=scale),
     )
 
     return ee.Image(image)
@@ -404,6 +401,110 @@ def monthly(start="2025-06-04", step=7, count=None, end_date=None, fmt="%Y-%m-%d
             cur += timedelta(days=step)
 
     return dates
+
+
+def setup_monthly_dates(years: List[int], months: List[int]) -> List[str]:
+    """Generate a list of monthly dates from the given years and months.
+
+    Creates dates starting from the first day of each specified month.
+
+    Args:
+        years: List of years (e.g., [2017, 2018]).
+        months: List of months as integers (1-12).
+
+    Returns:
+        List of formatted dates in 'YYYY-MM-DD' format (e.g., '2017-06-01').
+
+    Example:
+        >>> setup_monthly_dates([2023], [1, 2])
+        ['2023-01-01', '2023-02-01']
+    """
+    dates = []
+    for year in years:
+        for month in months:
+            dates.append(f"{year}-{month:02d}-01")
+    return dates
+
+
+def setup_dates_from_options(
+    years: Optional[List[int]] = None,
+    months: Optional[List[int]] = None,
+    date_list: Optional[List[str]] = None,
+) -> List[str]:
+    """Validate and generate a list of dates from either date_list OR (years AND months).
+
+    This function enforces mutual exclusivity between date_list and (years, months).
+
+    Args:
+        years: List of years (e.g., [2017, 2018]). Must be provided together with
+            `months` if `date_list` is not used.
+        months: List of months as integers (1-12). Must be provided together with
+            `years` if `date_list` is not used.
+        date_list: Optional list of dates in 'YYYY-MM' format (e.g., ['2017-06', '2018-07']).
+            If provided, `years` and `months` are ignored.
+
+    Returns:
+        List of formatted dates in 'YYYY-MM-DD' format.
+
+    Raises:
+        ValueError: If neither (years and months) nor date_list is provided,
+            or if both are provided.
+
+    Example:
+        >>> setup_dates_from_options(date_list=['2017-06', '2018-07'])
+        ['2017-06-01', '2018-07-01']
+        >>> setup_dates_from_options(years=[2017], months=[6, 7])
+        ['2017-06-01', '2017-07-01']
+    """
+
+    # Validate date parameters: either date_list OR (years AND months)
+    if date_list is not None and (years is not None or months is not None):
+        raise ValueError(
+            "Invalid date parameters: either provide 'date_list' OR ('years' AND 'months'), "
+            "but not both. These options are mutually exclusive."
+        )
+
+    if date_list is None and (years is None or months is None):
+        raise ValueError(
+            "Invalid date parameters: either provide 'date_list' or both 'years' and 'months'. "
+            f"Received: years={years}, months={months}, date_list={date_list}"
+        )
+
+    # Generate dates based on the input
+    if date_list is not None:
+        # Convert YYYY-MM format to YYYY-MM-DD format (first day of month)
+        return [f"{d}-01" for d in date_list]
+    else:
+        # Use years and months (with defaults if not provided)
+        years = years if years is not None else [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
+        months = months if months is not None else [6, 7, 8, 9]
+        return setup_monthly_dates(years=years, months=months)
+
+
+def setup_annual_dates(years: Optional[List[int]] = None, date_list: Optional[List[str]] = None) -> List[str]:
+    """Generate a list of annual dates from the given years or date_list.
+
+    Creates dates starting from January 1st of each specified year.
+
+    Args:
+        years: List of years (e.g., [2017, 2018]). Default: [2000-2021].
+        date_list: Optional list of years as strings (e.g., ['2017', '2018']).
+            If provided, `years` is ignored.
+
+    Returns:
+        List of formatted dates in 'YYYY-01-01' format (e.g., '2017-01-01').
+    """
+    if date_list is not None and years is not None:
+        raise ValueError("Invalid date parameters: either provide 'date_list' OR 'years', but not both.")
+
+    if date_list is None and years is None:
+        # Default years for JRC data (2000-2021)
+        years = list(range(2000, 2022))
+
+    if date_list is not None:
+        return [f"{year}-01-01" for year in date_list]
+    else:
+        return [f"{year}-01-01" for year in years]
 
 
 def calculate_data_area(ds: xr.Dataset) -> xr.Dataset:

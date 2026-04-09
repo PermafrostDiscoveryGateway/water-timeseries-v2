@@ -73,7 +73,7 @@ class TestSpatialFiltering:
         """Test spatial bbox filtering on test dataset."""
         import geopandas as gpd
 
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
 
         # Load test dataset
         gdf = gpd.read_parquet(VECTOR_DATASET)
@@ -97,7 +97,7 @@ class TestSpatialFiltering:
         """Test spatial bbox filtering with all parameters provided."""
         import geopandas as gpd
 
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
 
         gdf = gpd.read_parquet(VECTOR_DATASET)
 
@@ -117,7 +117,7 @@ class TestSpatialFiltering:
         """Test spatial bbox filtering with only west and east parameters."""
         import geopandas as gpd
 
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
 
         gdf = gpd.read_parquet(VECTOR_DATASET)
 
@@ -134,7 +134,7 @@ class TestSpatialFiltering:
         """Test that filtering without any bbox params raises ValueError."""
         import geopandas as gpd
 
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
 
         gdf = gpd.read_parquet(VECTOR_DATASET)
 
@@ -222,7 +222,7 @@ class TestJRCDownloader:
 
     def test_jrc_bandnames(self, monkeypatch):
         """Test that JRC band names are correctly defined."""
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
         downloader = EarthEngineDownloader()
         expected_bands = [
             "area_nodata",
@@ -236,16 +236,14 @@ class TestJRCDownloader:
         """Test that JRC reducer is correctly configured."""
         import geopandas as gpd
 
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
         downloader = EarthEngineDownloader()
 
         # Load test data
         gdf = gpd.read_parquet(VECTOR_DATASET)
 
         # Setup reducer
-        fc, reducer_dict = downloader._setup_jrc_reducer(
-            gdf, feature_index_name="id_geohash", scale=30
-        )
+        fc, reducer_dict = downloader._setup_jrc_reducer(gdf, feature_index_name="id_geohash", scale=30)
 
         # Verify reducer configuration
         assert "reducer" in reducer_dict
@@ -257,7 +255,7 @@ class TestJRCDownloader:
 
     def test_download_jrc_annual_no_download_mode(self, monkeypatch):
         """Test that download_jrc_annual works in no_download mode."""
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
         downloader = EarthEngineDownloader()
 
         # Test no_download mode - should return None but log the parameters
@@ -273,7 +271,7 @@ class TestJRCDownloader:
 
     def test_download_jrc_annual_with_id_list(self, monkeypatch):
         """Test download_jrc_annual with ID filtering."""
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
         downloader = EarthEngineDownloader()
 
         # Test with specific IDs
@@ -289,7 +287,7 @@ class TestJRCDownloader:
 
     def test_download_jrc_annual_with_bbox(self, monkeypatch):
         """Test download_jrc_annual with bbox filtering."""
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
         downloader = EarthEngineDownloader()
 
         # Test with bbox filter
@@ -308,7 +306,7 @@ class TestJRCDownloader:
 
     def test_download_jrc_annual_invalid_name_attribute(self, monkeypatch):
         """Test that invalid name_attribute raises KeyError."""
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
         downloader = EarthEngineDownloader()
 
         with pytest.raises(KeyError, match="not present in the vector dataset"):
@@ -321,7 +319,7 @@ class TestJRCDownloader:
 
     def test_download_jrc_annual_missing_ids(self, monkeypatch):
         """Test that missing IDs in id_list raises ValueError."""
-        #monkeypatch.setenv("EE_PROJECT", "test-project")
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
         downloader = EarthEngineDownloader()
 
         with pytest.raises(ValueError, match="None of the.*requested IDs found"):
