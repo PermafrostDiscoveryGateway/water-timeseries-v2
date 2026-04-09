@@ -440,19 +440,7 @@ def create_app(
     else:
         st.sidebar.caption("📊 Static mode - matplotlib plots")
 
-    # Map backend selection
-    st.sidebar.divider()
-    st.sidebar.subheader("Map Backend")
-    map_backend = st.sidebar.radio(
-        "Select map renderer:",
-        options=["folium", "st_map"],
-        index=0,
-        format_func=lambda x: {
-            "folium": "Folium (recommended for small/medium)",
-            "st_map": "st.map (simple, points only)",
-        }[x],
-        help="Folium is best for small datasets, pydeck for large datasets with many polygons.",
-    )
+    map_backend = "folium"
 
     # Performance settings for large datasets
     st.sidebar.divider()
@@ -474,37 +462,6 @@ def create_app(
     id_column = "id_geohash"
     zoom_level = 10
 
-    # Layer selection for folium (only when using folium)
-    st.sidebar.divider()
-    st.sidebar.subheader("Layer Selection")
-    if map_backend == "folium":
-        # Get available columns for layer selection (exclude geometry and id columns)
-        viewer_for_cols = MapViewer(
-            parquet_path=str(data_path),
-            id_column=id_column,
-            zoom=zoom_level,
-            map_backend=map_backend,
-            max_features=min(100, max_features) if max_features else 100,  # Use smaller sample for column detection
-        )
-        available_cols = [
-            c
-            for c in viewer_for_cols.gdf.columns
-            if c not in ["geometry", id_column, "id_geohash"]
-            and viewer_for_cols.gdf[c].dtype in ["object", "int64", "float64", "int32", "float32"]
-        ]
-
-        layer_column = st.sidebar.selectbox(
-            "Split into layers by column:",
-            options=["None"] + available_cols,
-            index=0,
-            help="Select a column to split polygons into separate toggleable layers. Each unique value becomes a layer.",
-        )
-        if layer_column == "None":
-            layer_column = None
-    else:
-        layer_column = None
-        st.sidebar.caption("Layer selection only available with Folium backend")
-
     # Initialize dataset in session state if not already
     if "dw_dataset" not in st.session_state:
         st.session_state.dw_dataset = None
@@ -522,7 +479,7 @@ def create_app(
             map_backend=map_backend,
             max_features=max_features,
         )
-        viewer.layer_column = layer_column  # Set layer column for folium
+        # viewer.layer_column = layer_column  # Set layer column for folium
 
         # Render the map
         selected = viewer.render()  # noqa: F841
