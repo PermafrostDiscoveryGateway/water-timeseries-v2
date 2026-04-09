@@ -31,12 +31,9 @@ def visualize_gdf(
     zoom: Optional[int] = None,
     map_center: Optional[List[float]] = None,
     use_st_map: bool = False,
-    use_folium: bool = False,
-    use_pydeck: bool = True,
+    use_folium: bool = True,
     max_features: Optional[int] = None,  # Limit features for faster loading
     simplify_tolerance: Optional[float] = None,  # Simplify geometries
-    show_centroids_only: bool = False,  # Show points instead of polygons (faster)
-    use_satellite: bool = True,  # Use ESRI satellite background
 ) -> None:
     """Visualize a GeoDataFrame with polygons using folium, pydeck, or st.map.
 
@@ -52,7 +49,6 @@ def visualize_gdf(
         map_center: [lat, lon] center of the map. If None, auto-calculated from centroid.
         use_st_map: If True, use Streamlit's native st.map() (shows points at centroids).
         use_folium: If True and use_pydeck is False, use folium for polygon rendering.
-        use_pydeck: If True, use pydeck (WebGL, best for large datasets).
         max_features: Maximum number of features to display (for large datasets).
         simplify_tolerance: Simplify polygons (higher = fewer points, faster).
 
@@ -84,192 +80,6 @@ def visualize_gdf(
     if use_st_map:
         st.map(valid_gdf)
         return
-
-    # Use pydeck for large datasets (WebGL acceleration)
-    if use_pydeck:
-        import pydeck as pdk
-        import streamlit as st
-
-        # Calculate center
-        if map_center is None:
-            centroid = valid_gdf.geometry.unary_union.centroid
-            center = [centroid.x, centroid.y]  # [lon, lat] for pydeck
-        else:
-            center = [map_center[1], map_center[0]]
-
-        # If centroids only mode, render points instead of polygons
-        if show_centroids_only:
-            # Extract centroids
-            centroids_gdf = valid_gdf.copy()
-            centroids_gdf["geometry"] = valid_gdf.geometry.centroid
-            centroids_gdf = centroids_gdf.reset_index(drop=True)
-
-            # Create point data
-            point_data = []
-            for idx, row in centroids_gdf.iterrows():
-                props = {col: row[col] for col in centroids_gdf.columns if col != "geometry"}
-                props["_index"] = idx
-                point_data.append({
-                    "position": [row.geometry.x, row.geometry.y],
-                    **props
-                })
-
-            # Create scatterplot layer
-            point_layer = pdk.Layer(
-                "ScatterplotLayer",
-                point_data,
-                get_position="position",
-                get_fill_color=[fill_color[0], fill_color[1], fill_color[2], fill_color[3]],
-                get_radius=150,
-                pickable=True,
-                auto_highlight=True,
-            )
-
-            # Add satellite background if requested
-            if use_satellite:
-                tile_layer = pdk.Layer(
-                    "TileLayer",
-                    data="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                    pickable=False,
-                    opacity=1,
-                    bounds=[-180, -85, 180, 85],
-                    min_zoom=0,
-                    max_zoom=19,
-                    tile_size=256,
-                )
-                layers = [tile_layer, point_layer]
-                map_style = None
-            else:
-                layers = [point_layer]
-                map_style = "mapbox://styles/mapbox/light-v10"
-
-            deck = pdk.Deck(
-                map_style=map_style,
-                initial_view_state=pdk.ViewState(
-                    latitude=center[1],
-                    longitude=center[0],
-                    zoom=zoom if zoom else 10,
-                    pitch=0,
-                    bearing=0,
-                ),
-                layers=layers,
-                tooltip=True,
-            )
-
-            st.pydeck_chart(deck, height=height)
-            return None
-
-        # Otherwise, render full polygons as before
-        import pydeck as pdk
-        import streamlit as st
-
-        # Calculate center
-        if map_center is None:
-            centroid = valid_gdf.geometry.unary_union.centroid
-            center = [centroid.x, centroid.y]  # [lon, lat] for pydeck
-        else:
-            center = [map_center[1], map_center[0]]
-
-        # Convert GeoDataFrame to pydeck-friendly format
-        # Convert polygons to list format [[[lon, lat], ...]]
-        def geom_to_list(geom):
-            if geom.is_empty:
-                return None
-            # Get exterior coordinates
-            if hasattr(geom, "exterior"):
-                coords = list(geom.exterior.coords)[:-1]  # Remove closing point
-                return [[x, y] for x, y in coords]
-            return None
-
-        # Create polygon data with index for selection tracking
-        polygon_data = []
-        for idx, row in valid_gdf.iterrows():
-            coords = geom_to_list(row.geometry)
-            if coords:
-                # Get properties (excluding geometry)
-                props = {col: row[col] for col in valid_gdf.columns if col != "geometry"}
-                props["_index"] = idx  # Track original index
-                polygon_data.append({
-                    "polygon": coords,
-                    **props
-                })
-
-        if not polygon_data:
-            st.warning("No valid polygon geometries found.")
-            return
-
-        # Create pydeck polygon layer
-        polygon_layer = pdk.Layer(
-            "PolygonLayer",
-            polygon_data,
-            get_polygon="polygon",
-            get_fill_color=[fill_color[0], fill_color[1], fill_color[2], fill_color[3]],
-            get_line_color=[255, 255, 255, 255],  # White edges for satellite
-            filled=True,
-            stroked=True,
-            extruded=False,
-            wireframe=True,
-            line_width_min_pixels=2,
-            pickable=True,
-            auto_highlight=True,
-        )
-
-        # Add satellite background if requested
-        if use_satellite:
-            tile_layer = pdk.Layer(
-                "TileLayer",
-                data="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                pickable=False,
-                opacity=1,
-                bounds=[-180, -85, 180, 85],
-                min_zoom=0,
-                max_zoom=19,
-                tile_size=256,
-            )
-            layers = [tile_layer, polygon_layer]
-            deck_map_style = None
-        else:
-            layers = [polygon_layer]
-            deck_map_style = "mapbox://styles/mapbox/light-v10"
-
-        # Create and render the deck with selection support
-        deck = pdk.Deck(
-            map_style=deck_map_style,
-            initial_view_state=pdk.ViewState(
-                latitude=center[1],
-                longitude=center[0],
-                zoom=zoom if zoom else 10,
-                pitch=0,
-                bearing=0,
-            ),
-            layers=layers,
-            tooltip=True,
-        )
-
-        # Use on_select for click detection (Streamlit 1.35+)
-        try:
-            selection = st.pydeck_chart(
-                deck,
-                height=height,
-                on_select="rerun",
-                selection_mode="single-object",
-            )
-
-            # Handle selection
-            if selection and selection.selection:
-                selected_data = selection.selection.get("objects", {}).get("polygon_layer", [])
-                if selected_data:
-                    # Get the first selected feature
-                    selected = selected_data[0]
-                    # Find the id_geohash
-                    clicked_id = selected.get("id_geohash") or selected.get("_index")
-                    if clicked_id is not None:
-                        return clicked_id
-        except TypeError:
-            # Older Streamlit version - just show the chart without click detection
-            st.pydeck_chart(deck, height=height)
-
-        return None
 
     # Use folium for full polygon rendering
     if use_folium:
@@ -380,7 +190,7 @@ class MapViewer:
         hover_columns: Optional[List[str]] = None,
         map_center: Optional[dict] = None,
         zoom: int = 10,
-        map_backend: str = "pydeck",  # "folium", "pydeck", or "st_map"
+        map_backend: str = "folium",  # "folium", or "st_map"
         max_features: Optional[int] = None,  # Limit features for faster loading
         simplify_tolerance: Optional[float] = None,  # Simplify geometries
         show_centroids_only: bool = False,  # Show points instead of polygons (much faster)
@@ -402,7 +212,7 @@ class MapViewer:
         self.hover_columns = hover_columns or DEFAULT_HOVER_COLUMNS
         self.zoom = zoom
         self.map_center = map_center
-        self.map_backend = map_backend  # "folium", "pydeck", or "st_map"
+        self.map_backend = map_backend  # "folium" or "st_map"
         self.max_features = max_features  # Limit features for faster loading
         self.simplify_tolerance = simplify_tolerance  # Simplify geometries
         self.show_centroids_only = show_centroids_only  # Show points instead of polygons
@@ -502,12 +312,6 @@ class MapViewer:
                 return self._render_folium(valid_gdf, layer_column=getattr(self, 'layer_column', None))
             return self._render_centroids(valid_gdf, map_style=getattr(self, 'map_style', 'light'))
 
-        # Use pydeck for large datasets
-        if self.map_backend == "pydeck":
-            # If satellite mode, use folium instead (better tile support)
-            if getattr(self, 'map_style', 'light') == "satellite":
-                return self._render_folium(valid_gdf, use_satellite=True, layer_column=getattr(self, 'layer_column', None))
-            return self._render_pydeck(valid_gdf, map_style=getattr(self, 'map_style', 'light'))
 
         # Use st.map for simple point rendering
         if self.map_backend == "st_map":
@@ -545,81 +349,58 @@ class MapViewer:
         m = folium.Map(location=center, zoom_start=self.zoom)
         folium.TileLayer('CartoDB.DarkMatter').add_to(m)
         folium.TileLayer('Esri.WorldImagery').add_to(m)
-
         
-        # Color palette for layers
-        colors = [
-            "#e41a1c",  # Red
-            "#377eb8",  # Blue
-            "#4daf4a",  # Green
-            "#984ea3",  # Purple
-            "#ff7f00",  # Orange
-            "#ffff33",  # Yellow
-            "#a65628",  # Brown
-            "#f781bf",  # Pink
-            "#999999",  # Gray
-            "#66c2a5",  # Teal
-        ]
-
-        # # If layer_column is specified, create separate layers for each value
-        # if layer_column and layer_column in valid_gdf.columns:
-        #     # Get unique values
-        #     unique_values = valid_gdf[layer_column].dropna().unique()
+        # Single layer with color based on NetChange_perc
+        # Check if NetChange_perc column exists
+        if 'NetChange_perc' in valid_gdf.columns:
+            # Create RdBu colormap from matplotlib
+            # Red at -40, blue at 40
+            cmap = plt.cm.RdBu_r
+            norm = plt.Normalize(vmin=-40, vmax=40)
             
-        #     # Sort values for consistent ordering (try numeric first)
-        #     try:
-        #         unique_values = sorted(unique_values, key=lambda x: float(x) if x is not None else float('inf'))
-        #     except (TypeError, ValueError):
-        #         unique_values = sorted(unique_values, key=str)
-            
-
-        #     # Get layer visibility from session state (set by sidebar checkboxes)
-        #     # Each unique value gets its own layer
-        #     for i, value in enumerate(unique_values):
-        #         # Filter to this layer's data
-        #         layer_gdf = valid_gdf[valid_gdf[layer_column] == value].copy()
+            def style_function(feature):
+                # Get NetChange_perc value for this feature
+                props = feature.get('properties', {})
+                value = props.get('NetChange_perc', None)
                 
-        #         if len(layer_gdf) == 0:
-        #             continue
+                if value is None or pd.isna(value):
+                    # Default color for missing values
+                    return {
+                        "fillColor": "#cccccc",
+                        "color": "#dddddd",
+                        "weight": 1,
+                        "fillOpacity": 0.5,
+                    }
                 
-        #         # Get color for this layer
-        #         color = colors[i % len(colors)]
+                # Normalize value and get color from colormap
+                color = cmap(norm(value))
+                # Convert RGBA to hex manually to avoid JSON serialization issues
+                r, g, b, a = color
+                hex_color = '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
                 
-        #         # Create feature group for this layer
-        #         layer_name = f"{layer_column}: {value}"
-
-        #         feature_group = folium.FeatureGroup(name=layer_name, show=True)
-                
-        #         # Add polygons to this layer
-        #         folium.GeoJson(
-        #             layer_gdf,
-        #             style_function=lambda x, c=color: {
-        #                 "fillColor": c,
-        #                 "color": "black",
-        #                 "weight": 1,
-        #                 "fillOpacity": 0.6,
-        #             },
-        #             tooltip=folium.GeoJsonTooltip(
-        #                 fields=[layer_column, self.id_column] if self.id_column in layer_gdf.columns else [layer_column],
-        #                 aliases=[layer_column.title(), "ID:"],
-        #             ),
-        #         ).add_to(feature_group)
-            
-        #         feature_group.add_to(m)
-
-        #     # Add layer control to toggle layers on/off
-        #     # This adds the layers icon in the top-right corner of the map
-            
-        # else:
-        # Single layer without selection (original behavior)
+                return {
+                    "fillColor": hex_color,
+                    "color": "#dddddd",
+                    "weight": 1,
+                    "fillOpacity": 0.6,
+                }
+        else:
+            # Fallback to blue if column doesn't exist
+            def style_function(feature):
+                return {
+                    "fillColor": "blue",
+                    "color": "#dddddd",
+                    "weight": 1,
+                    "fillOpacity": 0.5,
+                }
+        
         folium.GeoJson(
             valid_gdf,
-            style_function=lambda x: {
-                "fillColor": "blue",
-                "color": "black",
-                "weight": 1,
-                "fillOpacity": 0.5,
-            },
+            style_function=style_function,
+            tooltip=folium.GeoJsonTooltip(
+                fields=['NetChange_perc', self.id_column] if 'NetChange_perc' in valid_gdf.columns else [self.id_column],
+                aliases=['Net Change (%):', 'ID:'],
+            ),
         ).add_to(m)
 
         folium.LayerControl().add_to(m)
@@ -646,207 +427,6 @@ class MapViewer:
             if clicked_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(clicked_id)
             st.rerun()
-
-        return None
-
-    def _render_pydeck(self, valid_gdf: gpd.GeoDataFrame, map_style: str = "satellite") -> Optional[str]:
-        """Render using pydeck (WebGL, better for large datasets)."""
-        import pydeck as pdk
-        import streamlit as st
-
-        # Determine center of map
-        if self.map_center is None:
-            centroid = valid_gdf.geometry.unary_union.centroid
-            center = [centroid.x, centroid.y]  # [lon, lat] for pydeck
-        else:
-            center = [self.map_center.get("lon", 0), self.map_center.get("lat", 0)]
-
-        # Convert polygons to list format
-        def geom_to_list(geom):
-            if geom.is_empty:
-                return None
-            if hasattr(geom, "exterior"):
-                coords = list(geom.exterior.coords)[:-1]
-                return [[x, y] for x, y in coords]
-            return None
-
-        # Create polygon data
-        polygon_data = []
-        for idx, row in valid_gdf.iterrows():
-            coords = geom_to_list(row.geometry)
-            if coords:
-                props = {col: row[col] for col in valid_gdf.columns if col != "geometry"}
-                props["_index"] = idx
-                polygon_data.append({"polygon": coords, **props})
-
-        if not polygon_data:
-            st.warning("No valid polygon geometries found.")
-            return None
-
-        # Create pydeck polygon layer
-        polygon_layer = pdk.Layer(
-            "PolygonLayer",
-            polygon_data,
-            get_polygon="polygon",
-            get_fill_color=[0, 120, 255, 128],
-            get_line_color=[255, 255, 255, 255],  # White edges for better visibility on satellite
-            filled=True,
-            stroked=True,
-            extruded=False,
-            wireframe=True,
-            line_width_min_pixels=2,
-            pickable=True,
-            auto_highlight=True,
-        )
-
-        # Base map style
-        if map_style == "satellite":
-            # Use ESRI World Imagery via raster tiles
-            tile_layer = pdk.Layer(
-                "TileLayer",
-                data="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                pickable=False,
-                opacity=1,
-                bounds=[-180, -85, 180, 85],
-                min_zoom=0,
-                max_zoom=19,
-                tile_size=256,
-            )
-            layers = [tile_layer, polygon_layer]
-            map_style = None  # No base style when using custom tiles
-        else:
-            layers = [polygon_layer]
-
-        deck = pdk.Deck(
-            map_style=map_style,
-            initial_view_state=pdk.ViewState(
-                latitude=center[1],
-                longitude=center[0],
-                zoom=self.zoom,
-                pitch=0,
-                bearing=0,
-            ),
-            layers=layers,
-            tooltip=True,
-        )
-
-        # Render with selection support
-        try:
-            selection = st.pydeck_chart(
-                deck,
-                height=600,
-                on_select="rerun",
-                selection_mode="single-object",
-            )
-
-            if selection and selection.selection:
-                selected_data = selection.selection.get("objects", {}).get("polygon_layer", [])
-                if selected_data:
-                    selected = selected_data[0]
-                    clicked_id = selected.get(self.id_column) or selected.get("_index")
-
-                    if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
-                        st.session_state.selected_geohash = clicked_id
-                        if clicked_id not in st.session_state.clicked_features:
-                            st.session_state.clicked_features.append(clicked_id)
-                        st.rerun()
-
-        except TypeError:
-            st.pydeck_chart(deck, height=600)
-
-        return None
-
-    def _render_centroids(self, valid_gdf: gpd.GeoDataFrame, map_style: str = "satellite") -> Optional[str]:
-        """Render using centroids (points) - much faster for large datasets."""
-        import pydeck as pdk
-        import streamlit as st
-
-        # Extract centroids
-        centroids_gdf = valid_gdf.copy()
-        centroids_gdf["geometry"] = valid_gdf.geometry.centroid
-        centroids_gdf = centroids_gdf.reset_index(drop=True)
-
-        # Determine center
-        if self.map_center is None:
-            centroid = valid_gdf.geometry.unary_union.centroid
-            center = [centroid.x, centroid.y]
-        else:
-            center = [self.map_center.get("lon", 0), self.map_center.get("lat", 0)]
-
-        # Create point data
-        point_data = []
-        for idx, row in centroids_gdf.iterrows():
-            props = {col: row[col] for col in centroids_gdf.columns if col != "geometry"}
-            props["_index"] = idx
-            point_data.append({
-                "position": [row.geometry.x, row.geometry.y],
-                **props
-            })
-
-        # Create scatterplot layer (much faster than polygons)
-        point_layer = pdk.Layer(
-            "ScatterplotLayer",
-            point_data,
-            get_position="position",
-            get_fill_color=[0, 120, 255, 220],  # Bright blue for visibility on satellite
-            get_radius=150,
-            pickable=True,
-            auto_highlight=True,
-        )
-
-        # Base map style
-        if map_style == "satellite":
-            tile_layer = pdk.Layer(
-                "TileLayer",
-                data="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-                pickable=False,
-                opacity=1,
-                bounds=[-180, -85, 180, 85],
-                min_zoom=0,
-                max_zoom=19,
-                tile_size=256,
-            )
-            layers = [tile_layer, point_layer]
-            map_style = None
-        else:
-            layers = [point_layer]
-
-        deck = pdk.Deck(
-            map_style=map_style,
-            initial_view_state=pdk.ViewState(
-                latitude=center[1],
-                longitude=center[0],
-                zoom=self.zoom,
-                pitch=0,
-                bearing=0,
-            ),
-            layers=layers,
-            tooltip=True,
-        )
-
-        # Render with selection
-        try:
-            selection = st.pydeck_chart(
-                deck,
-                height=600,
-                on_select="rerun",
-                selection_mode="single-object",
-            )
-
-            if selection and selection.selection:
-                selected_data = selection.selection.get("objects", {}).get("scatterplot_layer", [])
-                if selected_data:
-                    selected = selected_data[0]
-                    clicked_id = selected.get(self.id_column) or selected.get("_index")
-
-                    if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
-                        st.session_state.selected_geohash = clicked_id
-                        if clicked_id not in st.session_state.clicked_features:
-                            st.session_state.clicked_features.append(clicked_id)
-                        st.rerun()
-
-        except TypeError:
-            st.pydeck_chart(deck, height=600)
 
         return None
 
@@ -909,17 +489,14 @@ def create_app(
     st.sidebar.subheader("Map Backend")
     map_backend = st.sidebar.radio(
         "Select map renderer:",
-        options=["folium", "pydeck", "st_map"],
+        options=["folium", "st_map"],
         index=0,
         format_func=lambda x: {
             "folium": "Folium (recommended for small/medium)",
-            "pydeck": "Pydeck (WebGL, best for large datasets)",
             "st_map": "st.map (simple, points only)",
         }[x],
         help="Folium is best for small datasets, pydeck for large datasets with many polygons.",
     )
-    if map_backend == "pydeck":
-        st.sidebar.caption("🚀 Pydeck uses WebGL - great for many polygons")
 
     # Performance settings for large datasets
     st.sidebar.divider()
