@@ -11,7 +11,6 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 import xarray as xr
-import numpy as np
 from lonboard import Map, PolygonLayer
 
 
@@ -94,7 +93,7 @@ def visualize_gdf(
             center = map_center
 
         # Create folium map
-        m = folium.Map(location=center, zoom_start=zoom if zoom else 10, tiles='Esri.WorldImagery')
+        m = folium.Map(location=center, zoom_start=zoom if zoom else 10, tiles="Esri.WorldImagery")
 
         # Add polygons with simple styling
         folium.GeoJson(
@@ -145,6 +144,7 @@ def visualize_gdf(
         html = map_view.to_html()
         st.components.v1.html(html, height=height)
 
+
 # Initialize Earth Engine - only if running in Streamlit context
 # Check environment variable first (works outside Streamlit)
 if "EARTHENGINE_TOKEN" in os.environ.keys():
@@ -166,8 +166,6 @@ from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.io import load_vector_dataset
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
-    MAP_STYLING,
-    get_z_values_for_coloring,
 )
 
 
@@ -308,10 +306,9 @@ class MapViewer:
         # If centroids_only mode, extract centroids
         if self.show_centroids_only:
             # If satellite mode, use folium instead (better tile support)
-            if getattr(self, 'map_style', 'light') == "satellite":
-                return self._render_folium(valid_gdf, layer_column=getattr(self, 'layer_column', None))
-            return self._render_centroids(valid_gdf, map_style=getattr(self, 'map_style', 'light'))
-
+            if getattr(self, "map_style", "light") == "satellite":
+                return self._render_folium(valid_gdf, layer_column=getattr(self, "layer_column", None))
+            return self._render_centroids(valid_gdf, map_style=getattr(self, "map_style", "light"))
 
         # Use st.map for simple point rendering
         if self.map_backend == "st_map":
@@ -319,20 +316,17 @@ class MapViewer:
             return None
 
         # Default: use folium
-        return self._render_folium(
-            valid_gdf, 
-            layer_column=getattr(self, 'layer_column', None)
-        )
+        return self._render_folium(valid_gdf, layer_column=getattr(self, "layer_column", None))
 
     def _render_folium(self, valid_gdf: gpd.GeoDataFrame, layer_column: Optional[str] = None) -> Optional[str]:
         """Render using folium with optional layer selection.
-        
+
         Args:
             valid_gdf: The GeoDataFrame to render.
             use_satellite: Whether to use ESRI satellite background.
             layer_column: Column name to split into separate layers. Each unique
                          value becomes a toggleable layer. If None, shows single layer.
-        
+
         Returns:
             The selected id_geohash value if a feature was clicked, None otherwise.
         """
@@ -347,22 +341,22 @@ class MapViewer:
             center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
 
         m = folium.Map(location=center, zoom_start=self.zoom)
-        folium.TileLayer('CartoDB.DarkMatter').add_to(m)
-        folium.TileLayer('Esri.WorldImagery').add_to(m)
-        
+        folium.TileLayer("CartoDB.DarkMatter").add_to(m)
+        folium.TileLayer("Esri.WorldImagery").add_to(m)
+
         # Single layer with color based on NetChange_perc
         # Check if NetChange_perc column exists
-        if 'NetChange_perc' in valid_gdf.columns:
+        if "NetChange_perc" in valid_gdf.columns:
             # Create RdBu colormap from matplotlib
             # Red at -40, blue at 40
             cmap = plt.cm.RdBu_r
             norm = plt.Normalize(vmin=-40, vmax=40)
-            
+
             def style_function(feature):
                 # Get NetChange_perc value for this feature
-                props = feature.get('properties', {})
-                value = props.get('NetChange_perc', None)
-                
+                props = feature.get("properties", {})
+                value = props.get("NetChange_perc", None)
+
                 if value is None or pd.isna(value):
                     # Default color for missing values
                     return {
@@ -371,13 +365,13 @@ class MapViewer:
                         "weight": 1,
                         "fillOpacity": 0.5,
                     }
-                
+
                 # Normalize value and get color from colormap
                 color = cmap(norm(value))
                 # Convert RGBA to hex manually to avoid JSON serialization issues
                 r, g, b, a = color
-                hex_color = '#{:02x}{:02x}{:02x}'.format(int(r * 255), int(g * 255), int(b * 255))
-                
+                hex_color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+
                 return {
                     "fillColor": hex_color,
                     "color": "#dddddd",
@@ -393,28 +387,39 @@ class MapViewer:
                     "weight": 1,
                     "fillOpacity": 0.5,
                 }
-        
-        # Pre-format NetChange_perc for tooltip display (to avoid JSON serialization issues)
-        if 'NetChange_perc' in valid_gdf.columns:
+
+        # Pre-format NetChange values for tooltip display (to avoid JSON serialization issues)
+        if "NetChange_perc" in valid_gdf.columns:
+            # Define column pairs to display in tooltips: (original_column, display_alias, format_string, unit)
+            tooltip_columns = [
+                ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
+                ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
+                ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
+                ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
+            ]
+
             valid_gdf = valid_gdf.copy()
-            valid_gdf['NetChange_perc_display'] = valid_gdf['NetChange_perc'].apply(
-                lambda x: f'{x:.2f}%' if pd.notna(x) else 'N/A'
-            )
-            # Show only NetChange_perc in tooltip
-            fields_to_show = ['id_geohash', 'NetChange_perc_display']
-            aliases_to_show = ['Lake ID:', 'Net Change:']
+            display_columns = []
+            alias_mapping = []
+
+            for orig_col, alias, fmt, unit in tooltip_columns:
+                display_col = f"{orig_col}_display"
+                valid_gdf[display_col] = valid_gdf[orig_col].apply(
+                    lambda x: f"{fmt.format(x)}{unit}" if pd.notna(x) else "N/A"
+                )
+                display_columns.append(display_col)
+                alias_mapping.append(alias)
+            # Show ID first, then formatted NetChange values
+            fields_to_show = [self.id_column] + display_columns
+            aliases_to_show = ["ID:"] + alias_mapping
         else:
             fields_to_show = [self.id_column]
-            aliases_to_show = ['ID:']
-        
+            aliases_to_show = ["ID:"]
+
         folium.GeoJson(
             valid_gdf,
             style_function=style_function,
             tooltip=folium.GeoJsonTooltip(
-
-
-
-
                 fields=fields_to_show,
                 aliases=aliases_to_show,
             ),
@@ -423,13 +428,7 @@ class MapViewer:
         folium.LayerControl().add_to(m)
         # Render the map and get click data
         # Note: returned_objects includes 'last_active_drawing' for click detection
-        result = st_folium(
-            m, 
-            height=600, 
-            width="100%", 
-            key="map_viewer",
-            returned_objects=["last_active_drawing"]
-        )
+        result = st_folium(m, height=600, width="100%", key="map_viewer", returned_objects=["last_active_drawing"])
 
         # Extract id_geohash from clicked feature
         clicked_id = None
@@ -569,10 +568,13 @@ def create_app(
             map_backend=map_backend,
             max_features=min(100, max_features) if max_features else 100,  # Use smaller sample for column detection
         )
-        available_cols = [c for c in viewer_for_cols.gdf.columns 
-                         if c not in ["geometry", id_column, "id_geohash"] 
-                         and viewer_for_cols.gdf[c].dtype in ["object", "int64", "float64", "int32", "float32"]]
-        
+        available_cols = [
+            c
+            for c in viewer_for_cols.gdf.columns
+            if c not in ["geometry", id_column, "id_geohash"]
+            and viewer_for_cols.gdf[c].dtype in ["object", "int64", "float64", "int32", "float32"]
+        ]
+
         layer_column = st.sidebar.selectbox(
             "Split into layers by column:",
             options=["None"] + available_cols,
