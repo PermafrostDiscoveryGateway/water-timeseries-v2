@@ -32,7 +32,6 @@ def visualize_gdf(
     use_st_map: bool = False,
     use_folium: bool = True,
     max_features: Optional[int] = None,  # Limit features for faster loading
-    simplify_tolerance: Optional[float] = None,  # Simplify geometries
 ) -> None:
     """Visualize a GeoDataFrame with polygons using folium, pydeck, or st.map.
 
@@ -49,7 +48,6 @@ def visualize_gdf(
         use_st_map: If True, use Streamlit's native st.map() (shows points at centroids).
         use_folium: If True and use_pydeck is False, use folium for polygon rendering.
         max_features: Maximum number of features to display (for large datasets).
-        simplify_tolerance: Simplify polygons (higher = fewer points, faster).
 
     Example:
         >>> import geopandas as gpd
@@ -70,10 +68,6 @@ def visualize_gdf(
     if max_features and len(valid_gdf) > max_features:
         valid_gdf = valid_gdf.sample(n=max_features, random_state=42).reset_index(drop=True)
         st.caption(f"Showing {max_features} of {len(gdf)} features (use max_features to change)")
-
-    # Simplify geometries if requested
-    if simplify_tolerance and simplify_tolerance > 0:
-        valid_gdf["geometry"] = valid_gdf["geometry"].simplify(simplify_tolerance, preserve_topology=True)
 
     # Use Streamlit's native st.map for simple visualization
     if use_st_map:
@@ -190,8 +184,6 @@ class MapViewer:
         zoom: int = 10,
         map_backend: str = "folium",  # "folium", or "st_map"
         max_features: Optional[int] = None,  # Limit features for faster loading
-        simplify_tolerance: Optional[float] = None,  # Simplify geometries
-        show_centroids_only: bool = False,  # Show points instead of polygons (much faster)
     ):
         """Initialize the MapViewer.
 
@@ -212,8 +204,6 @@ class MapViewer:
         self.map_center = map_center
         self.map_backend = map_backend  # "folium" or "st_map"
         self.max_features = max_features  # Limit features for faster loading
-        self.simplify_tolerance = simplify_tolerance  # Simplify geometries
-        self.show_centroids_only = show_centroids_only  # Show points instead of polygons
 
         # Load data if parquet_path provided
         if gdf is None and parquet_path is not None:
@@ -292,23 +282,12 @@ class MapViewer:
             valid_gdf = valid_gdf.sample(n=self.max_features, random_state=42).reset_index(drop=True)
             st.caption(f"Showing {self.max_features} of {len(self.gdf)} features (use max_features to change)")
 
-        # Simplify geometries if requested
-        if self.simplify_tolerance and self.simplify_tolerance > 0:
-            valid_gdf["geometry"] = valid_gdf["geometry"].simplify(self.simplify_tolerance, preserve_topology=True)
-
         # Ensure geometry is in proper shapely format
         valid_gdf = valid_gdf.reset_index(drop=True)
 
         if len(valid_gdf) == 0:
             st.warning("No valid geometries found.")
             return None
-
-        # If centroids_only mode, extract centroids
-        if self.show_centroids_only:
-            # If satellite mode, use folium instead (better tile support)
-            if getattr(self, "map_style", "light") == "satellite":
-                return self._render_folium(valid_gdf, layer_column=getattr(self, "layer_column", None))
-            return self._render_centroids(valid_gdf, map_style=getattr(self, "map_style", "light"))
 
         # Use st.map for simple point rendering
         if self.map_backend == "st_map":
@@ -323,7 +302,6 @@ class MapViewer:
 
         Args:
             valid_gdf: The GeoDataFrame to render.
-            use_satellite: Whether to use ESRI satellite background.
             layer_column: Column name to split into separate layers. Each unique
                          value becomes a toggleable layer. If None, shows single layer.
 
@@ -349,7 +327,7 @@ class MapViewer:
         if "NetChange_perc" in valid_gdf.columns:
             # Create RdBu colormap from matplotlib
             # Red at -40, blue at 40
-            cmap = plt.cm.RdBu_r
+            cmap = plt.cm.RdYlBu
             norm = plt.Normalize(vmin=-40, vmax=40)
 
             def style_function(feature):
@@ -528,28 +506,6 @@ def create_app(
     if max_features == 0:
         max_features = None
 
-    simplify_tolerance = st.sidebar.slider(
-        "Simplify tolerance",
-        min_value=0.0,
-        max_value=0.01,
-        value=0.0,
-        step=0.001,
-        help="Higher = simpler polygons = faster loading. 0 = no simplification.",
-    )
-
-    show_centroids = st.sidebar.toggle(
-        "Show centroids only (faster)",
-        value=True,
-        help="Show points at polygon centroids instead of full polygons. Much faster for large datasets.",
-    )
-
-    use_satellite = st.sidebar.toggle(
-        "Satellite background (ESRI)",
-        value=True,
-        help="Use ESRI World Imagery as background map.",
-    )
-    map_style = "satellite" if use_satellite else "light"
-
     # Use function parameters for data paths
     data_path_input = str(data_path)
     zarr_path_input = str(zarr_path)
@@ -603,10 +559,7 @@ def create_app(
             zoom=zoom_level,
             map_backend=map_backend,
             max_features=max_features,
-            simplify_tolerance=simplify_tolerance,
-            show_centroids_only=show_centroids,
         )
-        viewer.map_style = map_style  # Set map style after creation
         viewer.layer_column = layer_column  # Set layer column for folium
 
         # Render the map
@@ -779,7 +732,7 @@ def create_app(
                     col_checkbox = st.container()
                     with col_checkbox:
                         create_sentinel2 = st.checkbox("Sentinel-2 (2016-2025)", value=True, key="sentinel2_checkbox")
-                        create_landsat = st.checkbox("Landsat (2000-2025)", value=False, key="landsat_checkbox")
+                        create_landsat = st.checkbox("Landsat (2000-2025)", value=True, key="landsat_checkbox")
 
                     # Define GIF paths early so they're available for both creation and display
                     gif_dir = Path("gifs")
