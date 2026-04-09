@@ -394,12 +394,29 @@ class MapViewer:
                     "fillOpacity": 0.5,
                 }
         
+        # Pre-format NetChange_perc for tooltip display (to avoid JSON serialization issues)
+        if 'NetChange_perc' in valid_gdf.columns:
+            valid_gdf = valid_gdf.copy()
+            valid_gdf['NetChange_perc_display'] = valid_gdf['NetChange_perc'].apply(
+                lambda x: f'{x:.2f}%' if pd.notna(x) else 'N/A'
+            )
+            # Show only NetChange_perc in tooltip
+            fields_to_show = ['id_geohash', 'NetChange_perc_display']
+            aliases_to_show = ['Lake ID:', 'Net Change:']
+        else:
+            fields_to_show = [self.id_column]
+            aliases_to_show = ['ID:']
+        
         folium.GeoJson(
             valid_gdf,
             style_function=style_function,
             tooltip=folium.GeoJsonTooltip(
-                fields=['NetChange_perc', self.id_column] if 'NetChange_perc' in valid_gdf.columns else [self.id_column],
-                aliases=['Net Change (%):', 'ID:'],
+
+
+
+
+                fields=fields_to_show,
+                aliases=aliases_to_show,
             ),
         ).add_to(m)
 
