@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
+import folium
 import geemap
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -12,6 +13,20 @@ import pandas as pd
 import streamlit as st
 import xarray as xr
 from lonboard import Map, PolygonLayer
+from streamlit_folium import st_folium
+
+from water_timeseries.dataset import DWDataset
+from water_timeseries.downloader import EarthEngineDownloader
+from water_timeseries.utils.io import load_vector_dataset
+from water_timeseries.utils.map_styling import (
+    create_tile_layers,
+    format_tooltip_columns,
+    get_colored_style_function,
+    get_default_style_function,
+)
+from water_timeseries.utils.visualization import (
+    DEFAULT_HOVER_COLUMNS,
+)
 
 
 def render_map_html(map_view: Map) -> None:
@@ -76,9 +91,6 @@ def visualize_gdf(
 
     # Use folium for full polygon rendering
     if use_folium:
-        import folium
-        from streamlit_folium import st_folium
-
         # Calculate center
         if map_center is None:
             centroid = valid_gdf.geometry.unary_union.centroid
@@ -128,16 +140,6 @@ def visualize_gdf(
         zoom=zoom if zoom is not None else 10,
     )
 
-    # Try to use stlonboard for Streamlit integration
-    try:
-        from lonboard import stlonboard
-
-        stlonboard(map_view, height=height)
-    except ImportError:
-        # Fallback: render as HTML
-        html = map_view.to_html()
-        st.components.v1.html(html, height=height)
-
 
 # Initialize Earth Engine - only if running in Streamlit context
 # Check environment variable first (works outside Streamlit)
@@ -154,19 +156,6 @@ else:
     except Exception:
         # Not running in Streamlit context, skip initialization
         pass
-
-from water_timeseries.dataset import DWDataset
-from water_timeseries.downloader import EarthEngineDownloader
-from water_timeseries.utils.io import load_vector_dataset
-from water_timeseries.utils.visualization import (
-    DEFAULT_HOVER_COLUMNS,
-)
-from water_timeseries.utils.map_styling import (
-    create_tile_layers,
-    format_tooltip_columns,
-    get_colored_style_function,
-    get_default_style_function,
-)
 
 
 class MapViewer:
@@ -275,8 +264,6 @@ class MapViewer:
         Returns:
             The selected id_geohash value if a feature was clicked, None otherwise.
         """
-        import streamlit as st
-
         st.subheader("Interactive Map Viewer")
 
         # Get valid indices (after filtering out invalid geometries)
@@ -314,8 +301,6 @@ class MapViewer:
         Returns:
             The selected id_geohash value if a feature was clicked, None otherwise.
         """
-        import folium
-        from streamlit_folium import st_folium
 
         # Determine center of map
         if self.map_center is None:
@@ -329,6 +314,17 @@ class MapViewer:
         # Add tile layers using utility function
         for tile_name in create_tile_layers():
             folium.TileLayer(tile_name).add_to(m)
+
+        # Add WMS layer for permafrost data
+        wms_url = "https://maps.awi.de/services/common/permafrost/ows"
+        folium.WmsTileLayer(
+            url=wms_url,
+            name="TCVIS Landsat Trends 2005-2024 (AWI)",
+            styles="composite",
+            transparent=True,
+            overlay=False,
+            layers="tcvis",
+        ).add_to(m)
 
         # Create style function based on whether NetChange_perc column exists
         if "NetChange_perc" in valid_gdf.columns:
@@ -357,6 +353,7 @@ class MapViewer:
 
         folium.GeoJson(
             valid_gdf,
+            name="Lakes",
             style_function=style_function,
             tooltip=folium.GeoJsonTooltip(
                 fields=fields_to_show,
