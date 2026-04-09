@@ -19,86 +19,24 @@ import xarray as xr
 from loguru import logger
 from tqdm import tqdm
 
-from water_timeseries.utils.earthengine import calc_monthly_dw, create_dw_classes_mask, drop_z_from_gdf
+from water_timeseries.utils.earthengine import (
+    calc_monthly_dw,
+    create_dw_classes_mask,
+    drop_z_from_gdf,
+    setup_annual_dates,
+    setup_dates_from_options,
+    setup_monthly_dates,
+)
 from water_timeseries.utils.io import load_vector_dataset, save_xarray_dataset
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
 
-
-def setup_monthly_dates(years: List[int], months: List[int]) -> List[str]:
-    """Generate a list of monthly dates from the given years and months.
-
-    Creates dates starting from the first day of each specified month.
-
-    Args:
-        years: List of years (e.g., [2017, 2018]).
-        months: List of months as integers (1-12).
-
-    Returns:
-        List[str]: Formatted dates in 'YYYY-MM-DD' format (e.g., '2017-06-01').
-
-    Example:
-        >>> setup_monthly_dates([2023], [1, 2])
-        ['2023-01-01', '2023-02-01']
-    """
-    dates = []
-    for year in years:
-        for month in months:
-            dates.append(f"{year}-{month:02d}-01")
-    return dates
-
-
-def setup_dates_from_options(
-    years: Optional[List[int]] = None,
-    months: Optional[List[int]] = None,
-    date_list: Optional[List[str]] = None,
-) -> List[str]:
-    """Validate and generate a list of dates from either date_list OR (years AND months).
-
-    This function enforces mutual exclusivity between date_list and (years, months).
-
-    Args:
-        years: List of years (e.g., [2017, 2018]). Must be provided together with
-            `months` if `date_list` is not used.
-        months: List of months as integers (1-12). Must be provided together with
-            `years` if `date_list` is not used.
-        date_list: Optional list of dates in 'YYYY-MM' format (e.g., ['2017-06', '2018-07']).
-            If provided, `years` and `months` are ignored.
-
-    Returns:
-        List[str]: Formatted dates in 'YYYY-MM-DD' format.
-
-    Raises:
-        ValueError: If neither (years and months) nor date_list is provided,
-            or if both are provided.
-
-    Example:
-        >>> setup_dates_from_options(date_list=['2017-06', '2018-07'])
-        ['2017-06-01', '2018-07-01']
-        >>> setup_dates_from_options(years=[2017], months=[6, 7])
-        ['2017-06-01', '2017-07-01']
-    """
-    # Validate date parameters: either date_list OR (years AND months)
-    if date_list is not None and (years is not None or months is not None):
-        raise ValueError(
-            "Invalid date parameters: either provide 'date_list' OR ('years' AND 'months'), "
-            "but not both. These options are mutually exclusive."
-        )
-
-    if date_list is None and (years is None or months is None):
-        raise ValueError(
-            "Invalid date parameters: either provide 'date_list' or both 'years' and 'months'. "
-            f"Received: years={years}, months={months}, date_list={date_list}"
-        )
-
-    # Generate dates based on the input
-    if date_list is not None:
-        # Convert YYYY-MM format to YYYY-MM-DD format (first day of month)
-        return [f"{d}-01" for d in date_list]
-    else:
-        # Use years and months (with defaults if not provided)
-        years = years if years is not None else [2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025]
-        months = months if months is not None else [6, 7, 8, 9]
-        return setup_monthly_dates(years=years, months=months)
+# Re-export for backward compatibility
+__all__ = [
+    "EarthEngineDownloader",
+    "setup_annual_dates",
+    "setup_dates_from_options",
+    "setup_monthly_dates",
+]
 
 
 class EarthEngineDownloader:
@@ -156,6 +94,12 @@ class EarthEngineDownloader:
             "built",
             "bare",
             "snow_and_ice",
+        ]
+        self.jrc_bandnames = [
+            "area_nodata",
+            "area_land",
+            "area_water_seasonal",
+            "area_water_permanent",
         ]
 
         # Initialize Earth Engine
@@ -264,6 +208,30 @@ class EarthEngineDownloader:
             "crs": CRS,
             "scale": scale,
             "bands": self.dw_bandnames,
+        }
+        return fc, reducer_dict
+
+    def _setup_jrc_reducer(self, gdf, feature_index_name: str, scale: float = 30) -> tuple:
+        """Setup Google Earth Engine reducer configuration for JRC data.
+
+        Args:
+            gdf: GeoDataFrame with features to process.
+            feature_index_name: Column name to use as the feature index.
+            scale: Pixel scale in meters (default: 30 for JRC).
+
+        Returns:
+            tuple: (fc, reducer_dict) - GEE FeatureCollection and reducer configuration.
+        """
+        fc = geemap.gdf_to_ee(drop_z_from_gdf(gdf[:]))
+
+        reducer = ee.Reducer.sum()
+        CRS = "EPSG:4326"  # Use WGS84 (matching original JRC code)
+        reducer_dict = {
+            "reducer": reducer,
+            "collection": fc.select(feature_index_name),
+            "crs": CRS,
+            "scale": scale,
+            "bands": self.jrc_bandnames,
         }
         return fc, reducer_dict
 
@@ -389,6 +357,49 @@ class EarthEngineDownloader:
 
         # Return DataFrame with multi-index
         return df_out  # .set_index([name_attribute, "date"])
+
+    def _extract_jrc_time_series(
+        self, gdf_chunk, name_attribute: str, years: List[int], scale: float = 30
+    ) -> pd.DataFrame:
+        """Extract JRC time series data for a single chunk.
+
+        Processes each year within this method to avoid memory issues with large imlists.
+
+        Args:
+            gdf_chunk: GeoDataFrame chunk to extract data for.
+            name_attribute: Column name to use as the feature index.
+            years: List of years to process (e.g., [2017, 2018]).
+            scale: Pixel scale in meters (default: 30 for JRC data).
+
+        Returns:
+            pd.DataFrame: DataFrame with JRC water classification areas for this chunk.
+        """
+        image_collection = ee.ImageCollection("JRC/GSW1_4/YearlyHistory")
+
+        # Filter by specific years if provided
+        if years is not None and len(years) > 0:
+            image_collection = image_collection.filter(ee.Filter.inList("year", years))
+            self._log_info(f"Filtering JRC image collection to specific years: {years}")
+
+        def waterMaskArea(image):
+            for i in range(4):
+                # calculate pixel area in ha for seasonal water surface
+                water_mask = (
+                    image.select("waterClass")
+                    .eq(i)
+                    .multiply(ee.Image.pixelArea())
+                    .multiply(1e-4)
+                    .rename(self.jrc_bandnames[i])
+                )
+                image = image.addBands(water_mask.select(self.jrc_bandnames[i]))
+            return image
+
+        geom, reducer_dict = self._setup_jrc_reducer(gdf=gdf_chunk, feature_index_name=name_attribute, scale=scale)
+        ic_water = image_collection.map(waterMaskArea)
+        df = geemap.ee_to_gdf(ic_water.getTimeSeriesByRegions(**reducer_dict))
+        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+
+        return df.drop(columns=["geometry"])
 
     def download_dw_monthly(
         self,
@@ -534,6 +545,171 @@ class EarthEngineDownloader:
         n_items = len(ds.coords[name_attribute])
         n_dates = len(ds.coords["date"])
         self._log_info(f"Download complete: {n_items} items, {n_dates} dates collected")
+
+        # Remove the 'reducer' variable if present
+        ds = ds.drop_vars("reducer")
+
+        # Save to file if requested
+        if save_to_file is not None:
+            # Determine output_dir for relative paths
+            save_path = Path(save_to_file)
+            output_dir = str(self.output_dir) if not save_path.is_absolute() else None
+            save_xarray_dataset(ds, save_to_file, output_dir=output_dir, logger=self.logger)
+
+        return ds
+
+    def download_jrc_annual(
+        self,
+        vector_dataset: str | Path,
+        name_attribute: str,
+        years: Optional[List[int]] = None,
+        bbox_west: float = -180,
+        bbox_east: float = 180,
+        bbox_north: float = 90,
+        bbox_south: float = -90,
+        id_list: Optional[List] = None,
+        scale: float = 30,
+        max_total_requests: int = 500,
+        n_parallel: int = 1,
+        no_download: bool = False,
+        save_to_file: Optional[str] = None,
+    ) -> xr.Dataset:
+        """Download annual JRC (Joint Research Centre) water classification data.
+
+        Extracts JRC water classification areas from Google Earth Engine for each
+        polygon in the vector dataset, grouped by year.
+
+        The JRC dataset provides annual water classification with the following bands:
+        - area_nodata: Areas with no data
+        - area_land: Land areas
+        - area_water_seasonal: Seasonally flooded water areas
+        - area_water_permanent: Permanently flooded water areas
+
+        Args:
+            vector_dataset: Path to the input vector dataset (Parquet format).
+            name_attribute: Column name in the vector dataset to use for grouping.
+            years: List of years to process (e.g., [2017, 2018]). Default: [2000-2021].
+            bbox_west: Western boundary for spatial filtering (default: -180).
+            bbox_east: Eastern boundary for spatial filtering (default: 180).
+            bbox_north: Northern boundary for spatial filtering (default: 90).
+            bbox_south: Southern boundary for spatial filtering (default: -90).
+            id_list: Optional list of IDs to filter by (values from name_attribute column).
+                If provided, only features matching these IDs will be processed.
+                Default is None (no ID filtering).
+            scale: Pixel scale in meters (default: 30 for JRC data).
+            max_total_requests: Maximum number of total requests per chunk (features * years).
+                Default: 500.
+            n_parallel: Number of parallel workers for processing chunks (default: 1).
+            no_download: If True, only log the download parameters without actually
+                downloading data (default: False).
+            save_to_file: Optional path to save the downloaded dataset. If provided, the
+                dataset will be saved to this path. The format is determined by the file
+                extension: '.zarr' for Zarr format, '.nc' for NetCDF format. If a relative
+                path is provided, it will be saved in the output directory (default: None).
+
+        Returns:
+            xr.Dataset: Xarray dataset with JRC water classification areas indexed by
+                name attribute and date (stored as 'YYYY-01-01' format).
+
+        Raises:
+            KeyError: If the specified name_attribute column is not found in the
+                vector dataset.
+
+        Example:
+            >>> downloader = EarthEngineDownloader()
+            >>> ds = downloader.download_jrc_annual(
+            ...     vector_dataset="lakes.parquet",
+            ...     name_attribute="lake_id",
+            ...     years=[2017, 2018, 2019]
+            ... )
+        """
+        # Announce no_download mode at the top
+        if no_download:
+            self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
+
+        # Read vector data using the reusable function
+        gdf = load_vector_dataset(vector_dataset, logger=self.logger)
+        if name_attribute not in gdf.columns:
+            raise KeyError(f"The designated column '{name_attribute}' is not present in the vector dataset.")
+
+        # Log initial number of features
+        n_features_initial = len(gdf)
+        self._log_info(f"Initial dataset has {n_features_initial} features")
+
+        # Apply ID filter if id_list is provided
+        gdf = self._apply_id_filter(gdf, id_list, name_attribute)
+
+        # Apply spatial bbox filter if any bbox parameter is provided and differs from defaults
+        if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]) and not (
+            bbox_west == -180 and bbox_east == 180 and bbox_north == 90 and bbox_south == -90
+        ):
+            n_before_bbox_filter = len(gdf)
+            self._log_info(
+                f"Applying bbox filter: west={bbox_west}, south={bbox_south}, east={bbox_east}, north={bbox_north}"
+            )
+            gdf = filter_gdf_by_bbox(
+                gdf,
+                bbox_west=bbox_west,
+                bbox_south=bbox_south,
+                bbox_east=bbox_east,
+                bbox_north=bbox_north,
+            )
+            n_features_filtered = len(gdf)
+            self._log_info(
+                f"After bbox filter: {n_features_filtered} features (removed {n_before_bbox_filter - n_features_filtered})"
+            )
+        else:
+            self._log_info("No spatial bbox filtering applied (using default global bounds)")
+
+        n_features = len(gdf)
+        self._log_info(f"Processing {n_features} features")
+
+        # Generate annual dates from years (stored as 'YYYY-01-01' format internally)
+        if years is None:
+            # Default years for JRC data (2000-2021)
+            years = list(range(2000, 2022))
+        dates = [f"{year}-01-01" for year in years]
+        n_dates = len(dates)
+        n_total_requests = n_features * n_dates
+        self._log_info(f"Processing {n_features} features x {n_dates} years = {n_total_requests} total requests")
+        self._log_info(f"Processing years: {[d.split('-')[0] for d in dates]}")
+
+        # Chunk the GeoDataFrame into smaller pieces based on number of dates
+        gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates)
+
+        # Return early if no_download is True - skip downloading but show summary
+        if no_download:
+            self._log_info(f"Would process {len(gdf)} features with {len(gdf_chunks)} chunks")
+            self._log_info("=== END NO DOWNLOAD MODE ===")
+            return None
+
+        # Ensure n_parallel is not greater than number of chunks
+        n_parallel_effective = min(n_parallel, len(gdf_chunks))
+
+        # Process chunks with joblib (sequential if n_parallel=1, parallel otherwise)
+        self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
+
+        # Use tqdm for progress bar
+        df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
+            joblib.delayed(self._extract_jrc_time_series)(
+                gdf_chunk=chunk, name_attribute=name_attribute, years=years, scale=scale
+            )
+            for chunk in tqdm(gdf_chunks, desc="Downloading JRC annual chunks", unit="chunk")
+        )
+        # Filter out None/empty results
+        df_out_list = [df for df in df_out_list if df is not None and not df.empty]
+
+        # Combine all chunks
+        if not df_out_list:
+            raise ValueError("No data was extracted from any chunk. Check GEE request parameters.")
+
+        df_out = pd.concat(df_out_list)
+        ds = df_out.set_index([name_attribute, "date"]).to_xarray()
+
+        # Log summary statistics using the dataset coordinates (indexes)
+        n_items = len(ds.coords[name_attribute])
+        n_dates_out = len(ds.coords["date"])
+        self._log_info(f"Download complete: {n_items} items, {n_dates_out} years collected")
 
         # Remove the 'reducer' variable if present
         ds = ds.drop_vars("reducer")
