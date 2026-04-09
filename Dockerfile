@@ -16,7 +16,6 @@ WORKDIR /app
 
 # Copy everything at once
 COPY src/ ./src/
-COPY google_cloud_utils/ ./google_cloud_utils/
 COPY pyproject.toml .
 COPY uv.lock .
 COPY README.md .
