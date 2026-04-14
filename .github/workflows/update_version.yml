@@ -128,7 +128,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      packages: write  # Critical for ghcr.io
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') ||
       (github.event_name == 'push' && (github.ref_name == 'ncsa' || github.ref_name == 'add-dockerfile'))
@@ -146,13 +146,11 @@ jobs:
           TAGS="ghcr.io/ncsa/water-timeseries-v2:${GITHUB_SHA::8}"
           
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            # Manual dispatch - use version tag from update-version
             VERSION="${{ needs.update-version.outputs.VERSION }}"
             TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:latest"
             TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:${VERSION}"
             echo "Building versioned image: ${VERSION}"
           else
-            # Push to ncsa or add-dockerfile branch - use branch name
             BRANCH_NAME="${{ github.ref_name }}"
             TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:${BRANCH_NAME}"
             TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:${BRANCH_NAME}-${GITHUB_SHA::8}"
@@ -168,7 +166,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
+          username: ${{ github.repository_owner }}  # Use repository_owner instead of actor
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
