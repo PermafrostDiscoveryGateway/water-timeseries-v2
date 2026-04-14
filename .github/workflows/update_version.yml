@@ -135,7 +135,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write  # Critical for ghcr.io
+      packages: write
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') ||
       (github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'add-dockerfile'))
@@ -147,27 +147,43 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Set Docker tags
+      - name: Set Docker tags (lowercase)
         id: docker_tags
         run: |
-          TAGS="ghcr.io/${{ github.repository }}:${GITHUB_SHA::8}"
-          
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
-            # Manual dispatch - use version tag from update-version
-            VERSION="${{ needs.update-version.outputs.VERSION }}"
-            TAGS="${TAGS},ghcr.io/${{ github.repository }}:latest"
-            TAGS="${TAGS},ghcr.io/${{ github.repository }}:${VERSION}"
-            echo "Building versioned image: ${VERSION}"
-          else
-            # Push to main or add-dockerfile branch - use branch name
-            BRANCH_NAME="${{ github.ref_name }}"
-            TAGS="${TAGS},ghcr.io/${{ github.repository }}:${BRANCH_NAME}"
-            TAGS="${TAGS},ghcr.io/${{ github.repository }}:${BRANCH_NAME}-${GITHUB_SHA::8}"
-            echo "Building ${BRANCH_NAME} branch image"
+          # Convert repository name to lowercase for GHCR
+          REPO_LOWER="${{ github.repository }}"
+          REPO_LOWER="${REPO_LOWER,,}"
+
+          REGISTRY="ghcr.io/${REPO_LOWER}"
+          BRANCH_NAME="${{ github.ref_name }}"
+
+          # Start with branch tag
+          TAGS="${REGISTRY}:${BRANCH_NAME}"
+
+          # Add commit SHA tag
+          TAGS="${TAGS},${REGISTRY}:${GITHUB_SHA::8}"
+
+          # Add branch with commit SHA
+          TAGS="${TAGS},${REGISTRY}:${BRANCH_NAME}-${GITHUB_SHA::8}"
+
+          # Add latest for main branch only
+          if [ "$BRANCH_NAME" == "main" ]; then
+            TAGS="${TAGS},${REGISTRY}:latest"
           fi
-          
+
+          # For manual dispatch with version
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ needs.update-version.outputs.VERSION }}" ]; then
+            VERSION="${{ needs.update-version.outputs.VERSION }}"
+            TAGS="${TAGS},${REGISTRY}:${VERSION}"
+          fi
+
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
-          echo "branch=${BRANCH_NAME}" >> $GITHUB_OUTPUT
+          echo "registry=${REGISTRY}" >> $GITHUB_OUTPUT
+
+          # Debug output
+          echo "Repository original: ${{ github.repository }}"
+          echo "Repository lowercase: ${REPO_LOWER}"
+          echo "Will push to: ${TAGS}"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -194,9 +210,8 @@ jobs:
 
       - name: Image digest output
         run: |
-          echo "Successfully pushed:"
+          echo "✅ Successfully pushed:"
           echo "${{ steps.docker_tags.outputs.tags }}" | tr ',' '\n'
-
   # Only runs on manual dispatch
   build-and-publish-docs:
     runs-on: ubuntu-latest
