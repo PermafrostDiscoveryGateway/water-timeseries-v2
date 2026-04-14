@@ -157,14 +157,8 @@ jobs:
           REGISTRY="ghcr.io/${REPO_LOWER}"
           BRANCH_NAME="${{ github.ref_name }}"
 
-          # Start with branch tag
+          # Start with just the branch name tag
           TAGS="${REGISTRY}:${BRANCH_NAME}"
-
-          # Add commit SHA tag
-          TAGS="${TAGS},${REGISTRY}:${GITHUB_SHA::8}"
-
-          # Add branch with commit SHA
-          TAGS="${TAGS},${REGISTRY}:${BRANCH_NAME}-${GITHUB_SHA::8}"
 
           # Add latest for main branch only
           if [ "$BRANCH_NAME" == "main" ]; then
