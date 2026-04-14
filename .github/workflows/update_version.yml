@@ -1,5 +1,10 @@
 name: Update Version
 
+# Add default permissions at workflow level
+permissions:
+  contents: read
+  packages: write
+
 on:
   workflow_dispatch:
     inputs:
@@ -18,7 +23,7 @@ on:
         default: true
   push:
     branches:
-      - ncsa
+      - main           # Changed from ncsa to main
       - add-dockerfile
 
 jobs:
@@ -30,6 +35,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      packages: read   # Added for consistency
 
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -62,10 +68,10 @@ jobs:
           git commit -m "Update version to $VERSION_NO_V"
           git push
 
-  # Get current version for ncsa and add-dockerfile branch builds
+  # Get current version for main and add-dockerfile branch builds
   get-current-version:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref_name == 'ncsa' || github.ref_name == 'add-dockerfile')
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'add-dockerfile')
     outputs:
       VERSION: ${{ steps.get_version.outputs.version }}
       VERSION_TAG: ${{ steps.get_version.outputs.version_tag }}
@@ -92,6 +98,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      packages: read
     if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
 
     steps:
@@ -123,7 +130,7 @@ jobs:
           draft: false
           prerelease: false
 
-  # Runs on: manual dispatch with publish=true OR push to ncsa OR push to add-dockerfile
+  # Runs on: manual dispatch with publish=true OR push to main OR push to add-dockerfile
   build-and-push-docker:
     runs-on: ubuntu-latest
     permissions:
@@ -131,7 +138,7 @@ jobs:
       packages: write  # Critical for ghcr.io
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') ||
-      (github.event_name == 'push' && (github.ref_name == 'ncsa' || github.ref_name == 'add-dockerfile'))
+      (github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'add-dockerfile'))
 
     steps:
       - name: Checkout repository
@@ -143,21 +150,24 @@ jobs:
       - name: Set Docker tags
         id: docker_tags
         run: |
-          TAGS="ghcr.io/ncsa/water-timeseries-v2:${GITHUB_SHA::8}"
+          TAGS="ghcr.io/${{ github.repository }}:${GITHUB_SHA::8}"
           
           if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            # Manual dispatch - use version tag from update-version
             VERSION="${{ needs.update-version.outputs.VERSION }}"
-            TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:latest"
-            TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:${VERSION}"
+            TAGS="${TAGS},ghcr.io/${{ github.repository }}:latest"
+            TAGS="${TAGS},ghcr.io/${{ github.repository }}:${VERSION}"
             echo "Building versioned image: ${VERSION}"
           else
+            # Push to main or add-dockerfile branch - use branch name
             BRANCH_NAME="${{ github.ref_name }}"
-            TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:${BRANCH_NAME}"
-            TAGS="${TAGS},ghcr.io/ncsa/water-timeseries-v2:${BRANCH_NAME}-${GITHUB_SHA::8}"
+            TAGS="${TAGS},ghcr.io/${{ github.repository }}:${BRANCH_NAME}"
+            TAGS="${TAGS},ghcr.io/${{ github.repository }}:${BRANCH_NAME}-${GITHUB_SHA::8}"
             echo "Building ${BRANCH_NAME} branch image"
           fi
           
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "branch=${BRANCH_NAME}" >> $GITHUB_OUTPUT
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -166,7 +176,7 @@ jobs:
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.repository_owner }}  # Use repository_owner instead of actor
+          username: ${{ github.repository_owner }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build and push Docker image
@@ -182,6 +192,11 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Image digest output
+        run: |
+          echo "Successfully pushed:"
+          echo "${{ steps.docker_tags.outputs.tags }}" | tr ',' '\n'
+
   # Only runs on manual dispatch
   build-and-publish-docs:
     runs-on: ubuntu-latest
@@ -189,6 +204,7 @@ jobs:
       - update-version
     permissions:
       contents: write
+      packages: read
     if: github.event_name == 'workflow_dispatch'
 
     steps:
