@@ -9,6 +9,7 @@ os.environ["EE_PROJECT"] = "pdg-project-406720"
 
 dl = EarthEngineDownloader(ee_auth=True, logger=logger)
 
+# local values, replace
 ds = dl.download_dw_monthly(
     vector_dataset="/Users/helium/ncsa/pdg/water-timeseries-v2/tests/data/lake_polygons.parquet",
     name_attribute="id_geohash",
