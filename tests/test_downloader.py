@@ -11,6 +11,7 @@ import unittest.mock as mock
 import pytest
 
 from water_timeseries.downloader import EarthEngineDownloader, setup_annual_dates, setup_dates_from_options
+from water_timeseries.utils.earthengine import calc_monthly_dw
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
 
 # Path to test data
@@ -279,7 +280,7 @@ class TestJRCDownloader:
             vector_dataset=VECTOR_DATASET,
             name_attribute="id_geohash",
             years=[2017],
-            id_list=["u4pru9eqh", "u4pru9eqj"],
+            id_list=["b7g64d3984be", "b7g6j40qk509"],
             no_download=True,
         )
 
@@ -330,6 +331,39 @@ class TestJRCDownloader:
                 id_list=["nonexistent_id_1", "nonexistent_id_2"],
                 no_download=True,
             )
+
+
+class TestCalcMonthlyDw:
+    """Test the calc_monthly_dw function for handling missing data."""
+
+    def test_calc_monthly_dw_no_data_warning(self):
+        """Test that calc_monthly_dw returns None and raises a warning for date with no data."""
+        import warnings
+
+        import geemap
+        import geopandas as gpd
+
+        # Use a location that should have no Dynamic World data (2015 is before DW coverage)
+        start_date = "2015-01-01"
+
+        # Load test data and get a polygon
+        gdf = gpd.read_parquet(VECTOR_DATASET)
+        # Use the first polygon
+        polygon = gpd.GeoDataFrame(gdf.iloc[[0]]).to_crs(epsg=4326)
+        fc = geemap.gdf_to_ee(polygon)
+
+        # Capture warnings
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter("always")
+            result = calc_monthly_dw(start_date=start_date, polygons=fc)
+
+            # Verify that a warning was raised
+            assert len(w) == 1
+            assert "No data available" in str(w[0].message)
+            assert start_date in str(w[0].message)
+
+            # Verify that None was returned
+            assert result is None
 
 
 # Run tests
