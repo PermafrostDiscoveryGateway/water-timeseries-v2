@@ -7,6 +7,7 @@ different data sources and processing pipelines.
 
 import warnings
 from pathlib import Path
+from typing import Optional
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -404,12 +405,14 @@ class DWDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints=None,
+        save_path: Optional[str | Path] = None,
     ):
         """Plot the interactive time series for a specific geohash using Plotly.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
+            save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
             plotly.graph_objects.Figure: Interactive Plotly figure.
@@ -433,6 +436,7 @@ class DWDataset(LakeDataset):
             first_break=bp,
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
+            save_path=save_path,
         )
 
         return figure
@@ -581,12 +585,14 @@ class JRCDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints=None,
+        save_path: Optional[str | Path] = None,
     ):
         """Plot the interactive time series for a specific geohash using Plotly.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use (not used currently).
+            save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
             plotly.graph_objects.Figure: Interactive Plotly figure.
@@ -603,6 +609,7 @@ class JRCDataset(LakeDataset):
             plot_variables=["area_water_permanent", "area_water_seasonal", "area_land"],
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
+            save_path=save_path,
         )
 
         return fig

@@ -1,5 +1,6 @@
 """Dynamic plotting utilities using Plotly for interactive visualizations."""
 
+from pathlib import Path
 from typing import List, Optional
 
 import pandas as pd
@@ -35,6 +36,7 @@ def plot_water_time_series_dw_interactive(
     lake_id: Optional[str] = None,
     height: int = 500,
     width: Optional[int] = None,
+    save_path: Optional[str | Path] = None,
 ) -> go.Figure:
     """
     Create an interactive time series plot for Dynamic World data using Plotly.
@@ -50,6 +52,8 @@ def plot_water_time_series_dw_interactive(
         lake_id: Optional lake identifier for the title.
         height: Plot height in pixels.
         width: Plot width in pixels (optional).
+        save_path: Optional path to save the plot as HTML file. If provided,
+            the plot will be saved as an interactive HTML file.
 
     Returns:
         plotly.graph_objects.Figure: Interactive Plotly figure.
@@ -57,6 +61,7 @@ def plot_water_time_series_dw_interactive(
     Example:
         >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123")
         >>> st.plotly_chart(fig)
+        >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123", save_path="output.html")
     """
     # Create figure with secondary y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
@@ -151,6 +156,12 @@ def plot_water_time_series_dw_interactive(
         gridcolor="#cccccc",
     )
 
+    # Save to HTML if save_path is provided
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.write_html(save_path)
+
     return fig
 
 
@@ -162,6 +173,7 @@ def plot_water_time_series_jrc_interactive(
     lake_id: Optional[str] = None,
     height: int = 500,
     width: Optional[int] = None,
+    save_path: Optional[str | Path] = None,
 ) -> go.Figure:
     """
     Create an interactive time series plot for JRC data using Plotly.
@@ -177,6 +189,8 @@ def plot_water_time_series_jrc_interactive(
         lake_id: Optional lake identifier for the title.
         height: Plot height in pixels.
         width: Plot width in pixels (optional).
+        save_path: Optional path to save the plot as HTML file. If provided,
+            the plot will be saved as an interactive HTML file.
 
     Returns:
         plotly.graph_objects.Figure: Interactive Plotly figure.
@@ -184,6 +198,7 @@ def plot_water_time_series_jrc_interactive(
     Example:
         >>> fig = plot_water_time_series_jrc_interactive(df, lake_id="abc123")
         >>> st.plotly_chart(fig)
+        >>> fig = plot_water_time_series_jrc_interactive(df, lake_id="abc123", save_path="output.html")
     """
     if plot_variables is None:
         plot_variables = ["area_water_permanent", "area_water_seasonal", "area_land"]
@@ -281,6 +296,12 @@ def plot_water_time_series_jrc_interactive(
         tickformat="%Y",
         hoverformat="%Y",  # Show YYYY on hover
     )
+
+    # Save to HTML if save_path is provided
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.write_html(save_path)
 
     return fig
 
