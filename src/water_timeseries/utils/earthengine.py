@@ -80,7 +80,7 @@ def calc_monthly_dw(
     polygons: ee.FeatureCollection,
     crs: str = "EPSG:3572",
     scale: float = 10,
-) -> ee.Image:
+) -> ee.Image | None:
     """
     Generates a monthly dynamic world composite and then returns a binary mask where
     the value is 1 for each pixel if water, snow or ice was the top probability
@@ -89,7 +89,13 @@ def calc_monthly_dw(
     start_date: ee.Date, the mask will be calculated for start_date to start_date + 1 month.
     dw: ee.ImageCollection, the dynamic world image collection.
     crs: str, optional. The coordinate reference system.
+
+    Returns:
+        ee.Image: The dynamic world composite image, or None if no data is available
+        for the given time period and location.
     """
+    import warnings
+
     # Cast startDate back to an ee.Date, type erasure happens when mapping on a list.
     start_date = ee.Date(start_date)
     end_date = start_date.advance(1, "month")
@@ -97,15 +103,30 @@ def calc_monthly_dw(
         ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1").filterBounds(polygons).filterDate(start_date, end_date)
     )
 
-    image = ee.Algorithms.If(
-        dw_filtered_image_collection.size().eq(0),
-        create_no_data_image(),
-        dw_filtered_image_collection.select("label")
-        .reduce(ee.Reducer.mode())
-        .set("system:time_start", start_date.millis())
-        .setDefaultProjection(crs=crs, scale=scale),
-    )
-    return image
+    try:
+        # Check if collection is empty on the client side before processing
+        size = dw_filtered_image_collection.size().getInfo()
+        if size == 0:
+            warnings.warn(f"No data available for start_date: {start_date.getInfo()}")
+            return None
+
+        image = (
+            dw_filtered_image_collection.select("label")
+            .reduce(ee.Reducer.mode())
+            .set("system:time_start", start_date.millis())
+            .setDefaultProjection(crs=crs, scale=scale)
+        )
+    except ee.EEException as e:
+        # Check if this is a band matching error indicating no data
+        if "did not match any bands" in str(e) or "no_data" in str(e):
+            warnings.warn(f"No data available for start_date: {start_date.getInfo()}")
+            return None
+        raise
+    except Exception:
+        warnings.warn(f"No data available for start_date: {start_date.getInfo()}")
+        return None
+
+    return ee.Image(image)
 
 
 def calc_dw_aggregate(

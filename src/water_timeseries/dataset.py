@@ -7,6 +7,7 @@ different data sources and processing pipelines.
 
 import warnings
 from pathlib import Path
+from typing import Optional
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -369,12 +370,16 @@ class DWDataset(LakeDataset):
 
     # create_timelapse is inherited from LakeDataset
 
-    def plot_timeseries(self, id_geohash: str, breakpoints=None) -> plt.Figure:
+    def plot_timeseries(self, id_geohash: str, breakpoints=None, save_path: Optional[str | Path] = None) -> plt.Figure:
         """Plot the time series for a specific geohash.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
+            save_path (str | Path, optional): Path to save the plot as an image file.
+
+        Returns:
+            plt.Figure: The matplotlib figure object.
         """
         # self._normalize_ds()
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna()
@@ -396,6 +401,7 @@ class DWDataset(LakeDataset):
             first_break=bp,
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
+            save_path=save_path,
         )
 
         return figure
@@ -404,12 +410,14 @@ class DWDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints=None,
+        save_path: Optional[str | Path] = None,
     ):
         """Plot the interactive time series for a specific geohash using Plotly.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
+            save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
             plotly.graph_objects.Figure: Interactive Plotly figure.
@@ -433,6 +441,7 @@ class DWDataset(LakeDataset):
             first_break=bp,
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
+            save_path=save_path,
         )
 
         return figure
@@ -548,12 +557,16 @@ class JRCDataset(LakeDataset):
             overwrite_exists=overwrite_exists,
         )
 
-    def plot_timeseries(self, id_geohash: str, breakpoints=None) -> plt.Figure:
+    def plot_timeseries(self, id_geohash: str, breakpoints=None, save_path: Optional[str | Path] = None) -> plt.Figure:
         """Plot the time series for a specific geohash.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
+            save_path (str | Path, optional): Path to save the plot as an image file.
+
+        Returns:
+            plt.Figure: The matplotlib figure object.
         """
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
@@ -572,6 +585,7 @@ class JRCDataset(LakeDataset):
             plot_variables=["area_water_permanent", "area_water_seasonal", "area_land"],
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
+            save_path=save_path,
         )
 
         # return figure
@@ -581,12 +595,14 @@ class JRCDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints=None,
+        save_path: Optional[str | Path] = None,
     ):
         """Plot the interactive time series for a specific geohash using Plotly.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use (not used currently).
+            save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
             plotly.graph_objects.Figure: Interactive Plotly figure.
@@ -603,6 +619,7 @@ class JRCDataset(LakeDataset):
             plot_variables=["area_water_permanent", "area_water_seasonal", "area_land"],
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
+            save_path=save_path,
         )
 
         return fig

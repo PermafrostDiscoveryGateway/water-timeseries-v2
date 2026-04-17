@@ -1,3 +1,6 @@
+from pathlib import Path
+from typing import Optional
+
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -74,6 +77,7 @@ def plot_water_time_series_dw(
     first_break: pd.Timestamp | None,
     normalization_factor=None,
     lake_id: str = None,
+    save_path: Optional[str | Path] = None,
 ) -> plt.figure:
     """
     Plots a time series of water area with a vertical line indicating a specified date.
@@ -98,6 +102,10 @@ def plot_water_time_series_dw(
 
     lake_id : str, optional
         An optional identifier for the lake being plotted, which will be included in the legend title if provided.
+
+    save_path : str | Path, optional
+        Path to save the plot as an image file (e.g., .png, .pdf, .jpg).
+        If provided, the plot will be saved to the specified path.
 
     Returns:
     --------
@@ -187,6 +195,12 @@ def plot_water_time_series_dw(
         ax1.legend().set_title("")
     plt.tight_layout()  # Adjust layout to make room for rotated labels and legend
 
+    # Save to file if save_path is provided
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+
     return plt.gcf()
 
 
@@ -196,6 +210,7 @@ def plot_water_time_series_jrc(
     plot_variables: list = ["area_water_permanent", "area_water_seasonal", "area_land"],
     normalization_factor: bool = None,
     lake_id: str = None,
+    save_path: Optional[str | Path] = None,
 ) -> plt.figure:
     """
     Plot water time series for JRC data.
@@ -206,6 +221,8 @@ def plot_water_time_series_jrc(
         plot_variables (list): The list of variables to plot.
         normalization_factor (bool): The factor for normalizing the data.
         lake_id (str): An optional identifier for the lake being plotted.
+        save_path (str | Path, optional): Path to save the plot as an image file (e.g., .png, .pdf, .jpg).
+            If provided, the plot will be saved to the specified path.
 
     Returns:
         plt.figure: The matplotlib figure object.
@@ -287,4 +304,11 @@ def plot_water_time_series_jrc(
     ax1.set_ylabel("Area [ha]")
 
     fig = ax1.get_figure()
+
+    # Save to file if save_path is provided
+    if save_path is not None:
+        save_path = Path(save_path)
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(save_path, dpi=150, bbox_inches="tight")
+
     return fig

@@ -485,7 +485,7 @@ def create_app(
                         fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
                         st.plotly_chart(fig, width="stretch")
 
-                        # Convert figure to HTML for download
+                        # Convert figure to HTML for download (only when requested)
                         html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
                         st.download_button(
                             label="💾 Save Interactive Plot (HTML)",
@@ -728,7 +728,7 @@ def create_app(
                             fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
                             st.plotly_chart(fig, width="stretch")
 
-                            # Convert figure to HTML for download
+                            # Convert figure to HTML for download (only when requested)
                             html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
                             st.download_button(
                                 label="💾 Save Interactive Plot (HTML)",
