@@ -73,6 +73,8 @@ def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
 @app.command(group="Visualization")
 def dashboard(
     port: int = 8501,
+    vector_file: Optional[str] = None,
+    dw_dataset_file: Optional[str] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
@@ -80,12 +82,15 @@ def dashboard(
 
     Args:
         port: Port to run the dashboard on (default: 8501)
+        vector_file: Path to vector dataset file (GeoParquet)
+        dw_dataset_file: Path to water dataset file (zarr)
         logfile: Path to log file
         verbose: Verbosity level (-v for DEBUG)
 
     Example usage:
         water-timeseries dashboard
         water-timeseries dashboard --port 8502
+        water-timeseries dashboard --vector-file data/lakes.parquet --dw-dataset-file data/lakes.zarr
     """
     import subprocess
     import sys
@@ -93,7 +98,7 @@ def dashboard(
     # Setup logging
     setup_logging(logfile=logfile, verbose=verbose)
 
-    # Build streamlit command
+    # Build streamlit command with optional arguments
     cmd = [
         sys.executable,
         "-m",
@@ -103,6 +108,12 @@ def dashboard(
         "--server.port",
         str(port),
     ]
+
+    # Add optional data file arguments
+    if vector_file:
+        cmd.extend(["--", "--vector-file", vector_file])
+    if dw_dataset_file:
+        cmd.extend(["--", "--dw-dataset-file", dw_dataset_file])
 
     logger.info(f"Starting dashboard with command: {' '.join(cmd)}")
     subprocess.run(cmd)
