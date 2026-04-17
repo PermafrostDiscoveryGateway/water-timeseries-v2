@@ -280,6 +280,9 @@ uv run water-timeseries dashboard
 
 # Launch dashboard on a custom port
 uv run water-timeseries dashboard --port 8502
+
+# Launch dashboard with custom data files
+uv run water-timeseries dashboard --vector-file /path/to/lakes.parquet --dw-dataset-file /path/to/data.zarr
 ```
 
 ### Using a Config File
@@ -476,6 +479,20 @@ The `create_app()` function accepts these parameters:
 
 ### Using with Custom Data
 
+The dashboard can be launched with custom data files via the CLI:
+
+```bash
+# Using default test data
+uv run water-timeseries dashboard
+
+# Using custom data files
+uv run water-timeseries dashboard \
+    --vector-file /path/to/lakes.parquet \
+    --dw-dataset-file /path/to/data.zarr
+```
+
+Or programmatically with Python:
+
 ```python
 from water_timeseries.dashboard.map_viewer import create_app
 
@@ -484,13 +501,6 @@ create_app(
     data_path="/path/to/your/lakes.parquet",
     zarr_path="/path/to/your/data.zarr"
 )
-```
-
-Or run directly with custom paths:
-
-```bash
-# Modify the app.py or create a custom launcher
-streamlit run your_custom_app.py
 ```
 
 ### Running Tests
