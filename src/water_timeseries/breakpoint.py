@@ -6,6 +6,7 @@ water‑timeseries data. It includes:
 * ``BreakpointMethod`` – abstract base class with shared helpers.
 * ``SimpleBreakpoint`` – a fast rolling‑window statistical detector.
 * ``BeastBreakpoint`` – a Bayesian RBEAST‑based detector.
+* ``NRTBreakpoint`` – a Near‑Real‑Time breakpoint detector with custom logic.
 
 Each concrete class implements ``calculate_break`` for a single lake and
 inherits ``calculate_breaks_batch`` from the base class. The classes can be
@@ -411,3 +412,76 @@ class BeastBreakpoint(BreakpointMethod):
         break_df = calculate_temporal_stats(break_df)
 
         return break_df
+
+
+class NRTBreakpoint(BreakpointMethod):
+    """Near‑Real‑Time (NRT) breakpoint detector.
+
+    This method implements custom logic for detecting breakpoints in water‑timeseries
+    data. It follows the same interface as other breakpoint methods but uses internal
+    logic that is distinct from the SimpleBreakpoint and BeastBreakpoint classes.
+
+    Parameters
+    ----------
+    kwargs_break : dict, optional
+        Configuration dictionary for NRT-specific parameters. Default is an empty dict.
+
+    Attributes
+    ----------
+    breakpoint_columns : list
+        List of column names in the output DataFrame.
+    """
+
+    def __init__(self, kwargs_break: dict = dict()):
+        super().__init__(method_name="nrt")
+        self.kwargs_break = kwargs_break
+        # may need some update
+        self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
+
+    def get_first_break_date(self, df: pd.DataFrame, column: str = "water") -> tuple:
+        """Find the first break date using NRT-specific logic.
+
+        This method is a placeholder that implements the same interface as other
+        breakpoint methods. The actual detection logic should be implemented here.
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            DataFrame with a datetime‑like index and a water column.
+        column : str, optional
+            Column name to evaluate. Defaults to "water".
+
+        Returns
+        -------
+        tuple
+            (first_break_date, previous_date, after_date) where each element is
+            a pandas Timestamp or None if no break was found.
+        """
+        # Placeholder for NRT-specific break detection logic
+        return (None, None, None)
+
+    def calculate_break(self, dataset: LakeDataset, object_id: str, analysis_date: str | pd.Timestamp) -> pd.DataFrame:
+        """Calculate breakpoints for a single lake object using NRT logic.
+
+        This method implements the NRT-specific breakpoint detection and returns
+        a DataFrame with breakpoint information following the same structure as
+        other breakpoint methods.
+
+        Parameters
+        ----------
+        dataset : LakeDataset
+            Dataset containing lake water‑area data.
+        object_id : str
+            Unique identifier (geohash) for the lake object.
+        analysis_date : str or pd.Timestamp
+            The date for which to perform the NRT breakpoint analysis.
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing breakpoint information with columns defined in
+            ``self.breakpoint_columns`` plus calculated temporal statistics.
+        """
+        # Placeholder for NRT-specific break detection logic
+        # This should be implemented with the actual NRT processing
+        #       
+        return pd.DataFrame(columns=self.breakpoint_columns)
