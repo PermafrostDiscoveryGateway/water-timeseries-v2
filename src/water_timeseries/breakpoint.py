@@ -23,6 +23,9 @@ Example
 import numpy as np
 import pandas as pd
 import Rbeast as rb
+import warnings
+import logging
+import xarray as xr
 from tqdm import tqdm
 
 from water_timeseries.dataset import LakeDataset
@@ -460,7 +463,64 @@ class NRTBreakpoint(BreakpointMethod):
         # Placeholder for NRT-specific break detection logic
         return (None, None, None)
 
-    def calculate_break(self, dataset: LakeDataset, object_id: str, analysis_date: str | pd.Timestamp) -> pd.DataFrame:
+    def _validate_analysis_date(self, analysis_date: str | pd.Timestamp) -> pd.Timestamp:
+        """Validate and format analysis_date to datetime object.
+
+        Parameters
+        ----------
+        analysis_date : str or pd.Timestamp
+            The date to validate and format. Can be a string in %Y-%m format or a datetime object.
+
+        Returns
+        -------
+        pd.Timestamp
+            Formatted datetime object.
+        """
+        if isinstance(analysis_date, str):
+            try:
+                analysis_date_ts = pd.to_datetime(analysis_date, format='%Y-%m')
+                return analysis_date_ts
+            except (ValueError, TypeError):
+                analysis_date_ts = pd.to_datetime(analysis_date)
+                return analysis_date_ts
+        elif isinstance(analysis_date, pd.Timestamp):
+            return analysis_date
+        else:
+            return pd.to_datetime(analysis_date)
+
+    def _filter_valid_ids(self, ds_analysis: xr.Dataset, ds_historical: xr.Dataset) -> tuple:
+        """Filter datasets to only include valid id_geohash values with non-NaN data.
+
+        Parameters
+        ----------
+        ds_analysis : xr.Dataset
+            Dataset containing analysis date data.
+        ds_historical : xr.Dataset
+            Dataset containing historical data.
+
+        Returns
+        -------
+        tuple
+            Filtered (ds_analysis, ds_historical) datasets.
+        """
+        # Get valid id_geohash values that have non-NaN data in ds_analysis
+        valid_ids = ds_analysis.dropna(dim='id_geohash', how='all').id_geohash.values
+        
+        # Count total ids and valid ids for logging
+        total_ids = len(ds_analysis.id_geohash.values)
+        valid_count = len(valid_ids)
+        filtered_count = total_ids - valid_count
+        
+        # Log the filtering results
+        logging.info(f"Filtered {filtered_count} id_geohash(es) with NaN data, kept {valid_count} valid id_geohash(es)")
+        
+        # Filter both datasets to only include valid ids
+        ds_analysis_filtered = ds_analysis.sel(id_geohash=valid_ids)
+        ds_historical_filtered = ds_historical.sel(id_geohash=valid_ids)
+        
+        return ds_analysis_filtered, ds_historical_filtered
+
+    def calculate_break(self, dataset: LakeDataset, object_id: str, analysis_date: str | pd.Timestamp, data_aggregation_period: str = "all") -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 
         This method implements the NRT-specific breakpoint detection and returns
@@ -475,13 +535,33 @@ class NRTBreakpoint(BreakpointMethod):
             Unique identifier (geohash) for the lake object.
         analysis_date : str or pd.Timestamp
             The date for which to perform the NRT breakpoint analysis.
+        data_aggregation_period : str, optional
+            The period of data to consider for the analysis (e.g., "all", "monthly")
         Returns
         -------
         pd.DataFrame
             DataFrame containing breakpoint information with columns defined in
             ``self.breakpoint_columns`` plus calculated temporal statistics.
         """
-        # Placeholder for NRT-specific break detection logic
-        # This should be implemented with the actual NRT processing
-        #       
+        analysis_date = self._validate_analysis_date(analysis_date)
+
+        # Check if analysis_date in dataset.dates_ (convert to YYYY-MM format for comparison)
+        if analysis_date.strftime('%Y-%m') not in dataset.dates_:
+            raise ValueError(f"Analysis date {analysis_date.strftime('%Y-%m')} is not available in the dataset.")
+
+        data = dataset.ds
+
+        # Filter data for the analysis_date
+        ds_analysis = data.sel(date=analysis_date)
+        ds_historical = data.where(data['date'] < analysis_date, drop=True)
+
+        # Filter to valid ids with non-NaN data in ds_analysis
+        ds_analysis_filtered, ds_historical_filtered = self._filter_valid_ids(ds_analysis, ds_historical)
+
+        # TODO - split dataset into pre and post analysis_date and apply logic to detect breakpoints
+        ds_predrain = ds_historical_filtered.where(ds_historical_filtered['date'] < analysis_date)
+        # time-series at and after drainage
+        ds_postdrain = ds_historical_filtered.where(ds_historical_filtered['date'] >= analysis_date)
+        # 
+
         return pd.DataFrame(columns=self.breakpoint_columns)
