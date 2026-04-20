@@ -71,6 +71,7 @@ dev = [
     "wheel>=0.38.0",
     "twine>=4.0.0",
     "gh>=0.0.4",
+    "google-cloud-storage",
 ]
 docs = [
     "mkdocs>=1.5.0,<2.0",

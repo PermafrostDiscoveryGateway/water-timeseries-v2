@@ -1,5 +1,10 @@
 name: Update Version
 
+# Add default permissions at workflow level
+permissions:
+  contents: read
+  packages: write
+
 on:
   workflow_dispatch:
     inputs:
@@ -16,14 +21,21 @@ on:
         required: false
         type: boolean
         default: true
+  push:
+    branches:
+      - main           # Changed from ncsa to main
+      - add-dockerfile
 
 jobs:
+  # Only runs on manual workflow_dispatch
   update-version:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
 
     permissions:
       contents: write
       id-token: write
+      packages: read   # Added for consistency
 
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -36,8 +48,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      # Do a version bump on the package
       - name: Update version by bumping git tag
         id: update_version
         uses: leonsteinhaeuser/git-tag-bump@v1.1.0
@@ -47,22 +59,38 @@ jobs:
 
       - name: Update pyproject.toml version
         run: |
-          # Extract version from tag (remove 'v' prefix)
           VERSION="${{ steps.update_version.outputs.tag-number }}"
           VERSION_NO_V="${VERSION#v}"
-          
-          # Configure git user
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          
-          # Update version in pyproject.toml
           sed -i "s/^version = \".*\"/version = \"$VERSION_NO_V\"/" pyproject.toml
-          
-          # Commit the version update
           git add pyproject.toml
           git commit -m "Update version to $VERSION_NO_V"
           git push
 
+  # Get current version for main and add-dockerfile branch builds
+  get-current-version:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'add-dockerfile')
+    outputs:
+      VERSION: ${{ steps.get_version.outputs.version }}
+      VERSION_TAG: ${{ steps.get_version.outputs.version_tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get current version from pyproject.toml
+        id: get_version
+        run: |
+          VERSION=$(grep -m1 'version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_tag=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
+  # Only runs on manual dispatch with publish=true
   build-and-publish:
     runs-on: ubuntu-latest
     needs:
@@ -70,14 +98,15 @@ jobs:
     permissions:
       contents: write
       id-token: write
-
-    if: github.event.inputs.publish
+      packages: read
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -97,20 +126,102 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tag_name: ${{ needs.update-version.outputs.VERSION }}
-          release_name:  ${{ needs.update-version.outputs.VERSION }}
+          release_name: ${{ needs.update-version.outputs.VERSION }}
           draft: false
           prerelease: false
 
+  # Runs on: manual dispatch with publish=true OR push to main OR push to add-dockerfile
+  build-and-push-docker:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') ||
+      (github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'add-dockerfile'))
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set Docker tags (lowercase)
+        id: docker_tags
+        run: |
+          # Convert repository name to lowercase for GHCR
+          REPO_LOWER="${{ github.repository }}"
+          REPO_LOWER="${REPO_LOWER,,}"
+
+          REGISTRY="ghcr.io/${REPO_LOWER}"
+          BRANCH_NAME="${{ github.ref_name }}"
+
+          # Start with just the branch name tag
+          TAGS="${REGISTRY}:${BRANCH_NAME}"
+
+          # Add latest for main branch only
+          if [ "$BRANCH_NAME" == "main" ]; then
+            TAGS="${TAGS},${REGISTRY}:latest"
+          fi
+
+          # For manual dispatch with version
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ needs.update-version.outputs.VERSION }}" ]; then
+            VERSION="${{ needs.update-version.outputs.VERSION }}"
+            TAGS="${TAGS},${REGISTRY}:${VERSION}"
+          fi
+
+          echo "tags=${TAGS}" >> $GITHUB_OUTPUT
+          echo "registry=${REGISTRY}" >> $GITHUB_OUTPUT
+
+          # Debug output
+          echo "Repository original: ${{ github.repository }}"
+          echo "Repository lowercase: ${REPO_LOWER}"
+          echo "Will push to: ${TAGS}"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.docker_tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=$(date -Iseconds)
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image digest output
+        run: |
+          echo "✅ Successfully pushed:"
+          echo "${{ steps.docker_tags.outputs.tags }}" | tr ',' '\n'
+  # Only runs on manual dispatch
   build-and-publish-docs:
     runs-on: ubuntu-latest
     needs:
       - update-version
+    permissions:
+      contents: write
+      packages: read
+    if: github.event_name == 'workflow_dispatch'
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure Git Credentials
         run: |
