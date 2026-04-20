@@ -520,6 +520,13 @@ class NRTBreakpoint(BreakpointMethod):
         
         return ds_analysis_filtered, ds_historical_filtered
 
+    def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int = None) -> pd.DataFrame:
+        """Calculate statistics for the given dataset."""
+        if filter_month is not None:
+            dataset = dataset.where(dataset.date.dt.month == filter_month, drop=True)
+        out_df = dataset.to_dataframe()['water'].groupby('id_geohash').agg(["mean", "median", "std", "min", "max"])
+        return out_df
+
     def calculate_break(self, dataset: LakeDataset, object_id: str, analysis_date: str | pd.Timestamp, data_aggregation_period: str = "all") -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 
@@ -549,6 +556,7 @@ class NRTBreakpoint(BreakpointMethod):
         if analysis_date.strftime('%Y-%m') not in dataset.dates_:
             raise ValueError(f"Analysis date {analysis_date.strftime('%Y-%m')} is not available in the dataset.")
 
+        # make simpler name
         data = dataset.ds
 
         # Filter data for the analysis_date
@@ -558,10 +566,8 @@ class NRTBreakpoint(BreakpointMethod):
         # Filter to valid ids with non-NaN data in ds_analysis
         ds_analysis_filtered, ds_historical_filtered = self._filter_valid_ids(ds_analysis, ds_historical)
 
-        # TODO - split dataset into pre and post analysis_date and apply logic to detect breakpoints
-        ds_predrain = ds_historical_filtered.where(ds_historical_filtered['date'] < analysis_date)
-        # time-series at and after drainage
-        ds_postdrain = ds_historical_filtered.where(ds_historical_filtered['date'] >= analysis_date)
-        # 
+        # analys
+        df_stats_before = self._get_ds_stats(ds_historical_filtered)
+        # df_stats_before = self._get_ds_stats(ds_historical_filtered, filter_month=9)
 
         return pd.DataFrame(columns=self.breakpoint_columns)
