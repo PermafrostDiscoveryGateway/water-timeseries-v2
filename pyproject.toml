@@ -21,7 +21,7 @@ dependencies = [
     "contextily",
     "pyarrow",
     "h3pandas",
-    "h3>=3.6.1",
+    "h3>=4.0.0,<5.0.0",
     "dask[dataframe]>=2024.12.1",
     "joblib>=1.4.2",
     "ray[default]>=2.40.0",
