@@ -52,10 +52,11 @@ def load_vector_dataset(
 
 
 def save_xarray_dataset(
-    ds: xr.Dataset,
-    save_path: Union[str, Path],
-    output_dir: Optional[Union[str, Path]] = None,
-    logger=None,
+        ds: xr.Dataset,
+        save_path: Union[str, Path],
+        output_dir: Optional[Union[str, Path]] = None,
+        logger=None,
+        consolidated: bool = True,  # Add parameter with default True
 ) -> Path:
     """Save xarray dataset to file.
 
@@ -69,6 +70,8 @@ def save_xarray_dataset(
         output_dir: Directory for relative paths. If None and save_path is relative,
             the current working directory is used.
         logger: Logger for logging progress. If None, print statements are used.
+        consolidated: For Zarr format, whether to use consolidated metadata.
+            Default True (recommended for better compatibility).
 
     Returns:
         Path: The resolved path where the dataset was saved.
@@ -98,13 +101,42 @@ def save_xarray_dataset(
     _log(f"Saving to {ext[1:].upper()} format: {path}")
 
     if ext == ".zarr":
-        ds.to_zarr(path, mode="w")
+        # Handle string coordinates properly
+        encoding = {}
+        for coord in ds.coords:
+            if ds[coord].dtype.kind in ['U', 'S']:  # String type
+                # Convert string coordinates to object dtype for Zarr
+                encoding[coord] = {'dtype': 'object'}
+                _log(f"  Converting coordinate '{coord}' to object dtype for Zarr")
+
+        # Save with consolidated metadata (creates .zgroup!)
+        ds.to_zarr(
+            path,
+            mode="w",
+            consolidated=consolidated,
+            encoding=encoding if encoding else None
+        )
+
+        if consolidated:
+            _log(f"  Saved with consolidated metadata (creates .zgroup file)")
+        else:
+            _log(f"  Saved without consolidated metadata")
+
     elif ext == ".nc":
+        # For NetCDF, handle string coordinates automatically
         ds.to_netcdf(path)
     else:
         raise ValueError(f"Unsupported file extension: {ext}. Use '.zarr' or '.nc'.")
 
     _log(f"Dataset saved successfully to {path}")
+
+    # Verify Zarr save was successful
+    if ext == ".zarr" and consolidated:
+        zgroup_path = path / '.zgroup'
+        if zgroup_path.exists():
+            _log(f"  ✓ Verified .zgroup file created")
+        else:
+            _log(f"  ⚠️ Warning: .zgroup file not found (may cause reading issues)")
 
     return path
 

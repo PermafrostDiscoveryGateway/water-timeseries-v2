@@ -24,6 +24,7 @@ on:
   push:
     branches:
       - main
+      - local-zarr-fix  # Added this branch
 
 jobs:
   # Only runs on manual workflow_dispatch
@@ -67,10 +68,10 @@ jobs:
           git commit -m "Update version to $VERSION_NO_V"
           git push
 
-  # Get current version for main and add-dockerfile branch builds
+  # Get current version for main and local-zarr-fix branch builds
   get-current-version:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref_name == 'main')
+    if: github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'local-zarr-fix')
     outputs:
       VERSION: ${{ steps.get_version.outputs.version }}
       VERSION_TAG: ${{ steps.get_version.outputs.version_tag }}
@@ -129,7 +130,7 @@ jobs:
           draft: false
           prerelease: false
 
-  # Runs on: manual dispatch with publish=true OR push to main
+  # Runs on: manual dispatch with publish=true OR push to main OR push to local-zarr-fix
   build-and-push-docker:
     runs-on: ubuntu-latest
     permissions:
@@ -137,7 +138,7 @@ jobs:
       packages: write
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') ||
-      (github.event_name == 'push' && (github.ref_name == 'main'))
+      (github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == 'local-zarr-fix'))
 
     steps:
       - name: Checkout repository
@@ -167,7 +168,13 @@ jobs:
           # For manual dispatch with version
           if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ needs.update-version.outputs.VERSION }}" ]; then
             VERSION="${{ needs.update-version.outputs.VERSION }}"
+            # Add version tag for both main and branch
             TAGS="${TAGS},${REGISTRY}:${VERSION}"
+            
+            # If this is for local-zarr-fix branch during manual dispatch, add branch-version tag
+            if [ "$BRANCH_NAME" == "local-zarr-fix" ]; then
+              TAGS="${TAGS},${REGISTRY}:local-zarr-fix-${VERSION}"
+            fi
           fi
 
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
@@ -176,6 +183,7 @@ jobs:
           # Debug output
           echo "Repository original: ${{ github.repository }}"
           echo "Repository lowercase: ${REPO_LOWER}"
+          echo "Branch name: ${BRANCH_NAME}"
           echo "Will push to: ${TAGS}"
 
       - name: Set up Docker Buildx
@@ -198,6 +206,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=$(date -Iseconds)
+            org.opencontainers.image.branch=${{ github.ref_name }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -205,6 +214,10 @@ jobs:
         run: |
           echo "✅ Successfully pushed:"
           echo "${{ steps.docker_tags.outputs.tags }}" | tr ',' '\n'
+          echo ""
+          echo "To pull the image for local-zarr-fix branch:"
+          echo "docker pull ${{ steps.docker_tags.outputs.registry }}:local-zarr-fix"
+
   # Only runs on manual dispatch
   build-and-publish-docs:
     runs-on: ubuntu-latest
