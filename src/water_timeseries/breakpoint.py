@@ -20,12 +20,14 @@ Example
 >>> # breakpoint.calculate_break(dataset)  # Returns DataFrame with breakpoint info
 """
 
+import logging
+
 import numpy as np
 import pandas as pd
 import Rbeast as rb
-import warnings
-import logging
 import xarray as xr
+from sktime.forecasting.arima import AutoARIMA
+from sktime.forecasting.base import ForecastingHorizon
 from tqdm import tqdm
 
 from water_timeseries.dataset import LakeDataset
@@ -441,27 +443,40 @@ class NRTBreakpoint(BreakpointMethod):
         # may need some update
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
 
-    def get_first_break_date(self, df: pd.DataFrame, column: str = "water") -> tuple:
-        """Find the first break date using NRT-specific logic.
+    def predict_nrt_arima(self, ds_in: xr.Dataset, id_geohash: str) -> pd.Series:
+        """_summary_
 
-        This method is a placeholder that implements the same interface as other
-        breakpoint methods. The actual detection logic should be implemented here.
+        Args:
+            ds_in (xr.Dataset): _description_
+            id_geohash (str): _description_
 
-        Parameters
-        ----------
-        df : pd.DataFrame
-            DataFrame with a datetime‑like index and a water column.
-        column : str, optional
-            Column name to evaluate. Defaults to "water".
-
-        Returns
-        -------
-        tuple
-            (first_break_date, previous_date, after_date) where each element is
-            a pandas Timestamp or None if no break was found.
+        Returns:
+            pd.Series: _description_
         """
-        # Placeholder for NRT-specific break detection logic
-        return (None, None, None)
+        # Step 3: Fit model
+        model = AutoARIMA(
+            stepwise=True,
+            suppress_warnings=True,
+            trace=True,
+            error_action="ignore",
+            seasonal=False,
+        )
+
+        df_in = (
+            ds_in.sel(id_geohash=id_geohash)
+            .to_dataframe()
+            .drop(columns=["id_geohash"])["water"]
+            .reset_index(drop=True)
+            .dropna()
+        )
+        # print(df_in)
+        model.fit(df_in)
+        # Step 4: Predict
+
+        fh = ForecastingHorizon([1], is_relative=True)
+        y_pred = model.predict(fh=fh)
+
+        return pd.Series(data=y_pred.values, name=id_geohash, index=["water_predicted"])
 
     def _validate_analysis_date(self, analysis_date: str | pd.Timestamp) -> pd.Timestamp:
         """Validate and format analysis_date to datetime object.
@@ -478,7 +493,7 @@ class NRTBreakpoint(BreakpointMethod):
         """
         if isinstance(analysis_date, str):
             try:
-                analysis_date_ts = pd.to_datetime(analysis_date, format='%Y-%m')
+                analysis_date_ts = pd.to_datetime(analysis_date, format="%Y-%m")
                 return analysis_date_ts
             except (ValueError, TypeError):
                 analysis_date_ts = pd.to_datetime(analysis_date)
@@ -504,30 +519,34 @@ class NRTBreakpoint(BreakpointMethod):
             Filtered (ds_analysis, ds_historical) datasets.
         """
         # Get valid id_geohash values that have non-NaN data in ds_analysis
-        valid_ids = ds_analysis.dropna(dim='id_geohash', how='all').id_geohash.values
-        
+        valid_ids = ds_analysis.dropna(dim="id_geohash", how="all").id_geohash.values
+
         # Count total ids and valid ids for logging
         total_ids = len(ds_analysis.id_geohash.values)
         valid_count = len(valid_ids)
         filtered_count = total_ids - valid_count
-        
+
         # Log the filtering results
         logging.info(f"Filtered {filtered_count} id_geohash(es) with NaN data, kept {valid_count} valid id_geohash(es)")
-        
+
         # Filter both datasets to only include valid ids
         ds_analysis_filtered = ds_analysis.sel(id_geohash=valid_ids)
         ds_historical_filtered = ds_historical.sel(id_geohash=valid_ids)
-        
-        return ds_analysis_filtered, ds_historical_filtered
+
+        return ds_analysis_filtered, ds_historical_filtered, valid_ids
 
     def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int = None) -> pd.DataFrame:
         """Calculate statistics for the given dataset."""
         if filter_month is not None:
             dataset = dataset.where(dataset.date.dt.month == filter_month, drop=True)
-        out_df = dataset.to_dataframe()['water'].groupby('id_geohash').agg(["mean", "median", "std", "min", "max"])
+        out_df = dataset.to_dataframe()["water"].groupby("id_geohash").agg(["mean", "median", "std", "min", "max"])
         return out_df
 
-    def calculate_break(self, dataset: LakeDataset, object_id: str, analysis_date: str | pd.Timestamp, data_aggregation_period: str = "all") -> pd.DataFrame:
+    def calculate_break(
+        self,
+        dataset: LakeDataset,
+        analysis_date: str | pd.Timestamp,
+    ) -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 
         This method implements the NRT-specific breakpoint detection and returns
@@ -551,23 +570,23 @@ class NRTBreakpoint(BreakpointMethod):
             ``self.breakpoint_columns`` plus calculated temporal statistics.
         """
         analysis_date = self._validate_analysis_date(analysis_date)
+        print(analysis_date)
+        print(analysis_date.strftime("%Y-%m"))
 
         # Check if analysis_date in dataset.dates_ (convert to YYYY-MM format for comparison)
-        if analysis_date.strftime('%Y-%m') not in dataset.dates_:
+        if analysis_date not in dataset.dates_:
             raise ValueError(f"Analysis date {analysis_date.strftime('%Y-%m')} is not available in the dataset.")
 
-        # make simpler name
-        data = dataset.ds
-
-        # Filter data for the analysis_date
+        data = dataset.ds_normalized
+        # ds_before = data.where(data['date'] < analysis_date)
         ds_analysis = data.sel(date=analysis_date)
-        ds_historical = data.where(data['date'] < analysis_date, drop=True)
+        ds_before = data.where(data['date'] < analysis_date, drop=True)
+        # filter to dates wherea nalysis date has some data
+        ds_analysis_filtered, ds_historical_filtered, valid_ids = self._filter_valid_ids(ds_analysis, ds_before)
 
-        # Filter to valid ids with non-NaN data in ds_analysis
-        ds_analysis_filtered, ds_historical_filtered = self._filter_valid_ids(ds_analysis, ds_historical)
+        predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in valid_ids]
 
-        # analys
-        df_stats_before = self._get_ds_stats(ds_historical_filtered)
-        # df_stats_before = self._get_ds_stats(ds_historical_filtered, filter_month=9)
-
-        return pd.DataFrame(columns=self.breakpoint_columns)
+        df_output = ds_analysis_filtered['water'].to_dataframe().join(pd.DataFrame(predictions))
+        df_output['water_residual'] = df_output['water_predicted'] - df_output['water']
+        
+        return df_output
