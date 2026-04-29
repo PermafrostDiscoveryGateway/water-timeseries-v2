@@ -478,14 +478,28 @@ class NRTBreakpoint(BreakpointMethod):
             seasonal=False,
         )
 
-        # print(df_in)
-        model.fit(df_in)
-        # Step 4: Predict
+        # catch wild warnings to declutter console
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
 
-        fh = ForecastingHorizon([1], is_relative=True)
-        y_pred = model.predict(fh=fh)
+            # Fit
+            model.fit(df_in)
 
-        return pd.Series(data=y_pred.values, name=id_geohash, index=["water_predicted"])
+            # Predict
+            fh = ForecastingHorizon([1], is_relative=True)
+            y_pred = model.predict(fh=fh)
+            y_pred_int = model.predict_interval(fh=fh, coverage=0.90)
+
+            result = pd.Series(
+                {
+                    "water_predicted": y_pred.iloc[0],
+                    "water_predicted_lower_90": y_pred_int.iloc[0, 0],  # first row, first interval column
+                    "water_predicted_upper_90": y_pred_int.iloc[0, 1],  # first row, second interval column
+                },
+                name=id_geohash,
+            )
+
+            return result
 
     def _validate_analysis_date(self, analysis_date: str | pd.Timestamp) -> pd.Timestamp:
         """Validate and format analysis_date to datetime object.
