@@ -546,6 +546,7 @@ class NRTBreakpoint(BreakpointMethod):
         self,
         dataset: LakeDataset,
         analysis_date: str | pd.Timestamp,
+        data_aggregation_period: str = "all",
     ) -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 
@@ -577,17 +578,28 @@ class NRTBreakpoint(BreakpointMethod):
         if analysis_date not in dataset.dates_:
             raise ValueError(f"Analysis date {analysis_date.strftime('%Y-%m')} is not available in the dataset.")
 
+        # select dataset - default normalized data
         data = dataset.ds_normalized
-        # ds_before = data.where(data['date'] < analysis_date)
+        
+        # split data into historical and analysis datasets based on analysis_date
         ds_analysis = data.sel(date=analysis_date)
-        ds_before = data.where(data['date'] < analysis_date, drop=True)
+        ds_historical = data.where(data['date'] < analysis_date, drop=True)
+        
+        if data_aggregation_period == "monthly":
+            print("Filtering to monthly data for analysis date month:", analysis_date.month)
+            ds_historical = ds_historical.where(ds_historical.date.dt.month == analysis_date.month, drop=True)
+        
         # filter to dates wherea nalysis date has some data
-        ds_analysis_filtered, ds_historical_filtered, valid_ids = self._filter_valid_ids(ds_analysis, ds_before)
-
+        ds_analysis_filtered, ds_historical_filtered, valid_ids = self._filter_valid_ids(ds_analysis, ds_historical)
+        
+        # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
         predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in valid_ids]
 
+        # merge output into a single dataframe
         df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions))
+        # rename observed water column for clarity
         df_output.rename(columns={dataset.water_column: "water_observed"}, inplace=True)
-        df_output['water_residual'] = df_output["water_observed"] - df_output['water_predicted']
+        # calculate residuals
+        df_output["water_residual"] = df_output["water_observed"] - df_output["water_predicted"]
 
         return df_output
