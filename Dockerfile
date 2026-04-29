@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y \
     cmake \
     git \
     pkg-config \
+    libgdal-dev \
+    gdal-bin \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
@@ -16,6 +18,7 @@ WORKDIR /app
 
 # Copy everything at once
 COPY src/ ./src/
+COPY tests/data ./tests/data/
 COPY pyproject.toml .
 COPY uv.lock .
 COPY README.md .
@@ -35,7 +38,7 @@ RUN uv pip install -e .
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV VIRTUAL_ENV=/app/.venv
+ENV MPLBACKEND=Agg
 
-# Remove the fixed ENTRYPOINT - we'll specify commands at runtime
-# Keep CMD as default for local testing, but it can be overridden
-CMD ["uv", "run", "water-timeseries"]
+# Dashboard (override in compose or `docker run` for CLI tools, e.g. water-timeseries)
+CMD ["streamlit", "run", "src/water_timeseries/dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0"]
