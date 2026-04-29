@@ -535,11 +535,11 @@ class NRTBreakpoint(BreakpointMethod):
 
         return ds_analysis_filtered, ds_historical_filtered, valid_ids
 
-    def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int = None) -> pd.DataFrame:
+    def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int = None, water_column: str = "water") -> pd.DataFrame:
         """Calculate statistics for the given dataset."""
         if filter_month is not None:
             dataset = dataset.where(dataset.date.dt.month == filter_month, drop=True)
-        out_df = dataset.to_dataframe()["water"].groupby("id_geohash").agg(["mean", "median", "std", "min", "max"])
+        out_df = dataset.to_dataframe()[water_column].groupby("id_geohash").agg(["mean", "median", "std", "min", "max"])
         return out_df
 
     def calculate_break(
@@ -586,7 +586,8 @@ class NRTBreakpoint(BreakpointMethod):
 
         predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in valid_ids]
 
-        df_output = ds_analysis_filtered['water'].to_dataframe().join(pd.DataFrame(predictions))
-        df_output['water_residual'] = df_output['water_predicted'] - df_output['water']
-        
+        df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions))
+        df_output.rename(columns={dataset.water_column: "water_observed"}, inplace=True)
+        df_output['water_residual'] = df_output["water_observed"] - df_output['water_predicted']
+
         return df_output
