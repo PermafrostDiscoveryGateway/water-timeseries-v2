@@ -443,7 +443,7 @@ class NRTBreakpoint(BreakpointMethod):
         # may need some update
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
 
-    def predict_nrt_arima(self, ds_in: xr.Dataset, id_geohash: str) -> pd.Series:
+    def predict_nrt_arima(self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3) -> pd.Series:
         """_summary_
 
         Args:
@@ -453,6 +453,19 @@ class NRTBreakpoint(BreakpointMethod):
         Returns:
             pd.Series: _description_
         """
+
+        df_in = (
+            ds_in.sel(id_geohash=id_geohash)
+            .to_dataframe()
+            .drop(columns=["id_geohash"])["water"]
+            .reset_index(drop=True)
+            .dropna()
+        )
+
+        if len(df_in) < min_length:
+            print(f"Time-series has less than {min_length} observations. Skip processing for {id_geohash}")
+            return None
+
         # Step 3: Fit model
         model = AutoARIMA(
             stepwise=True,
@@ -462,13 +475,6 @@ class NRTBreakpoint(BreakpointMethod):
             seasonal=False,
         )
 
-        df_in = (
-            ds_in.sel(id_geohash=id_geohash)
-            .to_dataframe()
-            .drop(columns=["id_geohash"])["water"]
-            .reset_index(drop=True)
-            .dropna()
-        )
         # print(df_in)
         model.fit(df_in)
         # Step 4: Predict
@@ -594,12 +600,20 @@ class NRTBreakpoint(BreakpointMethod):
         
         # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
         predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in valid_ids]
+        # remove None values
+        predictions = [prediction for prediction in predictions if prediction is not None]
 
         # merge output into a single dataframe
-        df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions))
+        # df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions)).round(4)
+        df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions)).round(4)
         # rename observed water column for clarity
         df_output.rename(columns={dataset.water_column: "water_observed"}, inplace=True)
         # calculate residuals
         df_output["water_residual"] = df_output["water_observed"] - df_output["water_predicted"]
+
+        df_historical_stats = self._get_ds_stats(ds_historical_filtered).round(4)
+        df_historical_stats.columns = 'water_historical_' + df_historical_stats.columns.astype(str)
+
+        df_output = df_output.join(df_historical_stats, how='left').round(4)
 
         return df_output
