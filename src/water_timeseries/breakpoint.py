@@ -21,15 +21,18 @@ Example
 """
 
 import logging
+import warnings
 
 import numpy as np
 import pandas as pd
 import Rbeast as rb
 import xarray as xr
+from joblib import Parallel, delayed
 from sktime.forecasting.arima import AutoARIMA
 from sktime.forecasting.base import ForecastingHorizon
 from tqdm import tqdm
 
+warnings.filterwarnings("ignore")
 from water_timeseries.dataset import LakeDataset
 from water_timeseries.utils.data import (
     calculate_temporal_stats,
@@ -586,20 +589,24 @@ class NRTBreakpoint(BreakpointMethod):
 
         # select dataset - default normalized data
         data = dataset.ds_normalized
-        
+
         # split data into historical and analysis datasets based on analysis_date
         ds_analysis = data.sel(date=analysis_date)
-        ds_historical = data.where(data['date'] < analysis_date, drop=True)
-        
+        ds_historical = data.where(data["date"] < analysis_date, drop=True)
+
         if data_aggregation_period == "monthly":
             print("Filtering to monthly data for analysis date month:", analysis_date.month)
             ds_historical = ds_historical.where(ds_historical.date.dt.month == analysis_date.month, drop=True)
-        
+
         # filter to dates wherea nalysis date has some data
         ds_analysis_filtered, ds_historical_filtered, valid_ids = self._filter_valid_ids(ds_analysis, ds_historical)
-        
+
         # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
-        predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in valid_ids]
+        # predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in tqdm(valid_ids, desc='NRT breakpoints')]
+        predictions = Parallel(n_jobs=-1, verbose=10)(
+            delayed(self.predict_nrt_arima)(ds_in=ds_historical_filtered, id_geohash=idx)
+            for idx in tqdm(valid_ids, desc="NRT breakpoints")
+        )
         # remove None values
         predictions = [prediction for prediction in predictions if prediction is not None]
 
@@ -612,8 +619,8 @@ class NRTBreakpoint(BreakpointMethod):
         df_output["water_residual"] = df_output["water_observed"] - df_output["water_predicted"]
 
         df_historical_stats = self._get_ds_stats(ds_historical_filtered).round(4)
-        df_historical_stats.columns = 'water_historical_' + df_historical_stats.columns.astype(str)
+        df_historical_stats.columns = "water_historical_" + df_historical_stats.columns.astype(str)
 
-        df_output = df_output.join(df_historical_stats, how='left').round(4)
+        df_output = df_output.join(df_historical_stats, how="left").round(4)
 
         return df_output
