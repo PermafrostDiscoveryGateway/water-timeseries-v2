@@ -470,7 +470,7 @@ class NRTBreakpoint(BreakpointMethod):
         model = AutoARIMA(
             stepwise=True,
             suppress_warnings=True,
-            trace=True,
+            trace=False,
             error_action="ignore",
             seasonal=False,
         )
