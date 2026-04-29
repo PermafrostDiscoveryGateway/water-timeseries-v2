@@ -549,13 +549,15 @@ class EarthEngineDownloader:
         # Remove the 'reducer' variable if present
         ds = ds.drop_vars("reducer")
 
+        # force date to pd.datetime format
+        ds["date"] = pd.to_datetime(ds["date"])
+
         # Save to file if requested
         if save_to_file is not None:
             # Determine output_dir for relative paths
             save_path = Path(save_to_file)
             output_dir = str(self.output_dir) if not save_path.is_absolute() else None
             save_xarray_dataset(ds, save_to_file, output_dir=output_dir, logger=self.logger)
-
         return ds
 
     def download_jrc_annual(
