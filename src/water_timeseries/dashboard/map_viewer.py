@@ -21,6 +21,7 @@ from water_timeseries.utils.map_styling import (
     format_tooltip_columns,
     get_colored_style_function,
     get_default_style_function,
+    patch_folium_leaflet_default_icon_urls,
 )
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
@@ -179,6 +180,7 @@ class MapViewer:
             center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
 
         m = folium.Map(location=center, zoom_start=self.zoom)
+        patch_folium_leaflet_default_icon_urls(m)
 
         # Add tile layers using utility function
         for tile_name in create_tile_layers():

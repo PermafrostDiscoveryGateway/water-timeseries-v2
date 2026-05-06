@@ -1,5 +1,36 @@
 """Map styling utilities for interactive visualization."""
 
+_LEAFLET_IMAGES_CDN = "https://unpkg.com/leaflet@1.9.4/dist/images"
+
+
+def patch_folium_leaflet_default_icon_urls(m) -> None:
+    """Use CDN URLs for Leaflet's default marker images.
+
+    Folium/Leaflet otherwise resolve relative ``images/`` paths incorrectly inside
+    Streamlit (``st_folium``), leading to requests like ``/distmarker-icon-2x.png``.
+    """
+    import folium
+
+    fix = folium.Element(
+        f"""
+<script>
+(function patchDefaultIcons() {{
+  if (typeof L === "undefined" || !L.Icon || !L.Icon.Default) {{
+    setTimeout(patchDefaultIcons, 50);
+    return;
+  }}
+  delete L.Icon.Default.prototype._getIconUrl;
+  L.Icon.Default.mergeOptions({{
+    iconRetinaUrl: "{_LEAFLET_IMAGES_CDN}/marker-icon-2x.png",
+    iconUrl: "{_LEAFLET_IMAGES_CDN}/marker-icon.png",
+    shadowUrl: "{_LEAFLET_IMAGES_CDN}/marker-shadow.png",
+  }});
+}})();
+</script>
+""".strip()
+    )
+    m.get_root().html.add_child(fix)
+
 
 def get_colored_style_function(
     color_column: str = "NetChange_perc",
