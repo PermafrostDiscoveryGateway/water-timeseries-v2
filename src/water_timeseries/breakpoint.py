@@ -447,7 +447,9 @@ class NRTBreakpoint(BreakpointMethod):
         # may need some update
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
 
-    def predict_nrt_arima(self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3, water_column: str = "water") -> pd.Series:
+    def predict_nrt_arima(
+        self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3, water_column: str = "water"
+    ) -> pd.Series:
         """_summary_
 
         Args:
@@ -621,7 +623,9 @@ class NRTBreakpoint(BreakpointMethod):
         # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
         # predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in tqdm(valid_ids, desc='NRT breakpoints')]
         predictions = Parallel(n_jobs=-1, verbose=10)(
-            delayed(self.predict_nrt_arima)(ds_in=ds_historical_filtered, id_geohash=idx, water_column=dataset.water_column)
+            delayed(self.predict_nrt_arima)(
+                ds_in=ds_historical_filtered, id_geohash=idx, water_column=dataset.water_column
+            )
             for idx in tqdm(valid_ids, desc="NRT breakpoints")
         )
         # remove None values

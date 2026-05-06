@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from water_timeseries.breakpoint import BeastBreakpoint, SimpleBreakpoint, NRTBreakpoint
+from water_timeseries.breakpoint import BeastBreakpoint, NRTBreakpoint, SimpleBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
 
 
@@ -344,6 +344,8 @@ class TestBeastBreakpointBatch:
         bp = SimpleBreakpoint()
         breaks = bp.calculate_breaks_batch(dataset)
         assert isinstance(breaks, pd.DataFrame)
+
+
 class TestNrtBreakpointBatch:
     """Test batch breakpoint calculation with NrtBreakpoint."""
 
