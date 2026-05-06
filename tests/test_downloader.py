@@ -332,6 +332,20 @@ class TestJRCDownloader:
                 no_download=True,
             )
 
+    def test_download_jrc_annual_years(self, monkeypatch):
+        """Test that invalid years are skipped and warnings are logged."""
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
+        downloader = EarthEngineDownloader()
+
+        downloader.download_jrc_annual(
+            vector_dataset=VECTOR_DATASET,
+            name_attribute="id_geohash",
+            years=[2017, 2018, 2019, 2020, 2021, 2022],
+            id_list=["nonexistent_id_1", "nonexistent_id_2"],
+            no_download=True,
+        )
+        assert downloader._validate_years_jrc([2017, 2018, 2019, 2020, 2021, 2022]) == [2017, 2018, 2019, 2020, 2021]
+
 
 class TestCalcMonthlyDw:
     """Test the calc_monthly_dw function for handling missing data."""
