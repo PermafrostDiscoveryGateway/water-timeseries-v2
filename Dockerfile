@@ -17,7 +17,7 @@ WORKDIR /app
 # Copy everything at once
 COPY src/ ./src/
 COPY pyproject.toml .
-COPY uv.lock .
+# COPY uv.lock .
 COPY README.md .
 
 # Create virtual environment

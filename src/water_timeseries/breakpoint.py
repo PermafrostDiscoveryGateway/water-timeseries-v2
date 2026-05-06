@@ -32,13 +32,14 @@ from sktime.forecasting.arima import AutoARIMA
 from sktime.forecasting.base import ForecastingHorizon
 from tqdm import tqdm
 
-warnings.filterwarnings("ignore")
 from water_timeseries.dataset import LakeDataset
 from water_timeseries.utils.data import (
     calculate_temporal_stats,
     calculate_water_area_after,
     calculate_water_area_before,
 )
+
+warnings.filterwarnings("ignore")
 
 
 class BreakpointMethod:
