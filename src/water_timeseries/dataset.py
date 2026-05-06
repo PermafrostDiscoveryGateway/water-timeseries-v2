@@ -47,12 +47,13 @@ class LakeDataset:
         >>> normalized = lake_data.ds_normalized
     """
 
-    def __init__(self, ds, id_field: str = "id_geohash"):
+    def __init__(self, ds, id_field: str = "id_geohash", mask_data: bool = True):
         """Initialize the LakeDataset.
 
         Args:
             ds (xr.Dataset): Input xarray Dataset with land cover or water classification data.
             id_field (str): Name of the coordinate field that identifies individual time series (default: "id_geohash").
+            mask_data (bool): Whether to mask invalid data (default: True).
         """
         self.ds = ds
         self.preprocessed_ = False
@@ -62,6 +63,7 @@ class LakeDataset:
         self.ds_ismasked_ = False
         self.ds_normalized_ismasked_ = False
         self.id_field = id_field
+        self.mask_data = mask_data
         self._preprocess()
         self._normalize_ds()
         self._mask_invalid()
@@ -224,6 +226,7 @@ class LakeDataset:
 
         merged = self.__class__(merged_ds)
         merged.id_field = self.id_field
+        merged.mask_data = self.mask_data
         return merged
 
     def _validate_merge(self, other: "LakeDataset", how: str):
@@ -302,13 +305,14 @@ class DWDataset(LakeDataset):
         ['water', 'bare', 'snow_and_ice', 'trees', 'grass', 'flooded_vegetation', 'crops', 'shrub_and_scrub', 'built']
     """
 
-    def __init__(self, ds):
+    def __init__(self, ds, mask_data: bool = True):
         """Initialize DWDataset with Dynamic World data.
 
         Args:
             ds (xr.Dataset): Input xarray Dataset with at least the 9 DW class variables.
+            mask_data (bool): Whether to mask invalid data (default: True).
         """
-        super().__init__(ds)
+        super().__init__(ds, mask_data=mask_data)
         self.water_column = "water"
         self.data_columns = [
             "water",
@@ -354,6 +358,8 @@ class DWDataset(LakeDataset):
         Removes observations where data quality is poor (high no-data area) or
         where snow/ice coverage is excessive (more than 5%), which indicates poor classification.
         """
+        if self.mask_data is False:
+            return
         ds = self.ds_normalized
         # Mask where no-data area > 0
         mask_nodata = ds["area_nodata"] <= 0
@@ -463,13 +469,14 @@ class JRCDataset(LakeDataset):
         >>> seasonal_water = jrc_data.ds_normalized["area_water_seasonal"]
     """
 
-    def __init__(self, ds):
+    def __init__(self, ds, mask_data: bool = True):
         """Initialize JRCDataset with JRC water classification data.
 
         Args:
             ds (xr.Dataset): Input xarray Dataset with JRC water classification variables.
+            mask_data (bool): Whether to mask invalid data (default: True).
         """
-        super().__init__(ds)
+        super().__init__(ds, mask_data=mask_data)
         self.water_column = "area_water_permanent"
         self.data_columns = ["area_water_permanent", "area_water_seasonal", "area_land"]
 
@@ -492,6 +499,8 @@ class JRCDataset(LakeDataset):
 
         Removes observations where the no-data area exceeds quality thresholds.
         """
+        if self.mask_data is False:
+            return
         ds = self.ds_normalized
         mask = ds["area_nodata"] <= 0
         self.ds = self.ds.where(mask)

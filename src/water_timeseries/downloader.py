@@ -477,6 +477,12 @@ class EarthEngineDownloader:
         # Apply ID filter if id_list is provided
         gdf = self._apply_id_filter(gdf, id_list, name_attribute)
 
+        if bbox_west > bbox_east or bbox_south > bbox_north:
+            raise ValueError(
+                f"Invalid bbox parameters: west={bbox_west}, east={bbox_east}, south={bbox_south}, north={bbox_north}. "
+                "Ensure that west <= east and south <= north."
+            )
+
         # Apply spatial bbox filter if any bbox parameter is provided and differs from defaults
         if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]) and not (
             bbox_west == -180 and bbox_east == 180 and bbox_north == 90 and bbox_south == -90
@@ -549,13 +555,15 @@ class EarthEngineDownloader:
         # Remove the 'reducer' variable if present
         ds = ds.drop_vars("reducer")
 
+        # force date to pd.datetime format
+        ds["date"] = pd.to_datetime(ds["date"])
+
         # Save to file if requested
         if save_to_file is not None:
             # Determine output_dir for relative paths
             save_path = Path(save_to_file)
             output_dir = str(self.output_dir) if not save_path.is_absolute() else None
             save_xarray_dataset(ds, save_to_file, output_dir=output_dir, logger=self.logger)
-
         return ds
 
     def download_jrc_annual(

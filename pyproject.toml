@@ -56,6 +56,9 @@ dependencies = [
     "ffmpeg>=1.4",
     "ffmpeg-python>=0.2.0",
     "mapclassify>=2.10.0",
+    "sktime>=0.40.1",
+    "packaging==24.1",
+    "pmdarima>=2.1.1",
 ]
 
 [project.optional-dependencies]

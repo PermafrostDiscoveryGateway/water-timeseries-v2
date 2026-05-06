@@ -6,6 +6,7 @@ water‑timeseries data. It includes:
 * ``BreakpointMethod`` – abstract base class with shared helpers.
 * ``SimpleBreakpoint`` – a fast rolling‑window statistical detector.
 * ``BeastBreakpoint`` – a Bayesian RBEAST‑based detector.
+* ``NRTBreakpoint`` – a Near‑Real‑Time breakpoint detector with custom logic.
 
 Each concrete class implements ``calculate_break`` for a single lake and
 inherits ``calculate_breaks_batch`` from the base class. The classes can be
@@ -19,9 +20,16 @@ Example
 >>> # breakpoint.calculate_break(dataset)  # Returns DataFrame with breakpoint info
 """
 
+import logging
+import warnings
+
 import numpy as np
 import pandas as pd
 import Rbeast as rb
+import xarray as xr
+from joblib import Parallel, delayed
+from sktime.forecasting.arima import AutoARIMA
+from sktime.forecasting.base import ForecastingHorizon
 from tqdm import tqdm
 
 from water_timeseries.dataset import LakeDataset
@@ -30,6 +38,8 @@ from water_timeseries.utils.data import (
     calculate_water_area_after,
     calculate_water_area_before,
 )
+
+warnings.filterwarnings("ignore")
 
 
 class BreakpointMethod:
@@ -411,3 +421,227 @@ class BeastBreakpoint(BreakpointMethod):
         break_df = calculate_temporal_stats(break_df)
 
         return break_df
+
+
+class NRTBreakpoint(BreakpointMethod):
+    """Near‑Real‑Time (NRT) breakpoint detector.
+
+    This method implements custom logic for detecting breakpoints in water‑timeseries
+    data. It follows the same interface as other breakpoint methods but uses internal
+    logic that is distinct from the SimpleBreakpoint and BeastBreakpoint classes.
+
+    Parameters
+    ----------
+    kwargs_break : dict, optional
+        Configuration dictionary for NRT-specific parameters. Default is an empty dict.
+
+    Attributes
+    ----------
+    breakpoint_columns : list
+        List of column names in the output DataFrame.
+    """
+
+    def __init__(self, kwargs_break: dict = dict()):
+        super().__init__(method_name="nrt")
+        self.kwargs_break = kwargs_break
+        # may need some update
+        self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
+
+    def predict_nrt_arima(
+        self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3, water_column: str = "water"
+    ) -> pd.Series:
+        """_summary_
+
+        Args:
+            ds_in (xr.Dataset): _description_
+            id_geohash (str): _description_
+            min_length (int): Minimum length of the time series.
+            water_column (str): Name of the water column in the dataset.
+
+        Returns:
+            pd.Series: _description_
+        """
+
+        df_in = (
+            ds_in.sel(id_geohash=id_geohash)
+            .to_dataframe()
+            .drop(columns=["id_geohash"])[water_column]
+            .reset_index(drop=True)
+            .dropna()
+        )
+
+        if len(df_in) < min_length:
+            print(f"Time-series has less than {min_length} observations. Skip processing for {id_geohash}")
+            return None
+
+        # Step 3: Fit model
+        model = AutoARIMA(
+            stepwise=True,
+            suppress_warnings=True,
+            trace=False,
+            error_action="ignore",
+            seasonal=False,
+        )
+
+        # catch wild warnings to declutter console
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+
+            # Fit
+            model.fit(df_in)
+
+            # Predict
+            fh = ForecastingHorizon([1], is_relative=True)
+            y_pred = model.predict(fh=fh)
+            y_pred_int = model.predict_interval(fh=fh, coverage=0.90)
+
+            result = pd.Series(
+                {
+                    "water_predicted": y_pred.iloc[0],
+                    "water_predicted_lower_90": y_pred_int.iloc[0, 0],  # first row, first interval column
+                    "water_predicted_upper_90": y_pred_int.iloc[0, 1],  # first row, second interval column
+                },
+                name=id_geohash,
+            )
+
+            return result
+
+    def _validate_analysis_date(self, analysis_date: str | pd.Timestamp) -> pd.Timestamp:
+        """Validate and format analysis_date to datetime object.
+
+        Parameters
+        ----------
+        analysis_date : str or pd.Timestamp
+            The date to validate and format. Can be a string in %Y-%m format or a datetime object.
+
+        Returns
+        -------
+        pd.Timestamp
+            Formatted datetime object.
+        """
+        if isinstance(analysis_date, str):
+            try:
+                analysis_date_ts = pd.to_datetime(analysis_date, format="%Y-%m")
+                return analysis_date_ts
+            except (ValueError, TypeError):
+                analysis_date_ts = pd.to_datetime(analysis_date)
+                return analysis_date_ts
+        elif isinstance(analysis_date, pd.Timestamp):
+            return analysis_date
+        else:
+            return pd.to_datetime(analysis_date)
+
+    def _filter_valid_ids(self, ds_analysis: xr.Dataset, ds_historical: xr.Dataset) -> tuple:
+        """Filter datasets to only include valid id_geohash values with non-NaN data.
+
+        Parameters
+        ----------
+        ds_analysis : xr.Dataset
+            Dataset containing analysis date data.
+        ds_historical : xr.Dataset
+            Dataset containing historical data.
+
+        Returns
+        -------
+        tuple
+            Filtered (ds_analysis, ds_historical) datasets.
+        """
+        # Get valid id_geohash values that have non-NaN data in ds_analysis
+        valid_ids = ds_analysis.dropna(dim="id_geohash", how="all").id_geohash.values
+
+        # Count total ids and valid ids for logging
+        total_ids = len(ds_analysis.id_geohash.values)
+        valid_count = len(valid_ids)
+        filtered_count = total_ids - valid_count
+
+        # Log the filtering results
+        logging.info(f"Filtered {filtered_count} id_geohash(es) with NaN data, kept {valid_count} valid id_geohash(es)")
+
+        # Filter both datasets to only include valid ids
+        ds_analysis_filtered = ds_analysis.sel(id_geohash=valid_ids)
+        ds_historical_filtered = ds_historical.sel(id_geohash=valid_ids)
+
+        return ds_analysis_filtered, ds_historical_filtered, valid_ids
+
+    def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int = None, water_column: str = "water") -> pd.DataFrame:
+        """Calculate statistics for the given dataset."""
+        if filter_month is not None:
+            dataset = dataset.where(dataset.date.dt.month == filter_month, drop=True)
+        out_df = dataset.to_dataframe()[water_column].groupby("id_geohash").agg(["mean", "median", "std", "min", "max"])
+        return out_df
+
+    def calculate_break(
+        self,
+        dataset: LakeDataset,
+        analysis_date: str | pd.Timestamp,
+        data_aggregation_period: str = "all",
+    ) -> pd.DataFrame:
+        """Calculate breakpoints for a single lake object using NRT logic.
+
+        This method implements the NRT-specific breakpoint detection and returns
+        a DataFrame with breakpoint information following the same structure as
+        other breakpoint methods.
+
+        Parameters
+        ----------
+        dataset : LakeDataset
+            Dataset containing lake water‑area data.
+        object_id : str
+            Unique identifier (geohash) for the lake object.
+        analysis_date : str or pd.Timestamp
+            The date for which to perform the NRT breakpoint analysis.
+        data_aggregation_period : str, optional
+            The period of data to consider for the analysis (e.g., "all", "monthly")
+        Returns
+        -------
+        pd.DataFrame
+            DataFrame containing breakpoint information with columns defined in
+            ``self.breakpoint_columns`` plus calculated temporal statistics.
+        """
+        analysis_date = self._validate_analysis_date(analysis_date)
+        print(analysis_date)
+        print(analysis_date.strftime("%Y-%m"))
+
+        # Check if analysis_date in dataset.dates_ (convert to YYYY-MM format for comparison)
+        if analysis_date not in dataset.dates_:
+            raise ValueError(f"Analysis date {analysis_date.strftime('%Y-%m')} is not available in the dataset.")
+
+        # select dataset - default normalized data
+        data = dataset.ds_normalized
+
+        # split data into historical and analysis datasets based on analysis_date
+        ds_analysis = data.sel(date=analysis_date)
+        ds_historical = data.where(data["date"] < analysis_date, drop=True)
+
+        if data_aggregation_period == "monthly":
+            print("Filtering to monthly data for analysis date month:", analysis_date.month)
+            ds_historical = ds_historical.where(ds_historical.date.dt.month == analysis_date.month, drop=True)
+
+        # filter to dates wherea nalysis date has some data
+        ds_analysis_filtered, ds_historical_filtered, valid_ids = self._filter_valid_ids(ds_analysis, ds_historical)
+
+        # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
+        # predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in tqdm(valid_ids, desc='NRT breakpoints')]
+        predictions = Parallel(n_jobs=-1, verbose=10)(
+            delayed(self.predict_nrt_arima)(
+                ds_in=ds_historical_filtered, id_geohash=idx, water_column=dataset.water_column
+            )
+            for idx in tqdm(valid_ids, desc="NRT breakpoints")
+        )
+        # remove None values
+        predictions = [prediction for prediction in predictions if prediction is not None]
+
+        # merge output into a single dataframe
+        # df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions)).round(4)
+        df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions)).round(4)
+        # rename observed water column for clarity
+        df_output.rename(columns={dataset.water_column: "water_observed"}, inplace=True)
+        # calculate residuals
+        df_output["water_residual"] = df_output["water_observed"] - df_output["water_predicted"]
+
+        df_historical_stats = self._get_ds_stats(ds_historical_filtered, water_column=dataset.water_column).round(4)
+        df_historical_stats.columns = "water_historical_" + df_historical_stats.columns.astype(str)
+
+        df_output = df_output.join(df_historical_stats, how="left").round(4)
+
+        return df_output
