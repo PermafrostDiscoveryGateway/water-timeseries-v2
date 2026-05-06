@@ -477,6 +477,12 @@ class EarthEngineDownloader:
         # Apply ID filter if id_list is provided
         gdf = self._apply_id_filter(gdf, id_list, name_attribute)
 
+        if bbox_west > bbox_east or bbox_south > bbox_north:
+            raise ValueError(
+                f"Invalid bbox parameters: west={bbox_west}, east={bbox_east}, south={bbox_south}, north={bbox_north}. "
+                "Ensure that west <= east and south <= north."
+            )
+
         # Apply spatial bbox filter if any bbox parameter is provided and differs from defaults
         if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]) and not (
             bbox_west == -180 and bbox_east == 180 and bbox_north == 90 and bbox_south == -90
