@@ -2,7 +2,7 @@
 
 import pandas as pd
 
-from water_timeseries.breakpoint import BeastBreakpoint, SimpleBreakpoint
+from water_timeseries.breakpoint import BeastBreakpoint, SimpleBreakpoint, NRTBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
 
 
@@ -343,4 +343,41 @@ class TestBeastBreakpointBatch:
         dataset = DWDataset(dw_test_dataset)
         bp = SimpleBreakpoint()
         breaks = bp.calculate_breaks_batch(dataset)
+        assert isinstance(breaks, pd.DataFrame)
+class TestNrtBreakpointBatch:
+    """Test batch breakpoint calculation with NrtBreakpoint."""
+
+    def test_batch_breakpoint_nrt_dw_date_dt(self, dw_test_dataset):
+        """Test NrtBreakpoint detection functionality."""
+        dataset = DWDataset(dw_test_dataset)
+        bp = NRTBreakpoint()
+        breaks = bp.calculate_break(dataset, analysis_date=pd.Timestamp("2024-07-01"))
+        assert isinstance(breaks, pd.DataFrame)
+
+    def test_batch_breakpoint_nrt_dw_date_str(self, dw_test_dataset):
+        """Test NrtBreakpoint detection functionality."""
+        dataset = DWDataset(dw_test_dataset)
+        bp = NRTBreakpoint()
+        breaks = bp.calculate_break(dataset, analysis_date="2024-07-01")
+        assert isinstance(breaks, pd.DataFrame)
+
+    def test_batch_breakpoint_nrt_dw_date_str_short(self, dw_test_dataset):
+        """Test NrtBreakpoint detection functionality."""
+        dataset = DWDataset(dw_test_dataset)
+        bp = NRTBreakpoint()
+        breaks = bp.calculate_break(dataset, analysis_date="2024-07")
+        assert isinstance(breaks, pd.DataFrame)
+
+    def test_batch_breakpoint_nrt_jrc_date_dt(self, jrc_test_dataset):
+        """Test NrtBreakpoint detection functionality."""
+        dataset = JRCDataset(jrc_test_dataset)
+        bp = NRTBreakpoint()
+        breaks = bp.calculate_break(dataset, analysis_date=pd.Timestamp("2020-01-01"))
+        assert isinstance(breaks, pd.DataFrame)
+
+    def test_batch_breakpoint_nrt_jrc_date_str(self, jrc_test_dataset):
+        """Test NrtBreakpoint detection functionality."""
+        dataset = JRCDataset(jrc_test_dataset)
+        bp = NRTBreakpoint()
+        breaks = bp.calculate_break(dataset, analysis_date="2020-01-01")
         assert isinstance(breaks, pd.DataFrame)

@@ -447,12 +447,14 @@ class NRTBreakpoint(BreakpointMethod):
         # may need some update
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
 
-    def predict_nrt_arima(self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3) -> pd.Series:
+    def predict_nrt_arima(self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3, water_column: str = "water") -> pd.Series:
         """_summary_
 
         Args:
             ds_in (xr.Dataset): _description_
             id_geohash (str): _description_
+            min_length (int): Minimum length of the time series.
+            water_column (str): Name of the water column in the dataset.
 
         Returns:
             pd.Series: _description_
@@ -461,7 +463,7 @@ class NRTBreakpoint(BreakpointMethod):
         df_in = (
             ds_in.sel(id_geohash=id_geohash)
             .to_dataframe()
-            .drop(columns=["id_geohash"])["water"]
+            .drop(columns=["id_geohash"])[water_column]
             .reset_index(drop=True)
             .dropna()
         )
@@ -619,7 +621,7 @@ class NRTBreakpoint(BreakpointMethod):
         # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
         # predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in tqdm(valid_ids, desc='NRT breakpoints')]
         predictions = Parallel(n_jobs=-1, verbose=10)(
-            delayed(self.predict_nrt_arima)(ds_in=ds_historical_filtered, id_geohash=idx)
+            delayed(self.predict_nrt_arima)(ds_in=ds_historical_filtered, id_geohash=idx, water_column=dataset.water_column)
             for idx in tqdm(valid_ids, desc="NRT breakpoints")
         )
         # remove None values
@@ -633,7 +635,7 @@ class NRTBreakpoint(BreakpointMethod):
         # calculate residuals
         df_output["water_residual"] = df_output["water_observed"] - df_output["water_predicted"]
 
-        df_historical_stats = self._get_ds_stats(ds_historical_filtered).round(4)
+        df_historical_stats = self._get_ds_stats(ds_historical_filtered, water_column=dataset.water_column).round(4)
         df_historical_stats.columns = "water_historical_" + df_historical_stats.columns.astype(str)
 
         df_output = df_output.join(df_historical_stats, how="left").round(4)
