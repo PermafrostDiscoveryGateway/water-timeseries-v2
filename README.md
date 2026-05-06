@@ -271,6 +271,7 @@ pip install -e ".[dev]"
 
 - **SimpleBreakpoint**: Statistical breakpoint detection
 - **BeastBreakpoint**: Advanced RBEAST-based detection
+- **NRTBreakpoint**: Near‑Real‑Time breakpoint detection based on AutoARIMA
 
 ## Testing
 
