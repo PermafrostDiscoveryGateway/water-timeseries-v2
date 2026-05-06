@@ -14,6 +14,7 @@ import eemont  # noqa: F401
 import geemap
 import geopandas as gpd
 import joblib
+import numpy as np
 import pandas as pd
 import xarray as xr
 from loguru import logger
@@ -535,7 +536,7 @@ class EarthEngineDownloader:
             joblib.delayed(self._extract_time_series)(
                 dates=dates, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
             )
-            for chunk in tqdm(gdf_chunks, desc="Downloading chunks", unit="chunk")
+            for chunk in tqdm(gdf_chunks, desc="Downloading DW chunks", unit="chunk")
         )
         # Filter out None/empty results
         df_out_list = [df for df in df_out_list if df is not None and not df.empty]
@@ -566,11 +567,39 @@ class EarthEngineDownloader:
             save_xarray_dataset(ds, save_to_file, output_dir=output_dir, logger=self.logger)
         return ds
 
+    def _validate_years_jrc(self, years) -> List[int]:
+        """Validate the years parameter for JRC download.
+
+        Args:
+            years: The years parameter to validate
+        Returns:
+            List[int]: Validated list of years to process
+        """
+        # Check if years are empty and create default or check if they are in the correct format
+        if years is None:
+            # Default years for JRC data (2000-2021)
+            years = list(range(2000, 2022))
+        elif isinstance(years, np.ndarray) or isinstance(years, range):
+            years = list(years)
+        else:
+            raise ValueError(
+                "Years must be provided as a list, numpy array, or range object or as None for default years (2000-2021)"
+            )
+
+        # validate years
+        years_cleaned = []
+        for year in years:
+            if isinstance(year, int) and 1984 <= year <= 2021:
+                years_cleaned.append(year)
+            else:
+                self._log_warning(f"Year {year} is invalid, must be between 1984 and 2021 and will be skipped")
+        return years_cleaned
+
     def download_jrc_annual(
         self,
         vector_dataset: str | Path,
         name_attribute: str,
-        years: Optional[List[int]] = None,
+        years: Optional[List[int] | np.ndarray | range] = None,
         bbox_west: float = -180,
         bbox_east: float = 180,
         bbox_north: float = 90,
@@ -673,9 +702,10 @@ class EarthEngineDownloader:
         self._log_info(f"Processing {n_features} features")
 
         # Generate annual dates from years (stored as 'YYYY-01-01' format internally)
-        if years is None:
-            # Default years for JRC data (2000-2021)
-            years = list(range(2000, 2022))
+
+        # Check if years are empty and create default or check if they are in the correct format
+        years = self._validate_years_jrc(years)
+
         dates = [f"{year}-01-01" for year in years]
         n_dates = len(dates)
         n_total_requests = n_features * n_dates
