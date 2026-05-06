@@ -56,29 +56,9 @@ def save_xarray_dataset(
         save_path: Union[str, Path],
         output_dir: Optional[Union[str, Path]] = None,
         logger=None,
-        consolidated: bool = True,  # Add parameter with default True
+        consolidated: bool = True,
 ) -> Path:
-    """Save xarray dataset to file.
-
-    Args:
-        ds: The xarray dataset to save.
-        save_path: Path to save the file. Format is determined by extension:
-            - '.zarr' for Zarr format
-            - '.nc' for NetCDF format
-            If a relative path is provided and output_dir is specified,
-            the file will be saved in that directory.
-        output_dir: Directory for relative paths. If None and save_path is relative,
-            the current working directory is used.
-        logger: Logger for logging progress. If None, print statements are used.
-        consolidated: For Zarr format, whether to use consolidated metadata.
-            Default True (recommended for better compatibility).
-
-    Returns:
-        Path: The resolved path where the dataset was saved.
-
-    Raises:
-        ValueError: If the file extension is not supported.
-    """
+    """Save xarray dataset to file with Zarr v3 compatibility."""
     path = Path(save_path)
 
     # Handle relative path
@@ -92,71 +72,151 @@ def save_xarray_dataset(
     ext = path.suffix.lower()
 
     # Logging helper
-    def _log(msg: str):
+    def _log(msg: str, level="INFO"):
         if logger is not None:
-            logger.info(msg)
+            if level == "ERROR":
+                logger.error(msg)
+            elif level == "WARNING":
+                logger.warning(msg)
+            else:
+                logger.info(msg)
         else:
-            print(msg)
+            print(f"[{level}] {msg}")
 
     _log(f"Saving to {ext[1:].upper()} format: {path}")
 
     if ext == ".zarr":
-        # Handle string coordinates properly
-        encoding = {}
-        for coord in ds.coords:
-            if ds[coord].dtype.kind in ['U', 'S']:  # String type
-                # Convert string coordinates to object dtype for Zarr
-                encoding[coord] = {'dtype': 'object'}
-                _log(f"  Converting coordinate '{coord}' to object dtype for Zarr")
+        # Create a copy to work with
+        ds_to_save = ds.copy()
 
-        # Save with consolidated metadata (creates .zgroup!)
-        ds.to_zarr(
-            path,
-            mode="w",
-            consolidated=consolidated,
-            encoding=encoding if encoding else None
-        )
+        # Convert dates to datetime64 for better compatibility
+        for coord_name in list(ds_to_save.coords.keys()):
+            if coord_name == 'date' or 'date' in coord_name.lower():
+                coord = ds_to_save.coords[coord_name]
+                if coord.dtype.kind in ['U', 'S', 'O']:
+                    try:
+                        import pandas as pd
+                        _log(f"  Converting '{coord_name}' to datetime64...")
+                        datetime_values = pd.to_datetime(coord.values)
+                        ds_to_save.coords[coord_name] = xr.DataArray(
+                            datetime_values,
+                            dims=coord.dims,
+                            attrs=coord.attrs
+                        )
+                        _log(f"    ✓ Converted to datetime64")
+                    except Exception as e:
+                        _log(f"    ✗ Conversion failed: {e}", "WARNING")
 
-        if consolidated:
-            _log(f"  Saved with consolidated metadata (creates .zgroup file)")
-        else:
-            _log(f"  Saved without consolidated metadata")
+        # For Zarr v3, we need to use a different approach
+        # Option 1: Use consolidated=False (recommended for Zarr v3)
+        try:
+            _log("Attempting Zarr save with consolidated=False (Zarr v3 compatible)...")
+
+            # Prepare encoding for string coordinates
+            encoding = {}
+            for coord_name in ds_to_save.coords:
+                coord = ds_to_save.coords[coord_name]
+                # For string/object coordinates, use object dtype with no compressor
+                if coord.dtype.kind in ['U', 'S', 'O']:
+                    encoding[coord_name] = {
+                        'dtype': 'object',
+                        'compressor': None,
+                        'filters': None
+                    }
+                    _log(f"  Encoding '{coord_name}' as object dtype")
+
+            # Save with consolidated=False (works better with Zarr v3)
+            ds_to_save.to_zarr(
+                path,
+                mode="w",
+                consolidated=False,  # Don't use consolidated metadata for v3
+                encoding=encoding if encoding else None
+            )
+
+            # Verify the save
+            if path.exists():
+                # Check for any .zarray files (v3 uses different structure)
+                zarray_files = list(path.rglob('*.zarray'))
+                zmetadata_files = list(path.rglob('*.zmetadata'))
+
+                if zarray_files or zmetadata_files:
+                    _log(
+                        f"✓ Zarr save successful! Found {len(zarray_files)} .zarray files, {len(zmetadata_files)} .zmetadata files")
+                    return path
+                else:
+                    _log(f"⚠️ Save completed but no array files found", "WARNING")
+                    # Try to read it back to verify
+                    try:
+                        test_read = xr.open_zarr(path)
+                        _log(f"✓ Successfully verified Zarr can be read back")
+                        return path
+                    except Exception as read_err:
+                        _log(f"✗ Cannot read back Zarr: {read_err}", "ERROR")
+                        raise
+
+        except Exception as e:
+            _log(f"First save attempt failed: {e}", "WARNING")
+
+            # Option 2: Use Zarr v2 compatibility mode
+            try:
+                _log("Attempting Zarr save with v2 compatibility...")
+
+                # Force Zarr v2 format by using a different storage option
+                # This is more reliable for string/object data
+                import zarr
+
+                # Create Zarr group with v2 format
+                store = zarr.DirectoryStore(path)
+                root = zarr.group(store, overwrite=True, zarr_version=2)  # Force v2
+
+                # Use xarray to save to the v2 group
+                ds_to_save.to_zarr(
+                    store,
+                    mode="w",
+                    consolidated=consolidated,
+                    group=None
+                )
+
+                _log(f"✓ Zarr save successful with v2 format!")
+
+                # Verify
+                zgroup_path = path / '.zgroup'
+                if zgroup_path.exists():
+                    _log(f"  Found .zgroup file (v2 format)")
+                else:
+                    _log(f"  Note: No .zgroup file (v3 format)")
+
+                return path
+
+            except Exception as e2:
+                _log(f"All save attempts failed: {e2}", "ERROR")
+                raise
 
     elif ext == ".nc":
-        # For NetCDF, handle string coordinates automatically
+        _log("Saving as NetCDF...")
         ds.to_netcdf(path)
+        _log(f"✓ NetCDF saved successfully")
+
     else:
         raise ValueError(f"Unsupported file extension: {ext}. Use '.zarr' or '.nc'.")
 
-    _log(f"Dataset saved successfully to {path}")
-
-    # Verify Zarr save was successful
-    if ext == ".zarr" and consolidated:
-        zgroup_path = path / '.zgroup'
-        if zgroup_path.exists():
-            _log(f"  ✓ Verified .zgroup file created")
-        else:
-            _log(f"  ⚠️ Warning: .zgroup file not found (may cause reading issues)")
-
     return path
 
-
 def load_xarray_dataset(
-    path: Union[str, Path],
-    format: Optional[str] = None,
+        path: Union[str, Path],
+        format: Optional[str] = None,
+        decode_times: bool = True,
 ) -> xr.Dataset:
-    """Load xarray dataset from file.
+    """Load xarray dataset from file with proper handling of Zarr files.
 
     Args:
         path: Path to the dataset file.
         format: Format of the file ('zarr' or 'netcdf'). If None, auto-detected
             from extension.
+        decode_times: For NetCDF files, whether to decode time units (default: True).
 
     Returns:
         xr.Dataset: The loaded dataset.
-
-    Raises:
-        ValueError: If the file format is not supported.
     """
     path = Path(path)
 
@@ -170,8 +230,27 @@ def load_xarray_dataset(
             raise ValueError(f"Cannot auto-detect format for extension: {ext}")
 
     if format == "zarr":
-        return xr.open_zarr(path)
+        # For Zarr, we might need to handle object-typed coordinates
+        ds = xr.open_zarr(path)
+
+        # Try to convert object-typed date coordinates back to datetime
+        for coord_name in ds.coords:
+            if coord_name == 'date' or 'date' in coord_name.lower():
+                if ds[coord_name].dtype == object:
+                    try:
+                        import pandas as pd
+                        # Convert object array to datetime
+                        ds[coord_name] = xr.DataArray(
+                            pd.to_datetime(ds[coord_name].values),
+                            dims=ds[coord_name].dims,
+                            attrs=ds[coord_name].attrs
+                        )
+                    except Exception:
+                        pass  # Keep as object if conversion fails
+
+        return ds
+
     elif format == "netcdf":
-        return xr.open_dataset(path)
+        return xr.open_dataset(path, decode_times=decode_times)
     else:
         raise ValueError(f"Unsupported format: {format}. Use 'zarr' or 'netcdf'.")
