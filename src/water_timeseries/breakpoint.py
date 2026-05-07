@@ -21,9 +21,9 @@ Example
 """
 
 import logging
-from typing import Optional
-import warnings
 import os
+import warnings
+from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -601,7 +601,7 @@ class NRTBreakpoint(BreakpointMethod):
             DataFrame containing breakpoint information with columns defined in
             ``self.breakpoint_columns`` plus calculated temporal statistics.
         """
-        
+
         analysis_date = self._validate_analysis_date(analysis_date)
         print(analysis_date)
         print(analysis_date.strftime("%Y-%m"))
