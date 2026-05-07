@@ -6,12 +6,12 @@ readme = "README.md"
 authors = [
     { name = "Ingmar Nitze", email = "ingmarnitze@gmail.com" }
 ]
-requires-python = ">=3.11, <3.14"
+requires-python = ">=3.12, <3.14"
 dependencies = [
     "pandas>=2.0.0,<3.0.0",
     "numpy>=1.24.0,<2.0.0",
     "geopandas>=0.8.0",
-    "xarray>=2023.0.0",
+    # "xarray>=2023.0.0",
     "tqdm",
     "netcdf4",
     "python-geohash",
@@ -22,7 +22,6 @@ dependencies = [
     "pyarrow",
     "h3pandas",
     "h3>=4.0.0,<5.0.0",
-    "dask[dataframe]>=2024.12.1",
     "joblib>=1.4.2",
     "ray[default]>=2.40.0",
     "h5netcdf>=1.4.1",
@@ -56,9 +55,12 @@ dependencies = [
     "ffmpeg>=1.4",
     "ffmpeg-python>=0.2.0",
     "mapclassify>=2.10.0",
-    "sktime>=0.40.1",
     "packaging==24.1",
+    "sktime>=0.40.1",
     "pmdarima>=2.1.1",
+    "dask[dataframe]>=2026.3.0",
+    "xarray>=2026.2.0",
+    "ee-extra>=2025.7.2",
 ]
 
 [project.optional-dependencies]
