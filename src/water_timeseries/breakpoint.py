@@ -21,7 +21,9 @@ Example
 """
 
 import logging
+from typing import Optional
 import warnings
+import os
 
 import numpy as np
 import pandas as pd
@@ -575,6 +577,7 @@ class NRTBreakpoint(BreakpointMethod):
         dataset: LakeDataset,
         analysis_date: str | pd.Timestamp,
         data_aggregation_period: str = "all",
+        object_id: str | Optional[str] = None,
     ) -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 
@@ -586,7 +589,7 @@ class NRTBreakpoint(BreakpointMethod):
         ----------
         dataset : LakeDataset
             Dataset containing lake water‑area data.
-        object_id : str
+        object_id : str | Optional[str]
             Unique identifier (geohash) for the lake object.
         analysis_date : str or pd.Timestamp
             The date for which to perform the NRT breakpoint analysis.
@@ -598,6 +601,7 @@ class NRTBreakpoint(BreakpointMethod):
             DataFrame containing breakpoint information with columns defined in
             ``self.breakpoint_columns`` plus calculated temporal statistics.
         """
+        
         analysis_date = self._validate_analysis_date(analysis_date)
         print(analysis_date)
         print(analysis_date.strftime("%Y-%m"))
@@ -608,6 +612,12 @@ class NRTBreakpoint(BreakpointMethod):
 
         # select dataset - default normalized data
         data = dataset.ds_normalized
+
+        if object_id is not None:
+            if isinstance(object_id, str):
+                object_id = [object_id]
+            object_id = [obj for obj in object_id if obj in dataset.object_ids_]
+            data = data.sel(id_geohash=object_id)
 
         # split data into historical and analysis datasets based on analysis_date
         ds_analysis = data.sel(date=analysis_date)
@@ -622,7 +632,8 @@ class NRTBreakpoint(BreakpointMethod):
 
         # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
         # predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in tqdm(valid_ids, desc='NRT breakpoints')]
-        predictions = Parallel(n_jobs=-1, verbose=10)(
+        n_jobs = min(os.cpu_count(), len(valid_ids))
+        predictions = Parallel(n_jobs=n_jobs, verbose=10)(
             delayed(self.predict_nrt_arima)(
                 ds_in=ds_historical_filtered, id_geohash=idx, water_column=dataset.water_column
             )
