@@ -16,23 +16,23 @@ def load_dataset(
     dataset_type: str,
     zarr_path: str | Path,
     downloaded_data: Optional[object] = None,
-    dataset_obj: Optional[DWDataset | JRCDataset] = None
+    dataset_obj: Optional[DWDataset | JRCDataset] = None,
 ) -> Tuple[DWDataset | JRCDataset | None, bool]:
     """
     Load a dataset with fallback logic: downloaded data > cached dataset > zarr file.
-    
+
     Args:
         dataset_type: Either 'dw' or 'jrc' to specify which dataset to load
         zarr_path: Path to the zarr file for cached data
         downloaded_data: Previously downloaded data (if any)
         dataset_obj: Already loaded dataset object (if any)
-    
+
     Returns:
         Tuple of (loaded_dataset, success)
     """
-    dataset_class = DWDataset if dataset_type == 'dw' else JRCDataset
-    dataset_key = f"{'dw' if dataset_type == 'dw' else 'jrc'}_dataset"
-    
+    dataset_class = DWDataset if dataset_type == "dw" else JRCDataset
+    # dataset_key = f"{'dw' if dataset_type == 'dw' else 'jrc'}_dataset"
+
     # Priority 1: Use downloaded data if available
     if downloaded_data is not None:
         try:
@@ -40,11 +40,11 @@ def load_dataset(
         except Exception as e:
             st.error(f"Error processing downloaded {dataset_type.upper()} data: {e}")
             return None, False
-    
+
     # Priority 2: Use existing dataset object if available
     if dataset_obj is not None:
         return dataset_obj, True
-    
+
     # Priority 3: Load from zarr file
     try:
         ds = xr.open_zarr(str(zarr_path))
@@ -54,10 +54,7 @@ def load_dataset(
         return None, False
 
 
-def check_dataset_availability(
-    dataset: Optional[DWDataset | JRCDataset],
-    id_geohash: str
-) -> bool:
+def check_dataset_availability(dataset: Optional[DWDataset | JRCDataset], id_geohash: str) -> bool:
     """Check if the specific ID is available in the dataset."""
     if dataset is None:
         return False
@@ -74,7 +71,7 @@ def plot_time_series_data(
 ) -> bool:
     """
     Unified function to plot time series data with automatic format handling.
-    
+
     Args:
         dataset: Dataset object (DWDataset or JRCDataset)
         id_geohash: ID of the feature to plot
@@ -82,7 +79,7 @@ def plot_time_series_data(
         is_interactive: Whether to use interactive (plotly) or static (matplotlib) plots
         show_success: Whether to show success message for DW data
         show_caption: Whether to show captions and availability information
-    
+
     Returns:
         True if plotting succeeded, False otherwise
     """
@@ -93,7 +90,7 @@ def plot_time_series_data(
 
     # Check availability
     id_available = check_dataset_availability(dataset, id_geohash)
-    
+
     if not id_available:
         if show_caption:
             st.caption(f"⚠️ {dataset_type.upper()} data not available for this feature")
@@ -111,7 +108,7 @@ def plot_time_series_data(
 
             # Save as HTML for download
             html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
-            file_suffix = "jrc_" if dataset_type == 'jrc' else ""
+            file_suffix = "jrc_" if dataset_type == "jrc" else ""
             st.download_button(
                 label=f"💾 Save {file_suffix.upper()}Interactive Plot (HTML)",
                 data=html_buffer,
@@ -130,7 +127,7 @@ def plot_time_series_data(
             plt.close(fig)
 
             # Save as PNG for download
-            file_suffix = "jrc_" if dataset_type == 'jrc' else ""
+            file_suffix = "jrc_" if dataset_type == "jrc" else ""
             st.download_button(
                 label=f"💾 Save {file_suffix.upper()}Figure",
                 data=img_buffer,
@@ -155,11 +152,11 @@ def plot_timeseries_with_fallback(
     downloaded_data: Optional[object] = None,
     is_interactive: bool = True,
     show_download: bool = True,
-    layer_title: str | None = None
+    layer_title: str | None = None,
 ) -> bool:
     """
     Plot time series with automatic dataset loading and download fallback.
-    
+
     Args:
         dataset: Current dataset object
         id_geohash: ID of the feature to plot
@@ -169,7 +166,7 @@ def plot_timeseries_with_fallback(
         is_interactive: Whether to use interactive (plotly) or static (matplotlib) plots
         show_download: Whether to show download buttons
         layer_title: Title for the plot layer
-    
+
     Returns:
         True if plotting succeeded, False otherwise
     """
@@ -187,11 +184,11 @@ def download_dataset_if_needed(
     id_column: str,
     dataset_obj: Optional[DWDataset | JRCDataset] = None,
     downloaded_data: Optional[object] = None,
-    download_func=None
+    download_func=None,
 ) -> Tuple[Optional[object], DWDataset | JRCDataset | None, bool]:
     """
     Download dataset data for a specific ID if not already available.
-    
+
     Args:
         id_geohash: ID to download data for
         dataset_type: 'dw' or 'jrc'
@@ -200,21 +197,21 @@ def download_dataset_if_needed(
         dataset_obj: Existing dataset object
         downloaded_data: Previously downloaded data
         download_func: Function to call for downloading
-    
+
     Returns:
         Tuple of (downloaded_data, new_dataset, success)
     """
     if download_func is None:
         return downloaded_data, dataset_obj, False
-    
+
     try:
         downloader = EarthEngineDownloader(ee_auth=True)
         new_data = download_func(downloader, id_geohash, data_path, id_column)
-        
+
         if new_data is not None:
-            dataset_class = DWDataset if dataset_type == 'dw' else JRCDataset
+            dataset_class = DWDataset if dataset_type == "dw" else JRCDataset
             new_dataset = dataset_class(new_data)
-            
+
             # Merge with existing data if available
             if dataset_obj is not None:
                 try:
@@ -223,12 +220,12 @@ def download_dataset_if_needed(
                     return new_data, merged_dataset, True
                 except Exception as merge_e:
                     st.sidebar.warning(f"Could not merge {dataset_type.upper()} data: {merge_e}")
-            
+
             st.session_state[f"downloaded_ds{dataset_type}"] = new_data
             return new_data, new_dataset, True
-        
+
         return downloaded_data, dataset_obj, False
-    
+
     except Exception as e:
         st.error(f"Error downloading {dataset_type.upper()} data: {e}")
         return downloaded_data, dataset_obj, False
@@ -244,11 +241,11 @@ def create_timelapse_handler(
     start_date: str,
     end_date: str,
     buffer: int = 100,
-    gif_outdir: str = "gifs"
+    gif_outdir: str = "gifs",
 ) -> Optional[Path]:
     """
     Create a timelapse GIF and return its path.
-    
+
     Args:
         dataset_obj: Dataset object with create_timelapse method
         viewer_gdf: GeoDataFrame from viewer
@@ -260,7 +257,7 @@ def create_timelapse_handler(
         end_date: End date (month-day format)
         buffer: Buffer size in meters
         gif_outdir: Output directory for GIF
-    
+
     Returns:
         Path to created GIF or None if failed
     """
@@ -286,14 +283,11 @@ def create_timelapse_handler(
 
 
 def display_gif_row(
-    gif_path_s2: Optional[Path],
-    gif_path_landsat: Optional[Path],
-    current: str,
-    gif_dir: Path = Path("gifs")
+    gif_path_s2: Optional[Path], gif_path_landsat: Optional[Path], current: str, gif_dir: Path = Path("gifs")
 ):
     """
     Display GIFs in a two-column layout.
-    
+
     Args:
         gif_path_s2: Path to Sentinel-2 GIF or None
         gif_path_landsat: Path to Landsat GIF or None
@@ -301,20 +295,20 @@ def display_gif_row(
         gif_dir: Directory where GIFs are stored
     """
     display_col_s2, display_col_ls = st.columns(2)
-    
+
     # Sentinel-2 GIF
     with display_col_s2:
         st.subheader("Sentinel-2 (2016-2025)")
         gif_s2_path = gif_path_s2 if gif_path_s2 else gif_dir / f"{current}_S2.gif"
-        
+
         if gif_s2_path and gif_s2_path.exists():
             if gif_path_s2:
                 st.success(f"Timelapse created: {gif_path_s2}")
             else:
                 st.info("Timelapse already exists")
-            
+
             st.image(str(gif_s2_path), caption=f"Timelapse: {current}", width=512)
-            
+
             with open(gif_s2_path, "rb") as f:
                 st.download_button(
                     label="💾 Download GIF",
@@ -323,20 +317,20 @@ def display_gif_row(
                     mime="image/gif",
                     key=f"download_s2_{current}",
                 )
-    
+
     # Landsat GIF
     with display_col_ls:
         st.subheader("Landsat (2000-2025)")
         gif_ls_path = gif_path_landsat if gif_path_landsat else gif_dir / f"{current}_LS.gif"
-        
+
         if gif_ls_path and gif_ls_path.exists():
             if gif_path_landsat:
                 st.success(f"Timelapse created: {gif_path_landsat}")
             else:
                 st.info("Timelapse already exists")
-            
+
             st.image(str(gif_ls_path), caption=f"Timelapse: {current}", width=512)
-            
+
             with open(gif_ls_path, "rb") as f:
                 st.download_button(
                     label="💾 Download GIF",
@@ -347,28 +341,25 @@ def display_gif_row(
                 )
 
 
-def display_existing_gifs(
-    current: str,
-    gif_dir: Path = Path("gifs")
-):
+def display_existing_gifs(current: str, gif_dir: Path = Path("gifs")):
     """
     Display existing GIFs in a two-column layout.
-    
+
     Args:
         current: Current ID_geohash
         gif_dir: Directory where GIFs are stored
     """
     potential_gif_s2 = gif_dir / f"{current}_S2.gif"
     potential_gif_landsat = gif_dir / f"{current}_LS.gif"
-    
+
     existing_col_s2, existing_col_ls = st.columns(2)
-    
+
     with existing_col_s2:
         if potential_gif_s2.exists():
             st.subheader("Sentinel-2 (2016-2025)")
             st.info("Timelapse already exists")
             st.image(str(potential_gif_s2), caption=f"Timelapse: {current}", width=512)
-            
+
             with open(potential_gif_s2, "rb") as f:
                 st.download_button(
                     label="💾 Download GIF",
@@ -377,13 +368,13 @@ def display_existing_gifs(
                     mime="image/gif",
                     key=f"download_existing_s2_{current}",
                 )
-    
+
     with existing_col_ls:
         if potential_gif_landsat.exists():
             st.subheader("Landsat (2000-2025)")
             st.info("Timelapse already exists")
             st.image(str(potential_gif_landsat), caption=f"Timelapse: {current}", width=512)
-            
+
             with open(potential_gif_landsat, "rb") as f:
                 st.download_button(
                     label="💾 Download GIF",
@@ -399,24 +390,24 @@ def plot_jrc_timeseries(
     id_geohash: str,
     zarr_path_jrc: str | Path,
     downloaded_dsjrc: Optional[object],
-    is_interactive: bool
+    is_interactive: bool,
 ) -> bool:
     """
     Plot JRC time series with proper availability checking and fallback loading.
-    
+
     Args:
         jrc_dataset: Current JRC dataset object
         id_geohash: ID of the feature to plot
         zarr_path_jrc: Path to JRC zarr file
         downloaded_dsjrc: Previously downloaded JRC data
         is_interactive: Whether to use interactive plots
-    
+
     Returns:
         True if plotting succeeded, False otherwise
     """
     # Check JRC availability
     id_available_jrc = check_dataset_availability(jrc_dataset, id_geohash)
-    
+
     if not id_available_jrc:
         st.caption("⚠️ JRC data not available for this feature")
         return False

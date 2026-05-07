@@ -3,7 +3,6 @@
 import os
 from io import BytesIO
 from pathlib import Path
-from threading import Thread
 from typing import List, Optional
 
 import folium
@@ -540,7 +539,7 @@ def create_app(
                 try:
                     # Create container with one row and two columns for time series plots
                     ts_col1, ts_col2 = st.columns(2)
-                    
+
                     # Plot Dynamic World time series in first column
                     with ts_col1:
                         st.subheader("Dynamic World")
@@ -552,7 +551,7 @@ def create_app(
                             show_success=True,
                             show_caption=True,
                         )
-                    
+
                     # Plot JRC time series in second column if available
                     if st.session_state.jrc_dataset is not None and id_available_jrc:
                         with ts_col2:
