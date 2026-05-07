@@ -72,8 +72,10 @@ def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str = None
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
     ds.attrs["contact"] = "ingmar.nitze@awi.de"
+    
     return ds
 
 
@@ -100,6 +102,7 @@ def annotate_xr_dataset_dw(ds: xr.Dataset, input_vector_file: Path | str = None)
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = (
         "Ingmar Nitze (Alfred Wegener Institute), Kayla Hardie (Google), Chen Wang (NCSA, U Illinois), Todd Nicholson(NCSA, U Illinois)"
     )
