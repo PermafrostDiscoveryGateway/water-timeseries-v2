@@ -403,6 +403,41 @@ class EarthEngineDownloader:
 
         return df.drop(columns=["geometry"])
 
+    def _validate_years_dw(self, years) -> List[int]:
+        """Validate the years parameter for Dynamic World download.
+
+        Args:
+            years: The years parameter to validate
+        Returns:
+            List[int]: Validated list of years to process
+        """
+        current_year = pd.Timestamp.now().year
+        # Check if years are empty and create default or check if they are in the correct format
+        if years is None:
+            # Default years for Dynamic World data (2016-2021)
+            years = list(range(2016, current_year + 1))
+        elif isinstance(years, list):
+            pass  # already in correct format
+        elif isinstance(years, np.ndarray) or isinstance(years, range):
+            years = list(years)
+        else:
+            raise ValueError(
+                "Years must be provided as a list, numpy array, or range object or as None for default years (2016-"
+                + str(current_year)
+                + ")"
+            )
+
+        # validate years
+        years_cleaned = []
+        for year in years:
+            if isinstance(year, int) and 2016 <= year <= current_year:
+                years_cleaned.append(year)
+            else:
+                self._log_warning(
+                    f"Year {year} is invalid, must be between 2016 and {current_year} and will be skipped!"
+                )
+        return years_cleaned
+
     def download_dw_monthly(
         self,
         vector_dataset: str | Path,
@@ -466,6 +501,9 @@ class EarthEngineDownloader:
         # Announce no_download mode at the top
         if no_download:
             self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
+
+        # Check if years are empty and create default or check if they are in the correct format
+        years = self._validate_years_dw(years)
 
         # Read vector data using the reusable function
         gdf = load_vector_dataset(vector_dataset, logger=self.logger)
@@ -582,13 +620,15 @@ class EarthEngineDownloader:
         """
         # Check if years are empty and create default or check if they are in the correct format
         if years is None:
-            # Default years for JRC data (2000-2021)
-            years = list(range(2000, 2022))
+            # Default years for JRC data (1984-2021)
+            years = list(range(1984, 2022))
+        elif isinstance(years, list):
+            pass  # already in correct format
         elif isinstance(years, np.ndarray) or isinstance(years, range):
             years = list(years)
         else:
             raise ValueError(
-                "Years must be provided as a list, numpy array, or range object or as None for default years (2000-2021)"
+                "Years must be provided as a list, numpy array, or range object or as None for default years (1984-2021)"
             )
 
         # validate years
@@ -597,7 +637,7 @@ class EarthEngineDownloader:
             if isinstance(year, int) and 1984 <= year <= 2021:
                 years_cleaned.append(year)
             else:
-                self._log_warning(f"Year {year} is invalid, must be between 1984 and 2021 and will be skipped")
+                self._log_warning(f"Year {year} is invalid, must be between 1984 and 2021 and will be skipped!")
         return years_cleaned
 
     def download_jrc_annual(
@@ -630,7 +670,7 @@ class EarthEngineDownloader:
         Args:
             vector_dataset: Path to the input vector dataset (Parquet format).
             name_attribute: Column name in the vector dataset to use for grouping.
-            years: List of years to process (e.g., [2017, 2018]). Default: [2000-2021].
+            years: List of years to process (e.g., [2017, 2018]). Default: [1984-2021].
             bbox_west: Western boundary for spatial filtering (default: -180).
             bbox_east: Eastern boundary for spatial filtering (default: 180).
             bbox_north: Northern boundary for spatial filtering (default: 90).
@@ -668,6 +708,9 @@ class EarthEngineDownloader:
         # Announce no_download mode at the top
         if no_download:
             self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
+
+        # Check if years are empty and create default or check if they are in the correct format
+        years = self._validate_years_jrc(years)
 
         # Read vector data using the reusable function
         gdf = load_vector_dataset(vector_dataset, logger=self.logger)
@@ -707,9 +750,6 @@ class EarthEngineDownloader:
         self._log_info(f"Processing {n_features} features")
 
         # Generate annual dates from years (stored as 'YYYY-01-01' format internally)
-
-        # Check if years are empty and create default or check if they are in the correct format
-        years = self._validate_years_jrc(years)
 
         dates = [f"{year}-01-01" for year in years]
         n_dates = len(dates)

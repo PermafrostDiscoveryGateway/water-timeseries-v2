@@ -75,7 +75,7 @@ def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str = None
     ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
     ds.attrs["contact"] = "ingmar.nitze@awi.de"
-    
+
     return ds
 
 
