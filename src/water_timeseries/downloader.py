@@ -20,6 +20,7 @@ import xarray as xr
 from loguru import logger
 from tqdm import tqdm
 
+from water_timeseries.utils.data import annotate_xr_dataset_dw, annotate_xr_dataset_jrc
 from water_timeseries.utils.earthengine import (
     calc_monthly_dw,
     create_dw_classes_mask,
@@ -559,12 +560,16 @@ class EarthEngineDownloader:
         # force date to pd.datetime format
         ds["date"] = pd.to_datetime(ds["date"])
 
+        # Annotate dataset with metadata
+        ds = annotate_xr_dataset_dw(ds, input_vector_file=vector_dataset)
+
         # Save to file if requested
         if save_to_file is not None:
             # Determine output_dir for relative paths
             save_path = Path(save_to_file)
             output_dir = str(self.output_dir) if not save_path.is_absolute() else None
             save_xarray_dataset(ds, save_to_file, output_dir=output_dir, logger=self.logger)
+
         return ds
 
     def _validate_years_jrc(self, years) -> List[int]:
@@ -751,6 +756,9 @@ class EarthEngineDownloader:
 
         # Remove the 'reducer' variable if present
         ds = ds.drop_vars("reducer")
+
+        # Annotate dataset with metadata
+        ds = annotate_xr_dataset_jrc(ds, input_vector_file=vector_dataset)
 
         # Save to file if requested
         if save_to_file is not None:
