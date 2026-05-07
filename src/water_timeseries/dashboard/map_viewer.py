@@ -15,6 +15,11 @@ from streamlit_folium import st_folium
 
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
+from water_timeseries.utils.dashboard import (
+    check_dataset_availability,
+    load_dataset,
+    plot_time_series_data,
+)
 from water_timeseries.utils.io import load_vector_dataset
 from water_timeseries.utils.map_styling import (
     create_tile_layers,
@@ -280,7 +285,7 @@ class MapViewer:
 
 
 def create_app(
-    data_path: str | Path = "tests/data/lake_polygons.parquet", 
+    data_path: str | Path = "tests/data/lake_polygons.parquet",
     zarr_path: str | Path = "tests/data/lakes_dw_test.zarr",
     zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
 ):
@@ -419,49 +424,28 @@ def create_app(
             # Show inline preview
             st.caption("Preview - click button above for full view")
 
-            # Load dataset if not already loaded
-            # Prioritize downloaded data over cached zarr
-            if st.session_state.dw_dataset is None and st.session_state.downloaded_dsdw is not None:
-                try:
-                    st.session_state.dw_dataset = DWDataset(st.session_state.downloaded_dsdw)
-                except Exception as e:
-                    st.error(f"Error processing downloaded data: {e}")
-            elif st.session_state.dw_dataset is None:
-                try:
-                    ds = xr.open_zarr(zarr_path_input)
-                    st.session_state.dw_dataset = DWDataset(ds)
-                except Exception as e:
-                    st.error(f"Error loading time series data: {e}")
+            # Load datasets using unified helper function
+            dw_dataset = st.session_state.get("dw_dataset")
+            jrc_dataset = st.session_state.get("jrc_dataset")
 
-            # Load JRC dataset if not already loaded
-            # Prioritize downloaded data over cached zarr
-            if st.session_state.jrc_dataset is None and st.session_state.downloaded_dsjrc is not None:
-                try:
-                    st.session_state.jrc_dataset = JRCDataset(st.session_state.downloaded_dsjrc)
-                    st.caption(f"JRC dataset loaded from downloaded data, available IDs: {st.session_state.jrc_dataset.object_ids_}")
-                except Exception as e:
-                    st.error(f"Error processing downloaded JRC data: {e}")
-            elif st.session_state.jrc_dataset is None:
-                try:
-                    ds_jrc = xr.open_zarr(zarr_path_jrc_input)
-                    st.session_state.jrc_dataset = JRCDataset(ds_jrc)
-                    st.caption(f"JRC dataset loaded from zarr, available IDs: {st.session_state.jrc_dataset.object_ids_}")
-                except Exception as e:
-                    st.error(f"Error loading JRC time series data: {e}")
+            # Load DW dataset if needed
+            if dw_dataset is None:
+                dw_dataset, success = load_dataset("dw", zarr_path_input, st.session_state.downloaded_dsdw)
+                if success and dw_dataset is not None:
+                    st.session_state.dw_dataset = dw_dataset
 
-            # Re-check if selected id_geohash is available in the JRC dataset (after loading downloaded data)
-            if st.session_state.jrc_dataset is not None:
-                available_ids_jrc = st.session_state.jrc_dataset.object_ids_
-                id_available_jrc = current in available_ids_jrc
-                st.caption(f"Checking JRC availability: current={current}, available={id_available_jrc}")
+            # Load JRC dataset if needed
+            if jrc_dataset is None:
+                jrc_dataset, success = load_dataset("jrc", zarr_path_jrc_input, st.session_state.downloaded_dsjrc)
+                if success and jrc_dataset is not None:
+                    st.session_state.jrc_dataset = jrc_dataset
 
-            # Define id_available_dw if not already set (needed for cases where DW data was already loaded)
-            if "id_available_dw" not in locals():
-                id_available_dw = False
-                if st.session_state.dw_dataset is not None:
-                    available_ids_dw = st.session_state.dw_dataset.object_ids_
-                    id_available_dw = current in available_ids_dw
-                    st.caption(f"DW availability check: current={current}, available={id_available_dw}")
+            # Re-check availability after loading
+            id_available_dw = check_dataset_availability(st.session_state.dw_dataset, current)
+            id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
+            st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
+
+            ""  # Already handled in the unified loading code above"
 
             # Automatically download if not available
             if not id_available_dw or not id_available_jrc:
@@ -506,7 +490,7 @@ def create_app(
                             st.rerun()
                         else:
                             st.error("Download returned no data.")
-                    
+
                     if not id_available_jrc:
                         # JRC Download
                         st.caption("Downloading JRC data ...")
@@ -537,10 +521,10 @@ def create_app(
 
                             st.session_state.downloaded_dsjrc = dsjrc_downloaded
                             id_available_jrc = True
-                            
+
                             # Also set id_available_dw = True since DW data was also downloaded
                             id_available_dw = True
-                            
+
                             st.caption("Both DW and JRC data downloaded successfully!")
                             st.rerun()
                         else:
@@ -550,241 +534,184 @@ def create_app(
                     st.error(f"Error downloading data: {e}")
                     st.info("Make sure you have Google Earth Engine authentication configured.")
 
-
             # Plot time series if available
             if st.session_state.dw_dataset is not None and id_available_dw:
-                st.success("✅ Dynamic World data available")
                 try:
-                    # Use interactive or static plotting based on toggle
-                    if is_interactive:
-                        fig_dw = st.session_state.dw_dataset.plot_timeseries_interactive(current)
-                        st.plotly_chart(fig_dw, width="stretch")
+                    # Plot time series using unified helper function
+                    plot_time_series_data(
+                        st.session_state.dw_dataset,
+                        current,
+                        "dw",
+                        is_interactive,
+                        show_success=True,
+                        show_caption=True,
+                    )
 
-                        # Convert figure to HTML for download (only when requested)
-                        html_buffer = fig_dw.to_html(full_html=False, include_plotlyjs="cdn")
-                        st.download_button(
-                            label="💾 Save Interactive Plot (HTML)",
-                            data=html_buffer,
-                            file_name=f"timeseries_{current}.html",
-                            mime="text/html",
+                    # Plot JRC time series if available
+                    if st.session_state.jrc_dataset is not None and id_available_jrc:
+                        plot_time_series_data(
+                            st.session_state.jrc_dataset,
+                            current,
+                            "jrc",
+                            is_interactive,
+                            show_success=False,
+                            show_caption=True,
                         )
-
-                        # Plot JRC time series if available
-                        if st.session_state.jrc_dataset is not None and id_available_jrc:
-                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
-                            st.plotly_chart(fig_jrc, width="stretch")
-
-                            # Convert figure to HTML for download (only when requested)
-                            html_buffer = fig_jrc.to_html(full_html=False, include_plotlyjs="cdn")
-                            st.download_button(
-                                label="💾 Save JRC Interactive Plot (HTML)",
-                                data=html_buffer,
-                                file_name=f"timeseries_jrc_{current}.html",
-                                mime="text/html",
-                            )
-                        else:
-                            st.caption("⚠️ JRC data not available for this feature")
-                    else:
-                        fig_dw = st.session_state.dw_dataset.plot_timeseries(current)
-
-                        # Save figure to bytes buffer for download
-                        img_buffer = BytesIO()
-                        fig_dw.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
-                        img_buffer.seek(0)
-
-                        # Display and offer download
-                        st.pyplot(fig_dw)
-
-                        st.download_button(
-                            label="💾 Save Figure",
-                            data=img_buffer,
-                            file_name=f"timeseries_{current}.png",
-                            mime="image/png",
-                        )
-
-                        plt.close(fig_dw)  # Close matplotlib figure
-
-                        # Plot JRC time series if available
-                        if st.session_state.jrc_dataset is not None and id_available_jrc:
-                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries(current)
-
-                            # Save figure to bytes buffer for download
-                            img_buffer = BytesIO()
-                            fig_jrc.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
-                            img_buffer.seek(0)
-
-                            # Display and offer download
-                            st.pyplot(fig_jrc)
-
-                            st.download_button(
-                                label="💾 Save JRC Figure",
-                                data=img_buffer,
-                                file_name=f"timeseries_jrc_{current}.png",
-                                mime="image/png",
-                            )
-
-                            plt.close(fig_jrc)  # Close matplotlib figure
-                        else:
-                            st.caption("⚠️ JRC data not available for this feature")
-
-
-
-                    # ============================================
-                    # Timelapse Section
-                    # ============================================
-                    st.divider()
-                    st.subheader("🛰️ Timelapse")
-
-                    # Create checkboxes in one column (vertically stacked)
-                    col_checkbox = st.container()
-                    with col_checkbox:
-                        create_sentinel2 = st.checkbox("Sentinel-2 (2016-2025)", value=True, key="sentinel2_checkbox")
-                        create_landsat = st.checkbox("Landsat (2000-2025)", value=True, key="landsat_checkbox")
-
-                    # Define GIF paths early so they're available for both creation and display
-                    gif_dir = Path("gifs")
-                    potential_gif_s2 = gif_dir / f"{current}_S2.gif"
-                    potential_gif_landsat = gif_dir / f"{current}_LS.gif"
-
-                    # Button to create timelapse(s)
-                    timelapse_clicked = st.button("🎬 Create Timelapse", key="create_timelapse")
-
-                    if timelapse_clicked:
-                        if not create_sentinel2 and not create_landsat:
-                            st.warning("Please select at least one data source (Sentinel-2 or Landsat)")
-                        else:
-                            with st.spinner("Generating timelapse... This may take a up to a minute."):
-                                try:
-                                    # Create Sentinel-2 timelapse if checked
-                                    gif_path_s2 = None
-                                    gif_path_landsat = None
-
-                                    if create_sentinel2:
-                                        gif_path_s2 = st.session_state.dw_dataset.create_timelapse(
-                                            lake_gdf=viewer.gdf,
-                                            id_geohash=current,
-                                            timelapse_source="sentinel2",
-                                            gif_outdir="gifs",
-                                            buffer=100,
-                                            start_year=2016,
-                                            end_year=2025,
-                                            start_date="07-01",
-                                            end_date="08-31",
-                                            frames_per_second=1,
-                                            dimensions=512,
-                                            overwrite_exists=False,
-                                        )
-
-                                    # Create Landsat timelapse if checked
-                                    if create_landsat:
-                                        gif_path_landsat = st.session_state.dw_dataset.create_timelapse(
-                                            lake_gdf=viewer.gdf,
-                                            id_geohash=current,
-                                            timelapse_source="landsat",
-                                            gif_outdir="gifs",
-                                            buffer=100,
-                                            start_year=2000,
-                                            end_year=2025,
-                                            start_date="07-01",
-                                            end_date="08-31",
-                                            frames_per_second=1,
-                                            dimensions=512,
-                                            overwrite_exists=False,
-                                        )
-
-                                    # Display GIFs side by side with headers
-                                    display_col_s2, display_col_ls = st.columns(2)
-
-                                    # Sentinel-2 GIF
-                                    with display_col_s2:
-                                        st.subheader("Sentinel-2 (2016-2025)")
-                                        gif_s2_path = gif_path_s2 if gif_path_s2 is not None else potential_gif_s2
-                                        if gif_s2_path and gif_s2_path.exists():
-                                            if gif_path_s2 is not None:
-                                                st.success(f"Timelapse created: {gif_path_s2}")
-                                            else:
-                                                st.info("Timelapse already exists")
-
-                                            # Use simple path like the working version
-                                            st.image(str(gif_s2_path), caption=f"Timelapse: {current}", width=512)
-
-                                            with open(gif_s2_path, "rb") as f:
-                                                st.download_button(
-                                                    label="💾 Download GIF",
-                                                    data=f,
-                                                    file_name=gif_s2_path.name,
-                                                    mime="image/gif",
-                                                    key="download_s2",
-                                                )
-
-                                    # Landsat GIF
-                                    with display_col_ls:
-                                        if create_landsat:
-                                            st.subheader("Landsat (2000-2025)")
-                                            gif_ls_path = (
-                                                gif_path_landsat
-                                                if gif_path_landsat is not None
-                                                else potential_gif_landsat
-                                            )
-                                            if gif_ls_path and gif_ls_path.exists():
-                                                if gif_path_landsat is not None:
-                                                    st.success(f"Timelapse created: {gif_path_landsat}")
-                                                else:
-                                                    st.info("Timelapse already exists")
-
-                                                # Use simple path like the working version
-                                                st.image(str(gif_ls_path), caption=f"Timelapse: {current}", width=512)
-
-                                                with open(gif_ls_path, "rb") as f:
-                                                    st.download_button(
-                                                        label="💾 Download GIF",
-                                                        data=f,
-                                                        file_name=gif_ls_path.name,
-                                                        mime="image/gif",
-                                                        key="download_landsat",
-                                                    )
-
-                                except Exception as e:
-                                    st.error(f"Error creating timelapse: {e}")
-                                    st.info("Make sure you have Google Earth Engine authentication configured.")
-                    else:
-                        # Display existing GIFs (when button wasn't clicked)
-                        if potential_gif_s2.exists() or potential_gif_landsat.exists():
-                            existing_col_s2, existing_col_ls = st.columns(2)
-
-                            with existing_col_s2:
-                                if potential_gif_s2.exists():
-                                    st.subheader("Sentinel-2 (2016-2025)")
-                                    st.info("Timelapse already exists")
-                                    # Use simple path like the working version
-                                    st.image(str(potential_gif_s2), caption=f"Timelapse: {current}", width=512)
-
-                                    with open(potential_gif_s2, "rb") as f:
-                                        st.download_button(
-                                            label="💾 Download GIF",
-                                            data=f,
-                                            file_name=potential_gif_s2.name,
-                                            mime="image/gif",
-                                            key="download_existing_s2",
-                                        )
-
-                            with existing_col_ls:
-                                if potential_gif_landsat.exists():
-                                    st.subheader("Landsat (2000-2025)")
-                                    st.info("Timelapse already exists")
-                                    # Use simple path like the working version
-                                    st.image(str(potential_gif_landsat), caption=f"Timelapse: {current}", width=512)
-
-                                    with open(potential_gif_landsat, "rb") as f:
-                                        st.download_button(
-                                            label="💾 Download GIF",
-                                            data=f,
-                                            file_name=potential_gif_landsat.name,
-                                            mime="image/gif",
-                                            key="download_existing_landsat",
-                                        )
                 except Exception as e:
                     st.error(f"Error plotting time series: {e}")
+
+                    # ============================================
+            # Timelapse Section
+            # ============================================
+            st.divider()
+            st.subheader("🛰️ Timelapse")
+
+            # Create checkboxes in one column (vertically stacked)
+            col_checkbox = st.container()
+            with col_checkbox:
+                create_sentinel2 = st.checkbox("Sentinel-2 (2016-2025)", value=True, key="sentinel2_checkbox")
+                create_landsat = st.checkbox("Landsat (2000-2025)", value=True, key="landsat_checkbox")
+
+            # Define GIF paths early so they're available for both creation and display
+            gif_dir = Path("gifs")
+            potential_gif_s2 = gif_dir / f"{current}_S2.gif"
+            potential_gif_landsat = gif_dir / f"{current}_LS.gif"
+
+            # Button to create timelapse(s)
+            timelapse_clicked = st.button("🎬 Create Timelapse", key="create_timelapse")
+
+            if timelapse_clicked:
+                if not create_sentinel2 and not create_landsat:
+                    st.warning("Please select at least one data source (Sentinel-2 or Landsat)")
+                else:
+                    with st.spinner("Generating timelapse... This may take a up to a minute."):
+                        try:
+                            # Create Sentinel-2 timelapse if checked
+                            gif_path_s2 = None
+                            gif_path_landsat = None
+
+                            if create_sentinel2:
+                                gif_path_s2 = st.session_state.dw_dataset.create_timelapse(
+                                    lake_gdf=viewer.gdf,
+                                    id_geohash=current,
+                                    timelapse_source="sentinel2",
+                                    gif_outdir="gifs",
+                                    buffer=100,
+                                    start_year=2016,
+                                    end_year=2025,
+                                    start_date="07-01",
+                                    end_date="08-31",
+                                    frames_per_second=1,
+                                    dimensions=512,
+                                    overwrite_exists=False,
+                                )
+
+                            # Create Landsat timelapse if checked
+                            if create_landsat:
+                                gif_path_landsat = st.session_state.dw_dataset.create_timelapse(
+                                    lake_gdf=viewer.gdf,
+                                    id_geohash=current,
+                                    timelapse_source="landsat",
+                                    gif_outdir="gifs",
+                                    buffer=100,
+                                    start_year=2000,
+                                    end_year=2025,
+                                    start_date="07-01",
+                                    end_date="08-31",
+                                    frames_per_second=1,
+                                    dimensions=512,
+                                    overwrite_exists=False,
+                                )
+
+                            # Display GIFs side by side with headers
+                            display_col_s2, display_col_ls = st.columns(2)
+
+                            # Sentinel-2 GIF
+                            with display_col_s2:
+                                st.subheader("Sentinel-2 (2016-2025)")
+                                gif_s2_path = gif_path_s2 if gif_path_s2 is not None else potential_gif_s2
+                                if gif_s2_path and gif_s2_path.exists():
+                                    if gif_path_s2 is not None:
+                                        st.success(f"Timelapse created: {gif_path_s2}")
+                                    else:
+                                        st.info("Timelapse already exists")
+
+                                    # Use simple path like the working version
+                                    st.image(str(gif_s2_path), caption=f"Timelapse: {current}", width=512)
+
+                                    with open(gif_s2_path, "rb") as f:
+                                        st.download_button(
+                                            label="💾 Download GIF",
+                                            data=f,
+                                            file_name=gif_s2_path.name,
+                                            mime="image/gif",
+                                            key="download_s2",
+                                        )
+
+                            # Landsat GIF
+                            with display_col_ls:
+                                if create_landsat:
+                                    st.subheader("Landsat (2000-2025)")
+                                    gif_ls_path = (
+                                        gif_path_landsat if gif_path_landsat is not None else potential_gif_landsat
+                                    )
+                                    if gif_ls_path and gif_ls_path.exists():
+                                        if gif_path_landsat is not None:
+                                            st.success(f"Timelapse created: {gif_path_landsat}")
+                                        else:
+                                            st.info("Timelapse already exists")
+
+                                        # Use simple path like the working version
+                                        st.image(str(gif_ls_path), caption=f"Timelapse: {current}", width=512)
+
+                                        with open(gif_ls_path, "rb") as f:
+                                            st.download_button(
+                                                label="💾 Download GIF",
+                                                data=f,
+                                                file_name=gif_ls_path.name,
+                                                mime="image/gif",
+                                                key="download_landsat",
+                                            )
+
+                        except Exception as e:
+                            st.error(f"Error creating timelapse: {e}")
+                            st.info("Make sure you have Google Earth Engine authentication configured.")
+            else:
+                # Display existing GIFs (when button wasn't clicked)
+                if potential_gif_s2.exists() or potential_gif_landsat.exists():
+                    existing_col_s2, existing_col_ls = st.columns(2)
+
+                    with existing_col_s2:
+                        if potential_gif_s2.exists():
+                            st.subheader("Sentinel-2 (2016-2025)")
+                            st.info("Timelapse already exists")
+                            # Use simple path like the working version
+                            st.image(str(potential_gif_s2), caption=f"Timelapse: {current}", width=512)
+
+                            with open(potential_gif_s2, "rb") as f:
+                                st.download_button(
+                                    label="💾 Download GIF",
+                                    data=f,
+                                    file_name=potential_gif_s2.name,
+                                    mime="image/gif",
+                                    key="download_existing_s2",
+                                )
+
+                    with existing_col_ls:
+                        if potential_gif_landsat.exists():
+                            st.subheader("Landsat (2000-2025)")
+                            st.info("Timelapse already exists")
+                            # Use simple path like the working version
+                            st.image(str(potential_gif_landsat), caption=f"Timelapse: {current}", width=512)
+
+                            with open(potential_gif_landsat, "rb") as f:
+                                st.download_button(
+                                    label="💾 Download GIF",
+                                    data=f,
+                                    file_name=potential_gif_landsat.name,
+                                    mime="image/gif",
+                                    key="download_existing_landsat",
+                                )
 
         # Popup dialog for time series
         if st.session_state.get("show_ts_popup", False) and current:
