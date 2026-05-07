@@ -14,6 +14,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import xarray as xr
 
+from water_timeseries.utils.data import dw_bandnames, jrc_bandnames
 from water_timeseries.utils.earthengine import create_timelapse
 from water_timeseries.utils.plotting import (
     plot_water_time_series_dw,
@@ -314,17 +315,7 @@ class DWDataset(LakeDataset):
         """
         super().__init__(ds, mask_data=mask_data)
         self.water_column = "water"
-        self.data_columns = [
-            "water",
-            "bare",
-            "snow_and_ice",
-            "trees",
-            "grass",
-            "flooded_vegetation",
-            "crops",
-            "shrub_and_scrub",
-            "built",
-        ]
+        self.data_columns = dw_bandnames
 
     def _preprocess(self):
         """Preprocess Dynamic World data.
@@ -478,7 +469,7 @@ class JRCDataset(LakeDataset):
         """
         super().__init__(ds, mask_data=mask_data)
         self.water_column = "area_water_permanent"
-        self.data_columns = ["area_water_permanent", "area_water_seasonal", "area_land"]
+        self.data_columns = jrc_bandnames
 
     def _preprocess(self):
         """Preprocess JRC water data.

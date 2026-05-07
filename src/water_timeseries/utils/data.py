@@ -108,3 +108,23 @@ def annotate_xr_dataset_dw(ds: xr.Dataset, input_vector_file: Path | str = None)
     )
     ds.attrs["contact"] = "ingmar.nitze@awi.de"
     return ds
+
+
+dw_bandnames = [
+    "water",
+    "trees",
+    "grass",
+    "flooded_vegetation",
+    "crops",
+    "shrub_and_scrub",
+    "built",
+    "bare",
+    "snow_and_ice",
+]
+
+jrc_bandnames = [
+    "area_nodata",
+    "area_land",
+    "area_water_seasonal",
+    "area_water_permanent",
+]

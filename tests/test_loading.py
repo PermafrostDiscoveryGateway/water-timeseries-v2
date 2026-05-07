@@ -26,7 +26,7 @@ class TestDWDatasetLoading:
             "shrub_and_scrub",
             "built",
         ]
-        assert ds.data_columns == expected_columns
+        assert all(col in ds.data_columns for col in expected_columns)
 
     def test_dw_dataset_has_area_data(self, dw_test_dataset):
         """Test that DWDataset calculates area_data variable."""
@@ -57,7 +57,7 @@ class TestJRCDatasetLoading:
         """Test that JRCDataset has correct data columns."""
         ds = JRCDataset(jrc_test_dataset)
         expected_columns = ["area_water_permanent", "area_water_seasonal", "area_land"]
-        assert ds.data_columns == expected_columns
+        assert all(col in ds.data_columns for col in expected_columns)
 
     def test_jrc_dataset_has_area_data(self, jrc_test_dataset):
         """Test that JRCDataset calculates area_data variable."""

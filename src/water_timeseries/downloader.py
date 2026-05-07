@@ -20,7 +20,7 @@ import xarray as xr
 from loguru import logger
 from tqdm import tqdm
 
-from water_timeseries.utils.data import annotate_xr_dataset_dw, annotate_xr_dataset_jrc
+from water_timeseries.utils.data import annotate_xr_dataset_dw, annotate_xr_dataset_jrc, dw_bandnames, jrc_bandnames
 from water_timeseries.utils.earthengine import (
     calc_monthly_dw,
     create_dw_classes_mask,
@@ -86,23 +86,8 @@ class EarthEngineDownloader:
 
         self.output_dir = Path(output_dir) if output_dir else Path("downloads")
         self.ee_auth = ee_auth
-        self.dw_bandnames = [
-            "water",
-            "trees",
-            "grass",
-            "flooded_vegetation",
-            "crops",
-            "shrub_and_scrub",
-            "built",
-            "bare",
-            "snow_and_ice",
-        ]
-        self.jrc_bandnames = [
-            "area_nodata",
-            "area_land",
-            "area_water_seasonal",
-            "area_water_permanent",
-        ]
+        self.dw_bandnames = dw_bandnames
+        self.jrc_bandnames = jrc_bandnames
 
         # Initialize Earth Engine
         if ee_auth:
