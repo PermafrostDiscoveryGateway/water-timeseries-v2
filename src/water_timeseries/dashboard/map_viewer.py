@@ -3,6 +3,7 @@
 import os
 from io import BytesIO
 from pathlib import Path
+from threading import Thread
 from typing import List, Optional
 
 import folium
@@ -537,26 +538,36 @@ def create_app(
             # Plot time series if available
             if st.session_state.dw_dataset is not None and id_available_dw:
                 try:
-                    # Plot time series using unified helper function
-                    plot_time_series_data(
-                        st.session_state.dw_dataset,
-                        current,
-                        "dw",
-                        is_interactive,
-                        show_success=True,
-                        show_caption=True,
-                    )
-
-                    # Plot JRC time series if available
-                    if st.session_state.jrc_dataset is not None and id_available_jrc:
+                    # Create container with one row and two columns for time series plots
+                    ts_col1, ts_col2 = st.columns(2)
+                    
+                    # Plot Dynamic World time series in first column
+                    with ts_col1:
+                        st.subheader("Dynamic World")
                         plot_time_series_data(
-                            st.session_state.jrc_dataset,
+                            st.session_state.dw_dataset,
                             current,
-                            "jrc",
+                            "dw",
                             is_interactive,
-                            show_success=False,
+                            show_success=True,
                             show_caption=True,
                         )
+                    
+                    # Plot JRC time series in second column if available
+                    if st.session_state.jrc_dataset is not None and id_available_jrc:
+                        with ts_col2:
+                            st.subheader("JRC")
+                            plot_time_series_data(
+                                st.session_state.jrc_dataset,
+                                current,
+                                "jrc",
+                                is_interactive,
+                                show_success=False,
+                                show_caption=True,
+                            )
+                    else:
+                        with ts_col2:
+                            st.caption("JRC data not available for this feature")
                 except Exception as e:
                     st.error(f"Error plotting time series: {e}")
 

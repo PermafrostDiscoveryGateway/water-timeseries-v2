@@ -100,8 +100,8 @@ def plot_time_series_data(
         return False
 
     # Success message for DW dataset
-    if show_success and dataset_type == 'dw':
-        st.success("✅ Dynamic World data available")
+    # if show_success and dataset_type == 'dw':
+    #     st.success("✅ Dynamic World data available")
 
     try:
         if is_interactive:
