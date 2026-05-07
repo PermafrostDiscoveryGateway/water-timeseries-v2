@@ -1,5 +1,8 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
+import xarray as xr
 
 
 def calculate_water_area_after(
@@ -44,3 +47,61 @@ def calculate_temporal_stats(df: pd.DataFrame) -> pd.DataFrame:
     # change area perc
     df["water_change_perc"] = df["water_change_ha"].div(df["pre_break_median"].replace(0, np.nan)) * 100
     return df
+
+
+def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str = None) -> xr.Dataset:
+    """
+    Annotates an xarray Dataset with units, description, author, and contact information.
+
+    Parameters:
+    ds (xarray.Dataset): The dataset to be annotated.
+    input_vector_file (str|Path, optional): The path to the accompanying vector dataset. Defaults to None.
+
+    Returns:
+    xarray.Dataset: The annotated dataset.
+
+    """
+    # variable annotations
+    for var in list(ds.data_vars):
+        ds[var].attrs["units"] = "ha"
+
+    # dataset annotations
+    ds.attrs["description"] = (
+        'This datasets provides the annual area of permanent water, seasonal water, land, and no data for selected lake polygons. The areas were calculated from the JRC annual surface water dataset through Google Earth Engine. Lake polygons were calculated by Ingmar Nitze through the Permafrost Discovery Gateway Project. "id_geohash" is the lake_id, which needs be joined to the accompanying polygon vector dataset'
+    )
+    if input_vector_file is not None:
+        input_vector_file = Path(input_vector_file)
+        ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
+    ds.attrs["contact"] = "ingmar.nitze@awi.de"
+    return ds
+
+
+def annotate_xr_dataset_dw(ds: xr.Dataset, input_vector_file: Path | str = None) -> xr.Dataset:
+    """
+    Annotates an xarray Dataset with units, description, author, and contact information.
+
+    Parameters:
+    ds (xarray.Dataset): The dataset to be annotated.
+    input_vector_file (str|Path, optional): The path to the accompanying vector dataset. Defaults to None.
+
+    Returns:
+    xarray.Dataset: The annotated dataset.
+
+    """
+    # variable annotations
+    for var in list(ds.data_vars):
+        ds[var].attrs["units"] = "ha"
+
+    # dataset annotations
+    ds.attrs["description"] = (
+        'This datasets provides the monthly area of the dynamic world classes (water, trees, grass, flooded_vegetation, crops, shrub_and_scrub, built, bare, snow_and_ice) for selected lake polygons. The areas were calculated from the Dynamic World V1 dataset through Google Earth Engine. Lake polygons were calculated by Ingmar Nitze through the Permafrost Discovery Gateway Project. "id_geohash" is the lake_id, which needs be joined to the accompanying polygon vector dataset'
+    )
+    if input_vector_file is not None:
+        input_vector_file = Path(input_vector_file)
+        ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    ds.attrs["author"] = (
+        "Ingmar Nitze (Alfred Wegener Institute), Kayla Hardie (Google), Chen Wang (NCSA, U Illinois), Todd Nicholson(NCSA, U Illinois)"
+    )
+    ds.attrs["contact"] = "ingmar.nitze@awi.de"
+    return ds
