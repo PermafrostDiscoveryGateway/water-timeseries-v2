@@ -13,7 +13,7 @@ import streamlit as st
 import xarray as xr
 from streamlit_folium import st_folium
 
-from water_timeseries.dataset import DWDataset
+from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.io import load_vector_dataset
 from water_timeseries.utils.map_styling import (
@@ -280,13 +280,16 @@ class MapViewer:
 
 
 def create_app(
-    data_path: str | Path = "tests/data/lake_polygons.parquet", zarr_path: str | Path = "tests/data/lakes_dw_test.zarr"
+    data_path: str | Path = "tests/data/lake_polygons.parquet", 
+    zarr_path: str | Path = "tests/data/lakes_dw_test.zarr",
+    zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
 ):
     """Create the Streamlit app with map viewer.
 
     Args:
         data_path: Path to the parquet file containing lake polygons.
-        zarr_path: Path to the zarr file containing time series data.
+        zarr_path: Path to the zarr file containing Dynamic World time series data.
+        zarr_path_jrc: Path to the zarr file containing JRC time series data.
     """
     st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
 
@@ -331,16 +334,21 @@ def create_app(
     # Use function parameters for data paths
     data_path_input = str(data_path)
     zarr_path_input = str(zarr_path)
+    zarr_path_jrc_input = str(zarr_path_jrc)
     id_column = "id_geohash"
     zoom_level = 10
 
     # Initialize dataset in session state if not already
     if "dw_dataset" not in st.session_state:
         st.session_state.dw_dataset = None
+    if "jrc_dataset" not in st.session_state:
+        st.session_state.jrc_dataset = None
     if "show_ts_popup" not in st.session_state:
         st.session_state.show_ts_popup = False
-    if "downloaded_ds" not in st.session_state:
-        st.session_state.downloaded_ds = None
+    if "downloaded_dsdw" not in st.session_state:
+        st.session_state.downloaded_dsdw = None
+    if "downloaded_dsjrc" not in st.session_state:
+        st.session_state.downloaded_dsjrc = None
 
     # Create map viewer
     try:
@@ -413,9 +421,9 @@ def create_app(
 
             # Load dataset if not already loaded
             # Prioritize downloaded data over cached zarr
-            if st.session_state.dw_dataset is None and st.session_state.downloaded_ds is not None:
+            if st.session_state.dw_dataset is None and st.session_state.downloaded_dsdw is not None:
                 try:
-                    st.session_state.dw_dataset = DWDataset(st.session_state.downloaded_ds)
+                    st.session_state.dw_dataset = DWDataset(st.session_state.downloaded_dsdw)
                 except Exception as e:
                     st.error(f"Error processing downloaded data: {e}")
             elif st.session_state.dw_dataset is None:
@@ -425,14 +433,38 @@ def create_app(
                 except Exception as e:
                     st.error(f"Error loading time series data: {e}")
 
-            # Check if selected id_geohash is available in the dataset
-            id_available = False
-            if st.session_state.dw_dataset is not None:
-                available_ids = st.session_state.dw_dataset.object_ids_
-                id_available = current in available_ids
+            # Load JRC dataset if not already loaded
+            # Prioritize downloaded data over cached zarr
+            if st.session_state.jrc_dataset is None and st.session_state.downloaded_dsjrc is not None:
+                try:
+                    st.session_state.jrc_dataset = JRCDataset(st.session_state.downloaded_dsjrc)
+                    st.caption(f"JRC dataset loaded from downloaded data, available IDs: {st.session_state.jrc_dataset.object_ids_}")
+                except Exception as e:
+                    st.error(f"Error processing downloaded JRC data: {e}")
+            elif st.session_state.jrc_dataset is None:
+                try:
+                    ds_jrc = xr.open_zarr(zarr_path_jrc_input)
+                    st.session_state.jrc_dataset = JRCDataset(ds_jrc)
+                    st.caption(f"JRC dataset loaded from zarr, available IDs: {st.session_state.jrc_dataset.object_ids_}")
+                except Exception as e:
+                    st.error(f"Error loading JRC time series data: {e}")
+
+            # Re-check if selected id_geohash is available in the JRC dataset (after loading downloaded data)
+            if st.session_state.jrc_dataset is not None:
+                available_ids_jrc = st.session_state.jrc_dataset.object_ids_
+                id_available_jrc = current in available_ids_jrc
+                st.caption(f"Checking JRC availability: current={current}, available={id_available_jrc}")
+
+            # Define id_available_dw if not already set (needed for cases where DW data was already loaded)
+            if "id_available_dw" not in locals():
+                id_available_dw = False
+                if st.session_state.dw_dataset is not None:
+                    available_ids_dw = st.session_state.dw_dataset.object_ids_
+                    id_available_dw = current in available_ids_dw
+                    st.caption(f"DW availability check: current={current}, available={id_available_dw}")
 
             # Automatically download if not available
-            if not id_available:
+            if not id_available_dw or not id_available_jrc:
                 st.caption("Downloading...")
 
                 # Download data for the specific geohash
@@ -440,69 +472,128 @@ def create_app(
                     # Create downloader with the project from environment
                     downloader = EarthEngineDownloader(ee_auth=True)
 
-                    # Download data for the specific geohash
-                    ds_downloaded = downloader.download_dw_monthly(
-                        vector_dataset=data_path_input,
-                        name_attribute=id_column,
-                        id_list=[current],
-                        years=list(range(2017, 2026)),
-                        months=[6, 7, 8, 9],
-                        date_list=None,
-                    )
+                    if not id_available_dw:
+                        # Download data for the specific geohash
+                        st.caption("Downloading DW data ...")
+                        dsdw_downloaded = downloader.download_dw_monthly(
+                            vector_dataset=data_path_input,
+                            name_attribute=id_column,
+                            id_list=[current],
+                            years=list(range(2017, 2026)),
+                            months=[6, 7, 8, 9],
+                            date_list=None,
+                        )
 
-                    if ds_downloaded is not None:
-                        # Convert downloaded data to DWDataset
-                        downloaded_dataset = DWDataset(ds_downloaded)
+                        if dsdw_downloaded is not None:
+                            # Convert downloaded data to DWDataset
+                            downloaded_dataset_dw = DWDataset(dsdw_downloaded)
 
-                        # Merge with existing cached data if available
-                        if st.session_state.dw_dataset is not None:
-                            try:
-                                st.session_state.dw_dataset = st.session_state.dw_dataset.merge(
-                                    downloaded_dataset, how="id_geohash"
-                                )
-                            except Exception as merge_e:
-                                # If merge fails, use downloaded data only
-                                st.sidebar.warning(f"Could not merge data: {merge_e}")
-                                st.session_state.dw_dataset = downloaded_dataset
+                            # Merge with existing cached data if available
+                            if st.session_state.dw_dataset is not None:
+                                try:
+                                    st.session_state.dw_dataset = st.session_state.dw_dataset.merge(
+                                        downloaded_dataset_dw, how="id_geohash"
+                                    )
+                                except Exception as merge_e:
+                                    # If merge fails, use downloaded data only
+                                    st.sidebar.warning(f"Could not merge data: {merge_e}")
+                                    st.session_state.dw_dataset = downloaded_dataset_dw
+                            else:
+                                st.session_state.dw_dataset = downloaded_dataset_dw
+
+                            st.session_state.downloaded_dsdw = dsdw_downloaded
+                            id_available_dw = True
+                            st.rerun()
                         else:
-                            st.session_state.dw_dataset = downloaded_dataset
+                            st.error("Download returned no data.")
+                    
+                    if not id_available_jrc:
+                        # JRC Download
+                        st.caption("Downloading JRC data ...")
+                        dsjrc_downloaded = downloader.download_jrc_annual(
+                            vector_dataset=data_path_input,
+                            name_attribute=id_column,
+                            id_list=[current],
+                            years=range(1984, 2022),
+                        )
 
-                        st.session_state.downloaded_ds = ds_downloaded
-                        id_available = True
-                        st.rerun()
-                    else:
-                        st.error("Download returned no data.")
+                        # add dw dataset to session state
+                        if dsjrc_downloaded is not None:
+                            # Convert downloaded data to JRCDataset
+                            downloaded_dataset_jrc = JRCDataset(dsjrc_downloaded)
+
+                            # Merge with existing cached data if available
+                            if st.session_state.jrc_dataset is not None:
+                                try:
+                                    st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
+                                        downloaded_dataset_jrc, how="id_geohash"
+                                    )
+                                except Exception as merge_e:
+                                    # If merge fails, use downloaded data only
+                                    st.sidebar.warning(f"Could not merge data: {merge_e}")
+                                    st.session_state.jrc_dataset = downloaded_dataset_jrc
+                            else:
+                                st.session_state.jrc_dataset = downloaded_dataset_jrc
+
+                            st.session_state.downloaded_dsjrc = dsjrc_downloaded
+                            id_available_jrc = True
+                            
+                            # Also set id_available_dw = True since DW data was also downloaded
+                            id_available_dw = True
+                            
+                            st.caption("Both DW and JRC data downloaded successfully!")
+                            st.rerun()
+                        else:
+                            st.error("Download returned no data.")
 
                 except Exception as e:
                     st.error(f"Error downloading data: {e}")
                     st.info("Make sure you have Google Earth Engine authentication configured.")
 
+
             # Plot time series if available
-            if st.session_state.dw_dataset is not None and id_available:
+            if st.session_state.dw_dataset is not None and id_available_dw:
+                st.success("✅ Dynamic World data available")
                 try:
                     # Use interactive or static plotting based on toggle
                     if is_interactive:
-                        fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
-                        st.plotly_chart(fig, width="stretch")
+                        fig_dw = st.session_state.dw_dataset.plot_timeseries_interactive(current)
+                        st.plotly_chart(fig_dw, width="stretch")
 
                         # Convert figure to HTML for download (only when requested)
-                        html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
+                        html_buffer = fig_dw.to_html(full_html=False, include_plotlyjs="cdn")
                         st.download_button(
                             label="💾 Save Interactive Plot (HTML)",
                             data=html_buffer,
                             file_name=f"timeseries_{current}.html",
                             mime="text/html",
                         )
+
+                        # Plot JRC time series if available
+                        if st.session_state.jrc_dataset is not None and id_available_jrc:
+                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
+                            st.plotly_chart(fig_jrc, width="stretch")
+
+                            # Convert figure to HTML for download (only when requested)
+                            html_buffer = fig_jrc.to_html(full_html=False, include_plotlyjs="cdn")
+                            st.download_button(
+                                label="💾 Save JRC Interactive Plot (HTML)",
+                                data=html_buffer,
+                                file_name=f"timeseries_jrc_{current}.html",
+                                mime="text/html",
+                            )
+                        else:
+                            st.caption("⚠️ JRC data not available for this feature")
                     else:
-                        fig = st.session_state.dw_dataset.plot_timeseries(current)
+                        fig_dw = st.session_state.dw_dataset.plot_timeseries(current)
 
                         # Save figure to bytes buffer for download
                         img_buffer = BytesIO()
-                        fig.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
+                        fig_dw.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
                         img_buffer.seek(0)
 
                         # Display and offer download
-                        st.pyplot(fig)
+                        st.pyplot(fig_dw)
 
                         st.download_button(
                             label="💾 Save Figure",
@@ -511,7 +602,32 @@ def create_app(
                             mime="image/png",
                         )
 
-                        plt.close(fig)  # Close matplotlib figure
+                        plt.close(fig_dw)  # Close matplotlib figure
+
+                        # Plot JRC time series if available
+                        if st.session_state.jrc_dataset is not None and id_available_jrc:
+                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries(current)
+
+                            # Save figure to bytes buffer for download
+                            img_buffer = BytesIO()
+                            fig_jrc.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
+                            img_buffer.seek(0)
+
+                            # Display and offer download
+                            st.pyplot(fig_jrc)
+
+                            st.download_button(
+                                label="💾 Save JRC Figure",
+                                data=img_buffer,
+                                file_name=f"timeseries_jrc_{current}.png",
+                                mime="image/png",
+                            )
+
+                            plt.close(fig_jrc)  # Close matplotlib figure
+                        else:
+                            st.caption("⚠️ JRC data not available for this feature")
+
+
 
                     # ============================================
                     # Timelapse Section
@@ -679,9 +795,9 @@ def create_app(
 
                 # Load dataset if not already loaded
                 # Prioritize downloaded data over cached zarr
-                if st.session_state.dw_dataset is None and st.session_state.downloaded_ds is not None:
+                if st.session_state.dw_dataset is None and st.session_state.downloaded_dsdw is not None:
                     try:
-                        st.session_state.dw_dataset = DWDataset(st.session_state.downloaded_ds)
+                        st.session_state.dw_dataset = DWDataset(st.session_state.downloaded_dsdw)
                     except Exception as e:
                         st.error(f"Error processing downloaded data: {e}")
                 elif st.session_state.dw_dataset is None:
@@ -691,11 +807,30 @@ def create_app(
                     except Exception as e:
                         st.error(f"Error loading time series data: {e}")
 
-                # Check if id is available
+                # Load JRC dataset if not already loaded
+                # Prioritize downloaded data over cached zarr
+                if st.session_state.jrc_dataset is None and st.session_state.downloaded_dsjrc is not None:
+                    try:
+                        st.session_state.jrc_dataset = JRCDataset(st.session_state.downloaded_dsjrc)
+                    except Exception as e:
+                        st.error(f"Error processing downloaded JRC data: {e}")
+                elif st.session_state.jrc_dataset is None:
+                    try:
+                        ds_jrc = xr.open_zarr(zarr_path_jrc_input)
+                        st.session_state.jrc_dataset = JRCDataset(ds_jrc)
+                    except Exception as e:
+                        st.error(f"Error loading JRC time series data: {e}")
+
+                # Check if ids are available
                 id_available = False
                 if st.session_state.dw_dataset is not None:
                     available_ids = st.session_state.dw_dataset.object_ids_
                     id_available = current in available_ids
+
+                id_available_jrc = False
+                if st.session_state.jrc_dataset is not None:
+                    available_ids_jrc = st.session_state.jrc_dataset.object_ids_
+                    id_available_jrc = current in available_ids_jrc
 
                 # Automatically download if not available
                 if not id_available:
@@ -711,7 +846,7 @@ def create_app(
                             date_list=None,
                         )
                         if ds_downloaded is not None:
-                            st.session_state.downloaded_ds = ds_downloaded
+                            st.session_state.downloaded_dsdw = ds_downloaded
                             st.session_state.dw_dataset = DWDataset(ds_downloaded)
                             id_available = True
                             st.rerun()
@@ -759,6 +894,48 @@ def create_app(
                             plt.close(fig)  # Close matplotlib figure
                     except Exception as e:
                         st.error(f"Error plotting time series: {e}")
+
+                # Plot JRC time series if available
+                if st.session_state.jrc_dataset is not None and id_available_jrc:
+                    try:
+                        # Use interactive or static plotting based on toggle
+                        if is_interactive:
+                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
+                            st.plotly_chart(fig_jrc, width="stretch")
+
+                            # Convert figure to HTML for download (only when requested)
+                            html_buffer = fig_jrc.to_html(full_html=False, include_plotlyjs="cdn")
+                            st.download_button(
+                                label="💾 Save JRC Interactive Plot (HTML)",
+                                data=html_buffer,
+                                file_name=f"timeseries_jrc_{current}.html",
+                                mime="text/html",
+                            )
+                        else:
+                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries(current)
+
+                            # Save figure to bytes buffer for download
+                            img_buffer = BytesIO()
+                            fig_jrc.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
+                            img_buffer.seek(0)
+
+                            # Display and offer download
+                            st.pyplot(fig_jrc)
+
+                            col1, col2 = st.columns([1, 4])
+                            with col1:
+                                st.download_button(
+                                    label="💾 Save JRC Figure",
+                                    data=img_buffer,
+                                    file_name=f"timeseries_jrc_{current}.png",
+                                    mime="image/png",
+                                )
+
+                            plt.close(fig_jrc)  # Close matplotlib figure
+                    except Exception as e:
+                        st.error(f"Error plotting JRC time series: {e}")
+                else:
+                    st.caption("⚠️ JRC data not available for this feature")
 
                 if st.button("Close", key="close_ts_popup"):
                     st.session_state.show_ts_popup = False
