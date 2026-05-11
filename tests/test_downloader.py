@@ -9,6 +9,7 @@ import pathlib
 import unittest.mock as mock
 
 import pytest
+import geopandas as gpd
 
 from water_timeseries.downloader import EarthEngineDownloader, setup_annual_dates, setup_dates_from_options
 from water_timeseries.utils.earthengine import calc_monthly_dw
@@ -346,6 +347,32 @@ class TestJRCDownloader:
         )
         assert downloader._validate_years_jrc([2017, 2018, 2019, 2020, 2021, 2022]) == [2017, 2018, 2019, 2020, 2021]
 
+    def test_download_jrc_input_data_both_none(self, monkeypatch):
+        """Test that invalid years are skipped and warnings are logged."""
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
+        downloader = EarthEngineDownloader()
+        with pytest.raises(ValueError, match="Either vector_dataset or gdf must be provided"):
+            downloader.download_jrc_annual(
+                vector_dataset=None,
+                gdf=None,
+                name_attribute="id_geohash",
+                years=[2017, 2018, 2019, 2020, 2021, 2022],
+                no_download=True,
+            )
+
+    def test_download_jrc_input_data_both_true(self, monkeypatch):
+        """Test that invalid years are skipped and warnings are logged."""
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
+        downloader = EarthEngineDownloader()
+        with pytest.raises(ValueError, match="Only one of vector_dataset or gdf should be provided, not both"):
+            downloader.download_jrc_annual(
+                vector_dataset=VECTOR_DATASET,
+                gdf=gpd.GeoDataFrame(),
+                name_attribute="id_geohash",
+                years=[2017, 2018, 2019, 2020, 2021, 2022],
+                no_download=True,
+            )
+
 
 class TestCalcMonthlyDw:
     """Test the calc_monthly_dw function for handling missing data."""
@@ -378,6 +405,34 @@ class TestCalcMonthlyDw:
 
             # Verify that None was returned
             assert result is None
+
+    def test_download_dw_input_data_both_none(self, monkeypatch):
+        """Test that invalid years are skipped and warnings are logged."""
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
+        downloader = EarthEngineDownloader()
+        with pytest.raises(ValueError, match="Either vector_dataset or gdf must be provided"):
+            downloader.download_dw_monthly(
+                vector_dataset=None,
+                gdf=None,
+                name_attribute="id_geohash",
+                years=[2017, 2018, 2019, 2020, 2021, 2022],
+                months=[6, 7, 8, 9],
+                no_download=True,
+            )
+
+    def test_download_dw_input_data_both_true(self, monkeypatch):
+        """Test that invalid years are skipped and warnings are logged."""
+        # monkeypatch.setenv("EE_PROJECT", "test-project")
+        downloader = EarthEngineDownloader()
+        with pytest.raises(ValueError, match="Only one of vector_dataset or gdf should be provided, not both"):
+            downloader.download_dw_monthly(
+                vector_dataset=VECTOR_DATASET,
+                gdf=gpd.GeoDataFrame(),
+                name_attribute="id_geohash",
+                years=[2017, 2018, 2019, 2020, 2021, 2022],
+                months=[6, 7, 8, 9],
+                no_download=True,
+            )
 
 
 # Run tests

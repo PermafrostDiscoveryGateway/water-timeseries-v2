@@ -425,8 +425,9 @@ class EarthEngineDownloader:
 
     def download_dw_monthly(
         self,
-        vector_dataset: str | Path,
-        name_attribute: str,
+        vector_dataset: Optional[str | Path] = None,
+        gdf: Optional[gpd.GeoDataFrame] = None,
+        name_attribute: str = "id_geohash",
         years: Optional[List[int]] = None,
         months: Optional[List[int]] = None,
         date_list: Optional[List[str]] = None,
@@ -450,7 +451,8 @@ class EarthEngineDownloader:
         mutually exclusive.
 
         Args:
-            vector_dataset: Path to the input vector dataset (Parquet format).
+            vector_dataset: Path to the input vector dataset (Parquet format). Mutually exclusive with `gdf`.
+            gdf: Optional GeoDataFrame to use directly instead of loading from vector_dataset path. Mutually exclusive with `vector_dataset`.
             name_attribute: Column name in the vector dataset to use for grouping.
             years: List of years to process. Must be provided together with `months`
                 if `date_list` is not used. Default: [2017-2025].
@@ -483,6 +485,12 @@ class EarthEngineDownloader:
             ValueError: If neither (years and months) nor date_list is provided,
                 or if both are provided.
         """
+        # check mutually exclusive vector_dataset versus gdf
+        if vector_dataset is None and gdf is None:
+            raise ValueError("Either vector_dataset or gdf must be provided")
+        elif vector_dataset is not None and gdf is not None:
+            raise ValueError("Only one of vector_dataset or gdf should be provided, not both")
+
         # Announce no_download mode at the top
         if no_download:
             self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
@@ -495,7 +503,13 @@ class EarthEngineDownloader:
             years = self._validate_years_dw(years)
 
         # Read vector data using the reusable function
-        gdf = load_vector_dataset(vector_dataset, logger=self.logger)
+        if vector_dataset is not None:
+            self._log_info(f"Loading vector dataset from: {vector_dataset}")
+            gdf = load_vector_dataset(vector_dataset, logger=self.logger)
+
+        elif gdf is not None:
+            gdf = gdf.copy()
+
         if name_attribute not in gdf.columns:
             raise KeyError(f"The designated column '{name_attribute}' is not present in the vector dataset.")
 
@@ -631,8 +645,9 @@ class EarthEngineDownloader:
 
     def download_jrc_annual(
         self,
-        vector_dataset: str | Path,
-        name_attribute: str,
+        vector_dataset: Optional[str | Path] = None,
+        gdf: Optional[gpd.GeoDataFrame] = None,
+        name_attribute: str = "id_geohash",
         years: Optional[List[int] | np.ndarray | range] = None,
         bbox_west: float = -180,
         bbox_east: float = 180,
@@ -656,8 +671,11 @@ class EarthEngineDownloader:
         - area_water_seasonal: Seasonally flooded water areas
         - area_water_permanent: Permanently flooded water areas
 
+        Either provide `vector_dataset` or `gdf`. These options are mutually exclusive.
+
         Args:
-            vector_dataset: Path to the input vector dataset (Parquet format).
+            vector_dataset: Path to the input vector dataset (Parquet format). Mutually exclusive with `gdf`.
+            gdf: Optional GeoDataFrame to use directly instead of loading from vector_dataset path. Mutually exclusive with `vector_dataset`.
             name_attribute: Column name in the vector dataset to use for grouping.
             years: List of years to process (e.g., [2017, 2018]). Default: [1984-2021].
             bbox_west: Western boundary for spatial filtering (default: -180).
@@ -685,6 +703,7 @@ class EarthEngineDownloader:
         Raises:
             KeyError: If the specified name_attribute column is not found in the
                 vector dataset.
+            ValueError: If neither vector_dataset nor gdf is provided, or if both are provided.
 
         Example:
             >>> downloader = EarthEngineDownloader()
@@ -694,6 +713,12 @@ class EarthEngineDownloader:
             ...     years=[2017, 2018, 2019]
             ... )
         """
+        # check mutually exclusive vector_dataset versus gdf
+        if vector_dataset is None and gdf is None:
+            raise ValueError("Either vector_dataset or gdf must be provided")
+        elif vector_dataset is not None and gdf is not None:
+            raise ValueError("Only one of vector_dataset or gdf should be provided, not both")
+
         # Announce no_download mode at the top
         if no_download:
             self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
@@ -702,7 +727,14 @@ class EarthEngineDownloader:
         years = self._validate_years_jrc(years)
 
         # Read vector data using the reusable function
-        gdf = load_vector_dataset(vector_dataset, logger=self.logger)
+        if vector_dataset is not None:
+            self._log_info(f"Loading vector dataset from: {vector_dataset}")
+            gdf = load_vector_dataset(vector_dataset, logger=self.logger)
+
+        else:
+            self._log_info("Using provided GeoDataFrame directly, no further filtering applied")
+            gdf = gdf.copy()
+
         if name_attribute not in gdf.columns:
             raise KeyError(f"The designated column '{name_attribute}' is not present in the vector dataset.")
 
@@ -712,6 +744,12 @@ class EarthEngineDownloader:
 
         # Apply ID filter if id_list is provided
         gdf = self._apply_id_filter(gdf, id_list, name_attribute)
+
+        if bbox_west > bbox_east or bbox_south > bbox_north:
+            raise ValueError(
+                f"Invalid bbox parameters: west={bbox_west}, east={bbox_east}, south={bbox_south}, north={bbox_north}. "
+                "Ensure that west <= east and south <= north."
+            )
 
         # Apply spatial bbox filter if any bbox parameter is provided and differs from defaults
         if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]) and not (
