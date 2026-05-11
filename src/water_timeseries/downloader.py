@@ -488,7 +488,11 @@ class EarthEngineDownloader:
             self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
 
         # Check if years are empty and create default or check if they are in the correct format
-        years = self._validate_years_dw(years)
+
+        if date_list is not None and (years is not None or months is not None):
+            self._log_warning("years and/or months parameters will be ignored since date_list is provided")
+        elif date_list is None:
+            years = self._validate_years_dw(years)
 
         # Read vector data using the reusable function
         gdf = load_vector_dataset(vector_dataset, logger=self.logger)
