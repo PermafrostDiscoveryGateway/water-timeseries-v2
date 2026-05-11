@@ -8,8 +8,8 @@ Dynamic World data, JRC data, and error handling.
 import pathlib
 import unittest.mock as mock
 
-import pytest
 import geopandas as gpd
+import pytest
 
 from water_timeseries.downloader import EarthEngineDownloader, setup_annual_dates, setup_dates_from_options
 from water_timeseries.utils.earthengine import calc_monthly_dw
