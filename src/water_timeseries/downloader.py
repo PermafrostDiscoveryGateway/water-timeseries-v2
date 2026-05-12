@@ -452,6 +452,7 @@ class EarthEngineDownloader:
         scale: float = 10,
         max_total_requests: int = 500,
         n_parallel: int = 1,
+        chunk_method: str = "simple",
         no_download: bool = False,
         save_to_file: Optional[str] = None,
     ) -> xr.Dataset:
@@ -572,7 +573,7 @@ class EarthEngineDownloader:
         self._log_info(f"Processing dates: {dates}")
 
         # Chunk the GeoDataFrame into smaller pieces based on number of dates
-        gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates)
+        gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates, chunk_method=chunk_method)
 
         # Return early if no_download is True - skip downloading but show summary
         if no_download:
@@ -670,6 +671,7 @@ class EarthEngineDownloader:
         scale: float = 30,
         max_total_requests: int = 500,
         n_parallel: int = 1,
+        chunk_method: str = "simple",
         no_download: bool = False,
         save_to_file: Optional[str] = None,
     ) -> xr.Dataset:
@@ -702,6 +704,7 @@ class EarthEngineDownloader:
             max_total_requests: Maximum number of total requests per chunk (features * years).
                 Default: 500.
             n_parallel: Number of parallel workers for processing chunks (default: 1).
+            chunk_method: Method for chunking the data. Options are "simple" or "spatial_kmeans".
             no_download: If True, only log the download parameters without actually
                 downloading data (default: False).
             save_to_file: Optional path to save the downloaded dataset. If provided, the
@@ -798,7 +801,7 @@ class EarthEngineDownloader:
         self._log_info(f"Processing years: {[d.split('-')[0] for d in dates]}")
 
         # Chunk the GeoDataFrame into smaller pieces based on number of dates
-        gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates)
+        gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates, chunk_method=chunk_method)
 
         # Return early if no_download is True - skip downloading but show summary
         if no_download:
