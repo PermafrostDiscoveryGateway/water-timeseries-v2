@@ -30,7 +30,7 @@ from water_timeseries.utils.earthengine import (
     setup_monthly_dates,
 )
 from water_timeseries.utils.io import load_vector_dataset, save_xarray_dataset
-from water_timeseries.utils.spatial import filter_gdf_by_bbox
+from water_timeseries.utils.spatial import chunk_gdf_simple, chunk_gdf_spatial_kmeans, filter_gdf_by_bbox
 
 # Re-export for backward compatibility
 __all__ = [
@@ -222,7 +222,7 @@ class EarthEngineDownloader:
         }
         return fc, reducer_dict
 
-    def _chunk_gdf(self, gdf, max_total_requests: int, n_dates: int = 1) -> list:
+    def _chunk_gdf(self, gdf, max_total_requests: int, n_dates: int = 1, chunk_method: str = "spatial_kmeans") -> list:
         """Split a GeoDataFrame into chunks based on max_total_requests.
 
         Chunks the GeoDataFrame into smaller subsets to manage API request limits.
@@ -232,10 +232,14 @@ class EarthEngineDownloader:
             gdf: GeoDataFrame to chunk.
             max_total_requests: Maximum number of total requests per chunk (features * dates).
             n_dates: Number of dates/time periods being processed.
+            chunk_method: Method to use for chunking ("spatial_kmeans" or "simple").
 
         Returns:
             List of GeoDataFrames, each representing a chunk.
         """
+        if chunk_method not in ["spatial_kmeans", "simple"]:
+            raise ValueError("Invalid chunk_method. Must be 'spatial_kmeans' or 'simple'.")
+
         n_features = len(gdf)
 
         # Calculate chunk size based on max_total_requests and number of dates
@@ -243,14 +247,23 @@ class EarthEngineDownloader:
         features_per_chunk = max_total_requests // n_dates if n_dates > 0 else max_total_requests
         chunk_size = max(1, min(n_features, features_per_chunk))
 
-        self._log_info(
-            f"Chunking: n_features={n_features}, max_total_requests={max_total_requests}, n_dates={n_dates}, features_per_chunk={chunk_size}"
-        )
-
-        chunks = []
-        for i in range(0, n_features, chunk_size):
-            chunk = gdf.iloc[i : i + chunk_size]
-            chunks.append(chunk)
+        # spatial chunking
+        if chunk_method == "spatial_kmeans":
+            self._log_info(
+                f"Chunking with spatial KMeans: n_features={n_features}, max_total_requests={max_total_requests}, n_dates={n_dates}, features_per_chunk={chunk_size}"
+            )
+            chunks = chunk_gdf_spatial_kmeans(gdf=gdf, chunk_size=chunk_size, epsg=3995)
+            self._log_info(
+                f"Dataset was split into {len(chunks)} spatially coherent chunks using KMeans clustering (chunk_size={chunk_size})"
+            )
+        else:
+            self._log_info(
+                f"Chunking: n_features={n_features}, max_total_requests={max_total_requests}, n_dates={n_dates}, features_per_chunk={chunk_size}"
+            )
+            chunks = chunk_gdf_simple(gdf=gdf, chunk_size=chunk_size)
+            self._log_info(
+                f"Dataset was split into {len(chunks)} spatially coherent chunks using simple chunking (chunk_size={chunk_size})"
+            )
 
         self._log_info(f"Split {n_features} features into {len(chunks)} chunks (chunk_size={chunk_size})")
         return chunks
