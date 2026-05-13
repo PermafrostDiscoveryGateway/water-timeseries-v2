@@ -9,10 +9,13 @@ import folium
 import geemap
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 import streamlit as st
 import xarray as xr
 from streamlit_folium import st_folium
 
+from water_timeseries.breakpoint import NRTBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
@@ -70,6 +73,9 @@ class MapViewer:
         zoom: int = 10,
         map_backend: str = "folium",  # "folium", or "st_map"
         max_features: Optional[int] = None,  # Limit features for faster loading
+        drained_gdf: Optional[gpd.GeoDataFrame] = None,
+        drained_label: Optional[str] = None,
+        show_main_layer: bool = True,
     ):
         """Initialize the MapViewer.
 
@@ -90,6 +96,9 @@ class MapViewer:
         self.map_center = map_center
         self.map_backend = map_backend  # "folium" or "st_map"
         self.max_features = max_features  # Limit features for faster loading
+        self.drained_gdf = drained_gdf
+        self.drained_label = drained_label
+        self.show_main_layer = show_main_layer
 
         # Load data if parquet_path provided
         if gdf is None and parquet_path is not None:
@@ -219,6 +228,7 @@ class MapViewer:
             ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
             ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
         ]
+        valid_gdf = _sanitize_geojson_properties(valid_gdf)
         valid_gdf, fields_to_show, aliases_to_show = format_tooltip_columns(
             valid_gdf,
             id_column=self.id_column,
@@ -228,12 +238,47 @@ class MapViewer:
         folium.GeoJson(
             valid_gdf,
             name="Lakes",
+            show=self.show_main_layer,
             style_function=style_function,
             tooltip=folium.GeoJsonTooltip(
                 fields=fields_to_show,
                 aliases=aliases_to_show,
             ),
         ).add_to(m)
+
+        drained_gdf = getattr(self, "drained_gdf", None)
+        if drained_gdf is not None and len(drained_gdf) > 0:
+            drained_gdf = drained_gdf[drained_gdf.geometry.notna() & ~drained_gdf.geometry.is_empty].copy()
+            if len(drained_gdf) > 0:
+                drained_gdf = _sanitize_geojson_properties(drained_gdf)
+                drained_tooltip_columns = [
+                    ("water_residual", "Water residual:", "{:.2f}", ""),
+                    ("water_observed", "Observed water:", "{:.2f}", ""),
+                    ("water_predicted", "Predicted water:", "{:.2f}", ""),
+                ]
+                drained_gdf, drained_fields, drained_aliases = format_tooltip_columns(
+                    drained_gdf,
+                    id_column=self.id_column,
+                    tooltip_columns=drained_tooltip_columns,
+                )
+                drained_label = getattr(self, "drained_label", None)
+                drained_layer_name = "Drained last month"
+                if drained_label:
+                    drained_layer_name = f"{drained_layer_name} ({drained_label})"
+                folium.GeoJson(
+                    drained_gdf,
+                    name=drained_layer_name,
+                    style_function=get_default_style_function(
+                        fill_color="#d73027",
+                        edge_color="#7f0000",
+                        edge_weight=2,
+                        fill_opacity=0.7,
+                    ),
+                    tooltip=folium.GeoJsonTooltip(
+                        fields=drained_fields,
+                        aliases=drained_aliases,
+                    ),
+                ).add_to(m)
 
         folium.LayerControl().add_to(m)
 
@@ -282,6 +327,51 @@ class MapViewer:
         allowing the user to make a new selection.
         """
         st.session_state.selected_geohash = None
+
+
+def _get_latest_dw_analysis_date(dw_dataset: DWDataset) -> Optional[pd.Timestamp]:
+    """Return the most recent DW date that has at least one non-NaN water value."""
+    available_dates = _get_available_dw_analysis_dates(dw_dataset)
+    if len(available_dates) == 0:
+        return None
+    return available_dates[-1]
+
+
+def _get_available_dw_analysis_dates(dw_dataset: DWDataset) -> List[pd.Timestamp]:
+    """Return DW dates that have at least one non-NaN water value."""
+    water_col = dw_dataset.water_column
+    water_da = dw_dataset.ds_normalized[water_col]
+    valid_counts = water_da.notnull().sum(dim="id_geohash").compute()
+    available_dates = valid_counts["date"].values[np.asarray(valid_counts.values) > 0]
+    if len(available_dates) == 0:
+        return []
+    available_dates = pd.to_datetime(available_dates)
+    return sorted(list(available_dates))
+
+
+def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Convert non-JSON-serializable values (e.g., Timestamp) to strings."""
+    sanitized = gdf.copy()
+    geometry_col = sanitized.geometry.name
+
+    datetime_cols = sanitized.select_dtypes(include=["datetime", "datetimetz"]).columns
+    for col in datetime_cols:
+        if col != geometry_col:
+            sanitized[col] = sanitized[col].astype(str)
+
+    object_cols = sanitized.select_dtypes(include=["object"]).columns
+    for col in object_cols:
+        if col == geometry_col:
+            continue
+        sanitized[col] = sanitized[col].apply(
+            lambda value: (
+                pd.to_datetime(value).isoformat()
+                if isinstance(value, (pd.Timestamp, np.datetime64))
+                else value
+            )
+        )
+
+    return sanitized
 
 
 def create_app(
@@ -354,6 +444,83 @@ def create_app(
         st.session_state.downloaded_dsdw = None
     if "downloaded_dsjrc" not in st.session_state:
         st.session_state.downloaded_dsjrc = None
+    if "nrt_breaks" not in st.session_state:
+        st.session_state.nrt_breaks = None
+    if "nrt_breaks_date" not in st.session_state:
+        st.session_state.nrt_breaks_date = None
+
+    # Near-real-time drainage overlay
+    st.sidebar.divider()
+    st.sidebar.subheader("Near-real-time drainage")
+    show_drained = st.sidebar.checkbox(
+        "Show lakes drained in the last month",
+        value=False,
+        help="Uses NRT breakpoints on the most recent DW month (water_residual < -0.25).",
+    )
+    drained_breaks = None
+    drained_label = None
+    drain_threshold = -0.25
+
+    if show_drained:
+        dw_dataset = st.session_state.get("dw_dataset")
+        if dw_dataset is None:
+            dw_dataset, success = load_dataset(
+                "dw",
+                zarr_path_input,
+                st.session_state.downloaded_dsdw,
+                st.session_state.dw_dataset,
+            )
+            if success and dw_dataset is not None:
+                st.session_state.dw_dataset = dw_dataset
+
+        if st.session_state.dw_dataset is not None:
+            available_dates = _get_available_dw_analysis_dates(st.session_state.dw_dataset)
+            if len(available_dates) == 0:
+                st.sidebar.warning("DW dataset has no valid water observations for NRT analysis.")
+            else:
+                date_options = [d.strftime("%Y-%m") for d in available_dates]
+                default_idx = len(date_options) - 1
+                selected_analysis_month = st.sidebar.selectbox(
+                    "NRT analysis month",
+                    date_options,
+                    index=default_idx,
+                    help="Breakpoints are computed for this month; latest with data is selected by default.",
+                )
+                analysis_date_ts = pd.to_datetime(selected_analysis_month)
+                drained_label = analysis_date_ts.strftime("%Y-%m")
+            if (
+                len(available_dates) > 0
+                and (
+                    st.session_state.get("nrt_breaks") is None
+                    or st.session_state.get("nrt_breaks_date") != drained_label
+                )
+            ):
+                with st.spinner(f"Calculating NRT breakpoints for {drained_label}..."):
+                    try:
+                        st.session_state.nrt_breaks = NRTBreakpoint().calculate_break(
+                            st.session_state.dw_dataset,
+                            analysis_date=analysis_date_ts,
+                            data_aggregation_period="all",
+                        )
+                        st.session_state.nrt_breaks_date = drained_label
+                    except Exception as e:
+                        st.session_state.nrt_breaks = pd.DataFrame(columns=["water_residual"])
+                        st.session_state.nrt_breaks_date = drained_label
+                        st.sidebar.error(f"Could not calculate NRT breakpoints: {e}")
+
+            if (
+                len(available_dates) > 0
+                and st.session_state.nrt_breaks is not None
+                and not st.session_state.nrt_breaks.empty
+            ):
+                drained_breaks = st.session_state.nrt_breaks.query(
+                    "water_residual < @drain_threshold"
+                ).copy()
+                st.sidebar.caption(f"{len(drained_breaks)} lakes flagged for {drained_label}")
+            elif len(available_dates) > 0:
+                st.sidebar.caption(f"No NRT breakpoints available for {drained_label}")
+        else:
+            st.sidebar.warning("DW dataset not available; cannot compute NRT drainage.")
 
     # Create map viewer
     try:
@@ -364,6 +531,19 @@ def create_app(
             map_backend=map_backend,
             max_features=max_features,
         )
+        if show_drained and drained_breaks is not None and not drained_breaks.empty:
+            drained_gdf = viewer.gdf.merge(
+                drained_breaks.reset_index(),
+                on=id_column,
+                how="inner",
+            )
+            viewer.drained_gdf = drained_gdf
+            viewer.drained_label = drained_label
+            viewer.show_main_layer = False
+        elif show_drained:
+            viewer.drained_gdf = None
+            viewer.drained_label = drained_label
+            viewer.show_main_layer = True
         # viewer.layer_column = layer_column  # Set layer column for folium
 
         # Render the map
