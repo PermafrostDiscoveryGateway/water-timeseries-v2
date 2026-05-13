@@ -448,6 +448,10 @@ def create_app(
         st.session_state.nrt_breaks = None
     if "nrt_breaks_date" not in st.session_state:
         st.session_state.nrt_breaks_date = None
+    if "nrt_dw_dataset_all_ids" not in st.session_state:
+        st.session_state.nrt_dw_dataset_all_ids = None
+    if "nrt_dw_dataset_all_ids_source" not in st.session_state:
+        st.session_state.nrt_dw_dataset_all_ids_source = None
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
@@ -462,19 +466,58 @@ def create_app(
     drain_threshold = -0.25
 
     if show_drained:
-        dw_dataset = st.session_state.get("dw_dataset")
-        if dw_dataset is None:
-            dw_dataset, success = load_dataset(
-                "dw",
-                zarr_path_input,
-                st.session_state.downloaded_dsdw,
-                st.session_state.dw_dataset,
-            )
-            if success and dw_dataset is not None:
-                st.session_state.dw_dataset = dw_dataset
+        use_all_map_ids = st.sidebar.checkbox(
+            "Run NRT over all map IDs (slow)",
+            value=True,
+            help="Downloads DW data for all lakes in the loaded vector dataset, then runs NRT.",
+        )
+        nrt_dataset = None
+        if use_all_map_ids:
+            source_signature = f"{data_path_input}|{id_column}"
+            if (
+                st.session_state.nrt_dw_dataset_all_ids is None
+                or st.session_state.nrt_dw_dataset_all_ids_source != source_signature
+            ):
+                with st.spinner("Downloading DW data for all map IDs (this can take a while)..."):
+                    try:
+                        vector_gdf = load_vector_dataset(data_path_input)
+                        all_ids = vector_gdf[id_column].dropna().astype(str).unique().tolist()
+                        downloader = EarthEngineDownloader(ee_auth=True)
+                        dsdw_all = downloader.download_dw_monthly(
+                            vector_dataset=data_path_input,
+                            name_attribute=id_column,
+                            id_list=all_ids,
+                            years=list(range(2017, 2026)),
+                            months=[6, 7, 8, 9],
+                            date_list=None,
+                        )
+                        if dsdw_all is not None:
+                            st.session_state.nrt_dw_dataset_all_ids = DWDataset(dsdw_all)
+                            st.session_state.nrt_dw_dataset_all_ids_source = source_signature
+                            st.session_state.nrt_breaks = None
+                            st.session_state.nrt_breaks_date = None
+                        else:
+                            st.sidebar.error("DW download for all map IDs returned no data.")
+                    except Exception as e:
+                        st.sidebar.error(f"Failed to prepare all-ID NRT dataset: {e}")
 
-        if st.session_state.dw_dataset is not None:
-            available_dates = _get_available_dw_analysis_dates(st.session_state.dw_dataset)
+            nrt_dataset = st.session_state.nrt_dw_dataset_all_ids
+        else:
+            dw_dataset = st.session_state.get("dw_dataset")
+            if dw_dataset is None:
+                dw_dataset, success = load_dataset(
+                    "dw",
+                    zarr_path_input,
+                    st.session_state.downloaded_dsdw,
+                    st.session_state.dw_dataset,
+                )
+                if success and dw_dataset is not None:
+                    st.session_state.dw_dataset = dw_dataset
+            nrt_dataset = st.session_state.dw_dataset
+
+        if nrt_dataset is not None:
+            st.sidebar.caption(f"NRT evaluated lakes: {len(nrt_dataset.object_ids_)}")
+            available_dates = _get_available_dw_analysis_dates(nrt_dataset)
             if len(available_dates) == 0:
                 st.sidebar.warning("DW dataset has no valid water observations for NRT analysis.")
             else:
@@ -498,7 +541,7 @@ def create_app(
                 with st.spinner(f"Calculating NRT breakpoints for {drained_label}..."):
                     try:
                         st.session_state.nrt_breaks = NRTBreakpoint().calculate_break(
-                            st.session_state.dw_dataset,
+                            nrt_dataset,
                             analysis_date=analysis_date_ts,
                             data_aggregation_period="all",
                         )
