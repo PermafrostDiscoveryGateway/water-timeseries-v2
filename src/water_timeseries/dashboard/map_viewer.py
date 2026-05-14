@@ -15,7 +15,6 @@ import streamlit as st
 import xarray as xr
 from streamlit_folium import st_folium
 
-from water_timeseries.breakpoint import NRTBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
@@ -154,7 +153,6 @@ class MapViewer:
 
         # Apply sampling if max_features specified (for faster loading)
         if self.max_features and len(valid_gdf) > self.max_features:
-            # valid_gdf = valid_gdf.sample(n=self.max_features, random_state=42).reset_index(drop=True)
             valid_gdf = valid_gdf.head(n=self.max_features).reset_index(drop=True)
             st.caption(f"Showing largest {self.max_features} of {len(self.gdf)} features (use max_features to change)")
 
@@ -329,25 +327,6 @@ class MapViewer:
         st.session_state.selected_geohash = None
 
 
-def _get_latest_dw_analysis_date(dw_dataset: DWDataset) -> Optional[pd.Timestamp]:
-    """Return the most recent DW date that has at least one non-NaN water value."""
-    available_dates = _get_available_dw_analysis_dates(dw_dataset)
-    if len(available_dates) == 0:
-        return None
-    return available_dates[-1]
-
-
-def _get_available_dw_analysis_dates(dw_dataset: DWDataset) -> List[pd.Timestamp]:
-    """Return DW dates that have at least one non-NaN water value."""
-    water_col = dw_dataset.water_column
-    water_da = dw_dataset.ds_normalized[water_col]
-    valid_counts = water_da.notnull().sum(dim="id_geohash").compute()
-    available_dates = valid_counts["date"].values[np.asarray(valid_counts.values) > 0]
-    if len(available_dates) == 0:
-        return []
-    available_dates = pd.to_datetime(available_dates)
-    return sorted(list(available_dates))
-
 
 def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Convert non-JSON-serializable values (e.g., Timestamp) to strings."""
@@ -374,10 +353,38 @@ def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return sanitized
 
 
+def _load_precomputed_nrt(
+    precomputed_nrt_dir: Optional[Path | str],
+) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+    """Load pre-computed NRT monthly results from *precomputed_nrt_dir*.
+
+    Returns ``(counts_df, breaks_df)`` where either may be ``None`` if the
+    corresponding file does not exist.
+    """
+    if precomputed_nrt_dir is None:
+        return None, None
+
+    nrt_dir = Path(precomputed_nrt_dir)
+    counts_path = nrt_dir / "nrt_monthly_drain_counts.parquet"
+    breaks_path = nrt_dir / "nrt_monthly_drain_breaks.parquet"
+
+    counts_df: Optional[pd.DataFrame] = None
+    breaks_df: Optional[pd.DataFrame] = None
+
+    if counts_path.exists():
+        counts_df = pd.read_parquet(counts_path)
+
+    if breaks_path.exists():
+        breaks_df = pd.read_parquet(breaks_path)
+
+    return counts_df, breaks_df
+
+
 def create_app(
     data_path: str | Path = "tests/data/lake_polygons.parquet",
     zarr_path: str | Path = "tests/data/lakes_dw_test.zarr",
     zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
+    precomputed_nrt_dir: Optional[str | Path] = None,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -385,6 +392,10 @@ def create_app(
         data_path: Path to the parquet file containing lake polygons.
         zarr_path: Path to the zarr file containing Dynamic World time series data.
         zarr_path_jrc: Path to the zarr file containing JRC time series data.
+        precomputed_nrt_dir: Directory containing pre-computed NRT parquet files
+            (``nrt_monthly_drain_counts.parquet`` and
+            ``nrt_monthly_drain_breaks.parquet``).  When provided, the dashboard
+            loads these files instead of running NRT on the fly.
     """
     st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
 
@@ -444,14 +455,14 @@ def create_app(
         st.session_state.downloaded_dsdw = None
     if "downloaded_dsjrc" not in st.session_state:
         st.session_state.downloaded_dsjrc = None
-    if "nrt_breaks" not in st.session_state:
-        st.session_state.nrt_breaks = None
-    if "nrt_breaks_date" not in st.session_state:
-        st.session_state.nrt_breaks_date = None
-    if "nrt_dw_dataset_all_ids" not in st.session_state:
-        st.session_state.nrt_dw_dataset_all_ids = None
-    if "nrt_dw_dataset_all_ids_source" not in st.session_state:
-        st.session_state.nrt_dw_dataset_all_ids_source = None
+
+    # Load pre-computed NRT results (once per session)
+    if "precomputed_nrt_counts" not in st.session_state:
+        counts_loaded, breaks_loaded = _load_precomputed_nrt(precomputed_nrt_dir)
+        st.session_state.precomputed_nrt_counts = counts_loaded
+        st.session_state.precomputed_nrt_breaks = breaks_loaded
+    precomputed_counts: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_counts
+    precomputed_breaks: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_breaks
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
@@ -459,111 +470,96 @@ def create_app(
     show_drained = st.sidebar.checkbox(
         "Show lakes drained in the last month",
         value=False,
-        help="Uses NRT breakpoints on the most recent DW month (water_residual < -0.25).",
+        help="Uses pre-computed NRT breakpoints (water_residual < -0.25).",
     )
     drained_breaks = None
     drained_label = None
     drain_threshold = -0.25
+    nrt_monthly_counts_df = None
 
     if show_drained:
-        use_all_map_ids = st.sidebar.checkbox(
-            "Run NRT over all map IDs (slow)",
-            value=True,
-            help="Downloads DW data for all lakes in the loaded vector dataset, then runs NRT.",
-        )
-        nrt_dataset = None
-        if use_all_map_ids:
-            source_signature = f"{data_path_input}|{id_column}"
-            if (
-                st.session_state.nrt_dw_dataset_all_ids is None
-                or st.session_state.nrt_dw_dataset_all_ids_source != source_signature
-            ):
-                with st.spinner("Downloading DW data for all map IDs (this can take a while)..."):
-                    try:
-                        vector_gdf = load_vector_dataset(data_path_input)
-                        all_ids = vector_gdf[id_column].dropna().astype(str).unique().tolist()
-                        downloader = EarthEngineDownloader(ee_auth=True)
-                        dsdw_all = downloader.download_dw_monthly(
-                            vector_dataset=data_path_input,
-                            name_attribute=id_column,
-                            id_list=all_ids,
-                            years=list(range(2017, 2026)),
-                            months=[6, 7, 8, 9],
-                            date_list=None,
-                        )
-                        if dsdw_all is not None:
-                            st.session_state.nrt_dw_dataset_all_ids = DWDataset(dsdw_all)
-                            st.session_state.nrt_dw_dataset_all_ids_source = source_signature
-                            st.session_state.nrt_breaks = None
-                            st.session_state.nrt_breaks_date = None
-                        else:
-                            st.sidebar.error("DW download for all map IDs returned no data.")
-                    except Exception as e:
-                        st.sidebar.error(f"Failed to prepare all-ID NRT dataset: {e}")
-
-            nrt_dataset = st.session_state.nrt_dw_dataset_all_ids
+        if precomputed_counts is None and precomputed_breaks is None:
+            st.sidebar.warning(
+                "No pre-computed NRT data found. "
+                "Run `water-timeseries nrt-precompute` to generate it."
+            )
         else:
-            dw_dataset = st.session_state.get("dw_dataset")
-            if dw_dataset is None:
-                dw_dataset, success = load_dataset(
-                    "dw",
-                    zarr_path_input,
-                    st.session_state.downloaded_dsdw,
-                    st.session_state.dw_dataset,
-                )
-                if success and dw_dataset is not None:
-                    st.session_state.dw_dataset = dw_dataset
-            nrt_dataset = st.session_state.dw_dataset
-
-        if nrt_dataset is not None:
-            st.sidebar.caption(f"NRT evaluated lakes: {len(nrt_dataset.object_ids_)}")
-            available_dates = _get_available_dw_analysis_dates(nrt_dataset)
-            if len(available_dates) == 0:
-                st.sidebar.warning("DW dataset has no valid water observations for NRT analysis.")
+            available_months = (
+                sorted(precomputed_counts["analysis_month"].unique().tolist())
+                if precomputed_counts is not None
+                else sorted(precomputed_breaks["analysis_month"].unique().tolist())
+            )
+            if not available_months:
+                st.sidebar.warning("Pre-computed NRT files are empty.")
             else:
-                date_options = [d.strftime("%Y-%m") for d in available_dates]
-                default_idx = len(date_options) - 1
-                selected_analysis_month = st.sidebar.selectbox(
-                    "NRT analysis month",
-                    date_options,
-                    index=default_idx,
-                    help="Breakpoints are computed for this month; latest with data is selected by default.",
-                )
-                analysis_date_ts = pd.to_datetime(selected_analysis_month)
-                drained_label = analysis_date_ts.strftime("%Y-%m")
-            if (
-                len(available_dates) > 0
-                and (
-                    st.session_state.get("nrt_breaks") is None
-                    or st.session_state.get("nrt_breaks_date") != drained_label
-                )
-            ):
-                with st.spinner(f"Calculating NRT breakpoints for {drained_label}..."):
-                    try:
-                        st.session_state.nrt_breaks = NRTBreakpoint().calculate_break(
-                            nrt_dataset,
-                            analysis_date=analysis_date_ts,
-                            data_aggregation_period="all",
+                # Build a counts lookup so we can annotate each month with its drain count
+                counts_lookup: dict = {}
+                if precomputed_counts is not None and "drained_lake_count" in precomputed_counts.columns:
+                    counts_lookup = dict(
+                        zip(
+                            precomputed_counts["analysis_month"],
+                            precomputed_counts["drained_lake_count"],
                         )
-                        st.session_state.nrt_breaks_date = drained_label
-                    except Exception as e:
-                        st.session_state.nrt_breaks = pd.DataFrame(columns=["water_residual"])
-                        st.session_state.nrt_breaks_date = drained_label
-                        st.sidebar.error(f"Could not calculate NRT breakpoints: {e}")
+                    )
 
-            if (
-                len(available_dates) > 0
-                and st.session_state.nrt_breaks is not None
-                and not st.session_state.nrt_breaks.empty
-            ):
-                drained_breaks = st.session_state.nrt_breaks.query(
-                    "water_residual < @drain_threshold"
-                ).copy()
-                st.sidebar.caption(f"{len(drained_breaks)} lakes flagged for {drained_label}")
-            elif len(available_dates) > 0:
-                st.sidebar.caption(f"No NRT breakpoints available for {drained_label}")
-        else:
-            st.sidebar.warning("DW dataset not available; cannot compute NRT drainage.")
+                # Show a compact sparkline in the sidebar before the selector
+                if counts_lookup:
+                    spark_df = (
+                        pd.DataFrame(
+                            {"month": list(counts_lookup.keys()), "drained": list(counts_lookup.values())}
+                        )
+                        .sort_values("month")
+                        .set_index("month")
+                    )
+                    st.sidebar.caption("Drained lake counts per month:")
+                    st.sidebar.bar_chart(spark_df, height=80)
+
+                # Optional filter: hide months with zero drainages
+                only_nonzero = st.sidebar.toggle(
+                    "Only show months with drainages",
+                    value=False,
+                    help="Hide months where no lakes were flagged as drained.",
+                )
+                selectable_months = available_months
+                if only_nonzero and counts_lookup:
+                    selectable_months = [m for m in available_months if counts_lookup.get(m, 0) > 0]
+                    if not selectable_months:
+                        st.sidebar.info("No months with drainages found.")
+                        selectable_months = available_months
+
+                # Build display labels that include the drain count
+                def _month_label(m: str) -> str:
+                    n = counts_lookup.get(m, 0)
+                    return f"{m}  ·  {n} drained" if n != 1 else f"{m}  ·  1 drained"
+
+                month_labels = [_month_label(m) for m in selectable_months]
+                default_idx = len(selectable_months) - 1
+
+                selected_label = st.sidebar.selectbox(
+                    "NRT analysis month",
+                    month_labels,
+                    index=default_idx,
+                    help="Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
+                )
+                # Map label back to raw month string
+                selected_analysis_month = selectable_months[month_labels.index(selected_label)]
+                drained_label = selected_analysis_month
+
+                if precomputed_counts is not None:
+                    nrt_monthly_counts_df = precomputed_counts.copy()
+
+                if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
+                    month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
+                    if not month_slice.empty:
+                        drained_breaks = (
+                            month_slice.set_index("id_geohash")
+                            if "id_geohash" in month_slice.columns
+                            else month_slice
+                        )
+                    else:
+                        pass  # caption shown via annotated label above
+                else:
+                    st.sidebar.caption(f"No per-lake break data available for {drained_label}")
 
     # Create map viewer
     try:
@@ -587,7 +583,6 @@ def create_app(
             viewer.drained_gdf = None
             viewer.drained_label = drained_label
             viewer.show_main_layer = True
-        # viewer.layer_column = layer_column  # Set layer column for folium
 
         # Render the map
         selected = viewer.render()  # noqa: F841
@@ -667,8 +662,6 @@ def create_app(
             id_available_dw = check_dataset_availability(st.session_state.dw_dataset, current)
             id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
             st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
-
-            ""  # Already handled in the unified loading code above"
 
             # Automatically download if not available
             if not id_available_dw or not id_available_jrc:

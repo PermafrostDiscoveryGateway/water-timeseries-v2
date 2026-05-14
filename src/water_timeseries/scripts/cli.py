@@ -26,6 +26,9 @@ from water_timeseries.scripts.break_pipeline import (
 # Import plotting function from plot_pipeline
 from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
 
+# Import NRT pre-computation
+from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
+
 # Create the main app
 app = cyclopts.App(name="water-timeseries", help="Water timeseries analysis tools")
 
@@ -75,6 +78,7 @@ def dashboard(
     port: int = 8501,
     vector_file: Optional[str] = None,
     dw_dataset_file: Optional[str] = None,
+    precomputed_nrt_dir: Optional[str] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
@@ -84,6 +88,8 @@ def dashboard(
         port: Port to run the dashboard on (default: 8501)
         vector_file: Path to vector dataset file (GeoParquet)
         dw_dataset_file: Path to water dataset file (zarr)
+        precomputed_nrt_dir: Directory with pre-computed NRT parquet files.
+            Auto-detected from ``precomputed/nrt/`` in the repo root when present.
         logfile: Path to log file
         verbose: Verbosity level (-v for DEBUG)
 
@@ -91,6 +97,7 @@ def dashboard(
         water-timeseries dashboard
         water-timeseries dashboard --port 8502
         water-timeseries dashboard --vector-file data/lakes.parquet --dw-dataset-file data/lakes.zarr
+        water-timeseries dashboard --precomputed-nrt-dir precomputed/nrt
     """
     import subprocess
     import sys
@@ -109,11 +116,16 @@ def dashboard(
         str(port),
     ]
 
-    # Add optional data file arguments
+    # Add optional data file arguments (single "--" separates streamlit args from script args)
+    script_args = []
     if vector_file:
-        cmd.extend(["--", "--vector-file", vector_file])
+        script_args.extend(["--vector-file", vector_file])
     if dw_dataset_file:
-        cmd.extend(["--", "--dw-dataset-file", dw_dataset_file])
+        script_args.extend(["--dw-dataset-file", dw_dataset_file])
+    if precomputed_nrt_dir:
+        script_args.extend(["--precomputed-nrt-dir", precomputed_nrt_dir])
+    if script_args:
+        cmd.extend(["--"] + script_args)
 
     logger.info(f"Starting dashboard with command: {' '.join(cmd)}")
     subprocess.run(cmd)
@@ -405,6 +417,123 @@ def plot_timeseries(
         output_figure=output_figure,
         break_method=break_method,
         show=show,
+    )
+
+
+# Subcommand: NRT monthly pre-computation
+@app.command(group="Analysis")
+def nrt_precompute(
+    dataset_file: Path,
+    output_dir: Optional[Path] = None,
+    drain_threshold: float = -0.25,
+    data_aggregation_period: str = "all",
+    lake_chunk_size: int = 5000,
+    n_jobs: int = 4,
+    no_resume: bool = False,
+    vector_file: Optional[Path] = None,
+    logfile: Optional[str] = None,
+    verbose: int = 0,
+):
+    """Pre-compute NRT monthly drained-lake results from a DW dataset.
+
+    Iterates over every available analysis month in *dataset_file*, runs
+    ``NRTBreakpoint.calculate_break`` for each, and writes two parquet files:
+
+    ``nrt_monthly_drain_counts.parquet``
+        One row per month: ``analysis_month`` and ``drained_lake_count``.
+
+    ``nrt_monthly_drain_breaks.parquet``
+        Full per-lake NRT break results (drained lakes only) with an
+        ``analysis_month`` column, ready for the dashboard map overlay.
+
+    The dashboard will automatically detect and load these files when they are
+    placed in the same directory as the vector parquet dataset.
+
+    Parameters
+    ----------
+    dataset_file:
+        Path to the DW dataset file (``.ncin`` / ``.nc`` NetCDF or ``.zarr``).
+    output_dir:
+        Directory where results are written. Defaults to the parent directory
+        of *dataset_file*.
+    drain_threshold:
+        ``water_residual`` threshold below which a lake is classified as
+        drained (default ``-0.25``).
+    data_aggregation_period:
+        Passed to ``NRTBreakpoint.calculate_break`` (default ``"all"``).
+    lake_chunk_size:
+        Lakes processed per chunk per month. Smaller = less RAM. Default 5000.
+    n_jobs:
+        Parallel ARIMA workers per chunk. Reduce if RAM is tight. Default 4.
+    no_resume:
+        When set, re-process all months even if output files already exist.
+    vector_file:
+        Optional path to a GeoParquet vector file (e.g. the dashboard's lake
+        polygons).  When provided, only the ``id_geohash`` values present in
+        that file are processed — useful for generating a fast demo subset.
+    logfile:
+        Path to log file. Auto-generated if not provided.
+    verbose:
+        Verbosity level (0 = INFO, 1 = DEBUG).
+
+    Example usage
+    -------------
+    .. code-block:: bash
+
+        water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
+            --output-dir precomputed/nrt
+
+        # Only the demo visualization lakes (fast)
+        water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
+            --output-dir precomputed/nrt \\
+            --vector-file tests/data/lake_polygons.parquet
+
+        # Tune for low-RAM machines
+        water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
+            --output-dir precomputed/nrt --lake-chunk-size 2000 --n-jobs 2
+    """
+    setup_logging(logfile=logfile, verbose=verbose)
+
+    resolved_output = output_dir if output_dir is not None else Path(dataset_file).parent
+
+    # Resolve lake IDs from vector file if provided
+    lake_ids = None
+    if vector_file is not None:
+        import geopandas as gpd
+        gdf = gpd.read_parquet(vector_file)
+        if "id_geohash" not in gdf.columns:
+            logger.error("vector_file %s does not contain an 'id_geohash' column", vector_file)
+            raise SystemExit(1)
+        lake_ids = gdf["id_geohash"].dropna().unique().tolist()
+        logger.info("Loaded %d lake IDs from vector file: %s", len(lake_ids), vector_file)
+
+    logger.info(
+        "Starting NRT monthly pre-computation:\n"
+        f"  dataset_file          = {dataset_file}\n"
+        f"  output_dir            = {resolved_output}\n"
+        f"  drain_threshold       = {drain_threshold}\n"
+        f"  data_aggregation      = {data_aggregation_period}\n"
+        f"  lake_chunk_size       = {lake_chunk_size}\n"
+        f"  n_jobs                = {n_jobs}\n"
+        f"  resume                = {not no_resume}\n"
+        f"  lake_ids filter       = {len(lake_ids) if lake_ids is not None else 'all'}"
+    )
+
+    counts_df, breaks_df = precompute_nrt_monthly(
+        dataset_file=dataset_file,
+        output_dir=resolved_output,
+        drain_threshold=drain_threshold,
+        data_aggregation_period=data_aggregation_period,
+        resume=not no_resume,
+        lake_chunk_size=lake_chunk_size,
+        n_jobs=n_jobs,
+        lake_ids=lake_ids,
+    )
+
+    logger.info(
+        "Pre-computation complete.\n"
+        f"  months processed : {len(counts_df)}\n"
+        f"  total drained rows: {len(breaks_df)}"
     )
 
 
