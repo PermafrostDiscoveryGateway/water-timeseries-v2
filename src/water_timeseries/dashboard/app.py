@@ -1,8 +1,8 @@
 """Run the Streamlit dashboard."""
 
 import argparse
-import warnings
 from pathlib import Path
+import warnings
 
 from water_timeseries.dashboard.map_viewer import create_app
 

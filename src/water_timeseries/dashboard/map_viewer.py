@@ -474,7 +474,6 @@ def create_app(
     )
     drained_breaks = None
     drained_label = None
-    drain_threshold = -0.25
     nrt_monthly_counts_df = None
 
     if show_drained:
@@ -544,9 +543,6 @@ def create_app(
                 # Map label back to raw month string
                 selected_analysis_month = selectable_months[month_labels.index(selected_label)]
                 drained_label = selected_analysis_month
-
-                if precomputed_counts is not None:
-                    nrt_monthly_counts_df = precomputed_counts.copy()
 
                 if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
                     month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
