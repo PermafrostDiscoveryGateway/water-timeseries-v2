@@ -1,11 +1,10 @@
 """Run the Streamlit dashboard."""
 
 import argparse
-from pathlib import Path
 import warnings
+from pathlib import Path
 
 from water_timeseries.dashboard.map_viewer import create_app
-
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent
 _DEFAULT_NRT_DIR = _REPO_ROOT / "precomputed" / "nrt"

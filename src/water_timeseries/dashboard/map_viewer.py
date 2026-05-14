@@ -474,7 +474,6 @@ def create_app(
     )
     drained_breaks = None
     drained_label = None
-    nrt_monthly_counts_df = None
 
     if show_drained:
         if precomputed_counts is None and precomputed_breaks is None:
