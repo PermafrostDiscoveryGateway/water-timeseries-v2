@@ -11,6 +11,7 @@ import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 import xarray as xr
 from streamlit_folium import st_folium
@@ -353,6 +354,161 @@ def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     return sanitized
 
 
+_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _render_drain_heatmap(
+    precomputed_counts: pd.DataFrame,
+    precomputed_breaks: Optional[pd.DataFrame],
+    container=None,
+) -> None:
+    """Render an interactive month × year heatmap of drained lake counts.
+
+    Args:
+        precomputed_counts: DataFrame with columns ``analysis_month`` and
+            ``drained_lake_count``.
+        precomputed_breaks: Optional per-lake detail DataFrame.
+        container: Streamlit container to render into (e.g. ``st.sidebar``).
+            Defaults to the main content area (``st``).
+    """
+    c = container if container is not None else st
+
+    c.caption("Click a cell to pre-select that month below.")
+
+    # Parse analysis_month ("YYYY-MM") into numeric year/month
+    df = precomputed_counts.copy()
+    df["year"] = df["analysis_month"].str[:4].astype(int)
+    df["month"] = df["analysis_month"].str[5:7].astype(int)
+
+    pivot = df.pivot_table(index="year", columns="month", values="drained_lake_count", fill_value=0)
+    pivot = pivot.sort_index(ascending=False)  # newest year at top
+
+    years = pivot.index.tolist()
+    months_in_data = pivot.columns.tolist()
+    month_labels = [_MONTH_NAMES[m - 1] for m in months_in_data]
+
+    z_values = pivot.values.tolist()
+    text_values = [[str(int(v)) if v > 0 else "" for v in row] for row in pivot.values]
+
+    # Build flat lists for the invisible scatter overlay (the only way to capture
+    # single-click events in Streamlit – go.Heatmap cells are not selectable points).
+    scatter_x: list = []
+    scatter_y: list = []
+    scatter_color: list = []
+    scatter_custom: list = []
+    scatter_text: list = []
+    for year in years:
+        for mi, month in enumerate(months_in_data):
+            count = int(pivot.at[year, month])
+            scatter_x.append(month_labels[mi])
+            scatter_y.append(str(year))
+            scatter_color.append(count)
+            scatter_custom.append(f"{year}-{month:02d}")
+            scatter_text.append(str(count) if count > 0 else "")
+
+    fig = go.Figure()
+
+    # Layer 1: heatmap for colour fill and axis labels
+    fig.add_trace(
+        go.Heatmap(
+            z=z_values,
+            x=month_labels,
+            y=[str(y) for y in years],
+            colorscale="Blues",
+            text=text_values,
+            texttemplate="%{text}",
+            hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{z}<extra></extra>",
+            colorbar=dict(title="n", thickness=10, len=0.8),
+            xgap=2,
+            ygap=2,
+        )
+    )
+
+    # Layer 2: invisible scatter squares – these fire selection events on click
+    fig.add_trace(
+        go.Scatter(
+            x=scatter_x,
+            y=scatter_y,
+            mode="markers",
+            marker=dict(
+                symbol="square",
+                size=22,
+                opacity=0.01,  # effectively invisible but still hittable
+                color=scatter_color,
+                colorscale="Blues",
+                showscale=False,
+            ),
+            customdata=scatter_custom,
+            text=scatter_text,
+            hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{text}<extra></extra>",
+            showlegend=False,
+        )
+    )
+
+    fig.update_layout(
+        xaxis=dict(side="bottom", tickfont=dict(size=10)),
+        yaxis=dict(type="category", tickfont=dict(size=10)),
+        height=max(200, len(years) * 28 + 80),
+        margin=dict(l=40, r=40, t=10, b=30),
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    # Key is versioned so that incrementing it remounts the widget with no selection state
+    heatmap_key = f"drain_heatmap_{st.session_state.get('heatmap_version', 0)}"
+    event = c.plotly_chart(fig, use_container_width=True, on_select="rerun", key=heatmap_key)
+
+    # Decode click – scatter overlay points carry analysis_month in customdata
+    selected_analysis_month: Optional[str] = None
+    if event and getattr(event, "selection", None) and event.selection.get("points"):
+        pt = event.selection["points"][0]
+        # Scatter points store the analysis_month string in customdata
+        raw = pt.get("customdata")
+        if raw and isinstance(raw, str) and len(raw) == 7:
+            selected_analysis_month = raw
+
+    # Only raise the sync flag when the selection actually changes (the Plotly
+    # on_select event persists the last clicked point on every rerun, so we must
+    # compare against the previously stored value to detect genuine new clicks).
+    prev_cell = st.session_state.get("heatmap_selected_cell")
+    if selected_analysis_month is not None:
+        st.session_state["heatmap_selected_cell"] = selected_analysis_month
+        if selected_analysis_month != prev_cell:
+            st.session_state["heatmap_sync_dropdown"] = True
+    selected_analysis_month = st.session_state.get("heatmap_selected_cell")
+
+    if selected_analysis_month:
+        try:
+            sel_year_disp = int(selected_analysis_month[:4])
+            sel_month_disp = int(selected_analysis_month[5:7])
+            month_name = _MONTH_NAMES[sel_month_disp - 1]
+        except (ValueError, IndexError):
+            sel_year_disp, sel_month_disp, month_name = None, None, selected_analysis_month
+
+        count_row = int(
+            df.query("analysis_month == @selected_analysis_month")["drained_lake_count"].sum()
+            if not df.empty
+            else 0
+        )
+
+        c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drained")
+
+        if count_row > 0 and precomputed_breaks is not None:
+            month_breaks = precomputed_breaks.query("analysis_month == @selected_analysis_month").copy()
+            if not month_breaks.empty:
+                display_cols = [
+                    col for col in ["id_geohash", "water_residual", "water_observed", "water_predicted", "date"]
+                    if col in month_breaks.columns
+                ]
+                c.dataframe(month_breaks[display_cols].reset_index(drop=True), use_container_width=True)
+
+        if c.button("✖ Clear selection", key="clear_heatmap_sel"):
+            st.session_state.pop("heatmap_selected_cell", None)
+            st.session_state.pop("heatmap_sync_dropdown", None)
+            # Bump version so the chart remounts with no internal selection state
+            st.session_state["heatmap_version"] = st.session_state.get("heatmap_version", 0) + 1
+            st.rerun()
+
+
 def _load_precomputed_nrt(
     precomputed_nrt_dir: Optional[Path | str],
 ) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
@@ -512,6 +668,9 @@ def create_app(
                     st.sidebar.caption("Drained lake counts per month:")
                     st.sidebar.bar_chart(spark_df, height=80)
 
+                # Heatmap in sidebar – click a cell to pre-select the month dropdown
+                _render_drain_heatmap(precomputed_counts, precomputed_breaks, container=st.sidebar)
+
                 # Optional filter: hide months with zero drainages
                 only_nonzero = st.sidebar.toggle(
                     "Only show months with drainages",
@@ -531,12 +690,25 @@ def create_app(
                     return f"{m}  ·  {n} drained" if n != 1 else f"{m}  ·  1 drained"
 
                 month_labels = [_month_label(m) for m in selectable_months]
-                default_idx = len(selectable_months) - 1
+
+                # Sync dropdown with heatmap click: consume the one-shot flag and write
+                # directly to the selectbox session-state key so Streamlit picks it up.
+                heatmap_pick = st.session_state.get("heatmap_selected_cell")
+                if st.session_state.pop("heatmap_sync_dropdown", False):
+                    if heatmap_pick and heatmap_pick in selectable_months:
+                        st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
+
+                default_idx = (
+                    selectable_months.index(heatmap_pick)
+                    if heatmap_pick and heatmap_pick in selectable_months
+                    else len(selectable_months) - 1
+                )
 
                 selected_label = st.sidebar.selectbox(
                     "NRT analysis month",
                     month_labels,
                     index=default_idx,
+                    key="nrt_month_selector",
                     help="Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
                 )
                 # Map label back to raw month string

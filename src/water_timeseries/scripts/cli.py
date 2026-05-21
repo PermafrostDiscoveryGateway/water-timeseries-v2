@@ -78,6 +78,7 @@ def dashboard(
     port: int = 8501,
     vector_file: Optional[str] = None,
     dw_dataset_file: Optional[str] = None,
+    jrc_dataset_file: Optional[str] = None,
     precomputed_nrt_dir: Optional[str] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
@@ -87,7 +88,8 @@ def dashboard(
     Args:
         port: Port to run the dashboard on (default: 8501)
         vector_file: Path to vector dataset file (GeoParquet)
-        dw_dataset_file: Path to water dataset file (zarr)
+        dw_dataset_file: Path to Dynamic World dataset file (zarr)
+        jrc_dataset_file: Path to JRC dataset file (zarr)
         precomputed_nrt_dir: Directory with pre-computed NRT parquet files.
             Auto-detected from ``precomputed/nrt/`` in the repo root when present.
         logfile: Path to log file
@@ -97,7 +99,10 @@ def dashboard(
         water-timeseries dashboard
         water-timeseries dashboard --port 8502
         water-timeseries dashboard --vector-file data/lakes.parquet --dw-dataset-file data/lakes.zarr
-        water-timeseries dashboard --precomputed-nrt-dir precomputed/nrt
+        water-timeseries dashboard --vector-file tests/data/lake_polygons.parquet \\
+            --dw-dataset-file downloads/data.zarr \\
+            --jrc-dataset-file downloads/downloads/lakes_jrc_viz.zarr \\
+            --precomputed-nrt-dir precomputed/nrt-demo
     """
     import subprocess
     import sys
@@ -122,6 +127,8 @@ def dashboard(
         script_args.extend(["--vector-file", vector_file])
     if dw_dataset_file:
         script_args.extend(["--dw-dataset-file", dw_dataset_file])
+    if jrc_dataset_file:
+        script_args.extend(["--jrc-dataset-file", jrc_dataset_file])
     if precomputed_nrt_dir:
         script_args.extend(["--precomputed-nrt-dir", precomputed_nrt_dir])
     if script_args:
