@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Optional
 
 import cyclopts
+import pandas as pd
 import yaml
 from loguru import logger
 
@@ -432,7 +433,11 @@ def plot_timeseries(
 def nrt_precompute(
     dataset_file: Path,
     analysis_date: Optional[str] = None,
+    analysis_date_start: Optional[str] = None,
+    analysis_date_end: Optional[str] = None,
     output_file: Optional[Path] = None,
+    output_dir: Optional[Path] = None,
+    no_resume: bool = False,
     drain_threshold: float = -0.25,
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
@@ -441,24 +446,44 @@ def nrt_precompute(
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
-    """Pre-compute NRT drained-lake results for a single analysis month.
+    """Pre-compute NRT drained-lake results for one month or a date range.
 
-    Runs ``NRTBreakpoint.calculate_break`` for *analysis_date* and writes the
-    per-lake break results (drained lakes only) to *output_file*.  The output
-    parquet includes an ``analysis_month`` column and is ready for the
-    dashboard map overlay.
+    **Single-month mode** (``--analysis-date``): runs for exactly one month
+    and writes results to ``--output-file``.
+
+    **Range mode** (``--analysis-date-start`` + ``--analysis-date-end``): runs
+    for every month in the inclusive range and writes one parquet file per
+    month to ``--output-dir``, auto-named
+    ``nrt_<YYYY-MM>_drain_breaks.parquet``.  Already-present files are skipped
+    unless ``--no-resume`` is set.
+
+    Both modes produce per-lake NRT break results (drained lakes only) with an
+    ``analysis_month`` column, ready for the dashboard map overlay.
 
     Parameters
     ----------
     dataset_file:
         Path to the DW dataset file (``.ncin`` / ``.nc`` NetCDF or ``.zarr``).
     analysis_date:
-        Month to analyse as a ``YYYY-MM`` string (e.g. ``2024-01``).
-        **Required.**
+        Single month to analyse, as ``YYYY-MM`` (e.g. ``2024-01``).
+        Mutually exclusive with ``--analysis-date-start`` /
+        ``--analysis-date-end``.
+    analysis_date_start:
+        First month of an inclusive range, as ``YYYY-MM``.
+        Must be used together with ``--analysis-date-end``.
+    analysis_date_end:
+        Last month of an inclusive range, as ``YYYY-MM``.
+        Must be used together with ``--analysis-date-start``.
     output_file:
-        Destination parquet file for the results.  Defaults to
-        ``nrt_<analysis_date>_drain_breaks.parquet`` in the parent directory
-        of *dataset_file*.
+        Destination parquet file (single-month mode only).  Defaults to
+        ``nrt_<analysis_date>_drain_breaks.parquet`` next to *dataset_file*.
+    output_dir:
+        Destination directory for range mode.  One file per month is written
+        as ``nrt_<YYYY-MM>_drain_breaks.parquet``.  Defaults to the parent
+        directory of *dataset_file*.
+    no_resume:
+        Range mode only.  When set, re-process months even if their output
+        file already exists in ``--output-dir``.
     drain_threshold:
         ``water_residual`` threshold below which a lake is classified as
         drained (default ``-0.25``).
@@ -469,9 +494,8 @@ def nrt_precompute(
     n_jobs:
         Parallel ARIMA workers per chunk. Reduce if RAM is tight. Default 4.
     vector_file:
-        Optional path to a GeoParquet vector file (e.g. the dashboard's lake
-        polygons).  When provided, only the ``id_geohash`` values present in
-        that file are processed — useful for generating a fast demo subset.
+        Optional GeoParquet vector file.  When provided, only the
+        ``id_geohash`` values present in that file are processed.
     logfile:
         Path to log file. Auto-generated if not provided.
     verbose:
@@ -481,35 +505,57 @@ def nrt_precompute(
     -------------
     .. code-block:: bash
 
+        # Single month
         water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
             --analysis-date 2024-01 \\
             --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet
 
-        # Only the demo visualization lakes (fast)
+        # Date range (one file per month written to --output-dir)
         water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
-            --analysis-date 2024-01 \\
-            --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet \\
-            --vector-file tests/data/lake_polygons.parquet
+            --analysis-date-start 2024-01 \\
+            --analysis-date-end 2024-06 \\
+            --output-dir precomputed/nrt
 
-        # Tune for low-RAM machines
+        # Resume a previously interrupted range run
         water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
-            --analysis-date 2024-01 \\
-            --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet \\
-            --lake-chunk-size 2000 --n-jobs 2
+            --analysis-date-start 2024-01 \\
+            --analysis-date-end 2024-12 \\
+            --output-dir precomputed/nrt
+
+        # Force re-process all months in range
+        water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
+            --analysis-date-start 2024-01 \\
+            --analysis-date-end 2024-12 \\
+            --output-dir precomputed/nrt \\
+            --no-resume
     """
     setup_logging(logfile=logfile, verbose=verbose)
 
-    if not analysis_date:
-        logger.error("--analysis-date is required (e.g. --analysis-date 2024-01)")
+    # --- Validate mode selection -------------------------------------------
+    range_mode = analysis_date_start is not None or analysis_date_end is not None
+    single_mode = analysis_date is not None
+
+    if single_mode and range_mode:
+        logger.error(
+            "--analysis-date cannot be combined with "
+            "--analysis-date-start / --analysis-date-end"
+        )
         raise SystemExit(1)
 
-    resolved_output_file = (
-        output_file
-        if output_file is not None
-        else Path(dataset_file).parent / f"nrt_{analysis_date}_drain_breaks.parquet"
-    )
+    if not single_mode and not range_mode:
+        logger.error(
+            "Provide either --analysis-date (single month) or both "
+            "--analysis-date-start and --analysis-date-end (range)."
+        )
+        raise SystemExit(1)
 
-    # Resolve lake IDs from vector file if provided
+    if range_mode and (analysis_date_start is None or analysis_date_end is None):
+        logger.error(
+            "--analysis-date-start and --analysis-date-end must both be provided."
+        )
+        raise SystemExit(1)
+
+    # --- Resolve lake IDs from vector file ----------------------------------
     lake_ids = None
     if vector_file is not None:
         import geopandas as gpd
@@ -520,22 +566,8 @@ def nrt_precompute(
         lake_ids = gdf["id_geohash"].dropna().unique().tolist()
         logger.info("Loaded %d lake IDs from vector file: %s", len(lake_ids), vector_file)
 
-    logger.info(
-        "Starting NRT pre-computation:\n"
-        f"  dataset_file          = {dataset_file}\n"
-        f"  analysis_date         = {analysis_date}\n"
-        f"  output_file           = {resolved_output_file}\n"
-        f"  drain_threshold       = {drain_threshold}\n"
-        f"  data_aggregation      = {data_aggregation_period}\n"
-        f"  lake_chunk_size       = {lake_chunk_size}\n"
-        f"  n_jobs                = {n_jobs}\n"
-        f"  lake_ids filter       = {len(lake_ids) if lake_ids is not None else 'all'}"
-    )
-
-    breaks_df = precompute_nrt_monthly(
+    shared_kwargs = dict(
         dataset_file=dataset_file,
-        output_file=resolved_output_file,
-        analysis_date=analysis_date,
         drain_threshold=drain_threshold,
         data_aggregation_period=data_aggregation_period,
         lake_chunk_size=lake_chunk_size,
@@ -543,11 +575,104 @@ def nrt_precompute(
         lake_ids=lake_ids,
     )
 
+    # --- Single-month mode --------------------------------------------------
+    if single_mode:
+        resolved_output_file = (
+            output_file
+            if output_file is not None
+            else Path(dataset_file).parent / f"nrt_{analysis_date}_drain_breaks.parquet"
+        )
+        logger.info(
+            "Starting NRT pre-computation (single month):\n"
+            f"  dataset_file      = {dataset_file}\n"
+            f"  analysis_date     = {analysis_date}\n"
+            f"  output_file       = {resolved_output_file}\n"
+            f"  drain_threshold   = {drain_threshold}\n"
+            f"  data_aggregation  = {data_aggregation_period}\n"
+            f"  lake_chunk_size   = {lake_chunk_size}\n"
+            f"  n_jobs            = {n_jobs}\n"
+            f"  lake_ids filter   = {len(lake_ids) if lake_ids is not None else 'all'}"
+        )
+        breaks_df = precompute_nrt_monthly(
+            output_file=resolved_output_file,
+            analysis_date=analysis_date,
+            **shared_kwargs,
+        )
+        logger.info(
+            "Pre-computation complete.\n"
+            f"  analysis_date  : {analysis_date}\n"
+            f"  drained lakes  : {len(breaks_df)}\n"
+            f"  output_file    : {resolved_output_file}"
+        )
+        return
+
+    # --- Range mode ---------------------------------------------------------
+    try:
+        start_ts = pd.Timestamp(analysis_date_start)
+        end_ts = pd.Timestamp(analysis_date_end)
+    except Exception as exc:
+        logger.error("Invalid date range: %s", exc)
+        raise SystemExit(1) from exc
+
+    if end_ts < start_ts:
+        logger.error(
+            "--analysis-date-end (%s) must be >= --analysis-date-start (%s)",
+            analysis_date_end, analysis_date_start,
+        )
+        raise SystemExit(1)
+
+    months = pd.period_range(start=start_ts, end=end_ts, freq="M")
+    month_strs = [str(m) for m in months]  # "YYYY-MM" format
+
+    resolved_output_dir = output_dir if output_dir is not None else Path(dataset_file).parent
+    resolved_output_dir = Path(resolved_output_dir)
+    resolved_output_dir.mkdir(parents=True, exist_ok=True)
+
     logger.info(
-        "Pre-computation complete.\n"
-        f"  analysis_date     : {analysis_date}\n"
-        f"  drained lakes     : {len(breaks_df)}\n"
-        f"  output_file       : {resolved_output_file}"
+        "Starting NRT pre-computation (range mode):\n"
+        f"  dataset_file      = {dataset_file}\n"
+        f"  range             = {analysis_date_start} – {analysis_date_end} "
+        f"({len(month_strs)} months)\n"
+        f"  output_dir        = {resolved_output_dir}\n"
+        f"  resume            = {not no_resume}\n"
+        f"  drain_threshold   = {drain_threshold}\n"
+        f"  data_aggregation  = {data_aggregation_period}\n"
+        f"  lake_chunk_size   = {lake_chunk_size}\n"
+        f"  n_jobs            = {n_jobs}\n"
+        f"  lake_ids filter   = {len(lake_ids) if lake_ids is not None else 'all'}"
+    )
+
+    total_drained = 0
+    skipped = 0
+    failed = 0
+
+    for month_str in month_strs:
+        month_file = resolved_output_dir / f"nrt_{month_str}_drain_breaks.parquet"
+
+        if not no_resume and month_file.exists():
+            logger.info("Skipping %s — output already exists: %s", month_str, month_file)
+            skipped += 1
+            continue
+
+        try:
+            breaks_df = precompute_nrt_monthly(
+                output_file=month_file,
+                analysis_date=month_str,
+                **shared_kwargs,
+            )
+            total_drained += len(breaks_df)
+        except Exception as exc:
+            logger.warning("Failed for %s: %s", month_str, exc)
+            failed += 1
+
+    logger.info(
+        "Range pre-computation complete.\n"
+        f"  months in range   : {len(month_strs)}\n"
+        f"  skipped (existing): {skipped}\n"
+        f"  failed            : {failed}\n"
+        f"  processed         : {len(month_strs) - skipped - failed}\n"
+        f"  total drained rows: {total_drained}\n"
+        f"  output_dir        : {resolved_output_dir}"
     )
 
 
