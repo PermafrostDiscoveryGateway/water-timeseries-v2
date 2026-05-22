@@ -630,9 +630,21 @@ class NRTBreakpoint(BreakpointMethod):
         # filter to dates wherea nalysis date has some data
         ds_analysis_filtered, ds_historical_filtered, valid_ids = self._filter_valid_ids(ds_analysis, ds_historical)
 
+        if len(valid_ids) == 0:
+            return pd.DataFrame(
+                columns=[
+                    "water_observed",
+                    "water_predicted",
+                    "water_predicted_lower_90",
+                    "water_predicted_upper_90",
+                    "water_residual",
+                ]
+            )
+
         # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
         # predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in tqdm(valid_ids, desc='NRT breakpoints')]
-        n_jobs = min(os.cpu_count(), len(valid_ids))
+        cpu_count = os.cpu_count() or 1
+        n_jobs = max(1, min(cpu_count, len(valid_ids)))
         predictions = Parallel(n_jobs=n_jobs, verbose=10)(
             delayed(self.predict_nrt_arima)(
                 ds_in=ds_historical_filtered, id_geohash=idx, water_column=dataset.water_column
@@ -641,10 +653,20 @@ class NRTBreakpoint(BreakpointMethod):
         )
         # remove None values
         predictions = [prediction for prediction in predictions if prediction is not None]
+        prediction_df = pd.DataFrame(predictions)
+        if prediction_df.empty:
+            prediction_df = pd.DataFrame(
+                index=ds_analysis_filtered.id_geohash.values,
+                columns=[
+                    "water_predicted",
+                    "water_predicted_lower_90",
+                    "water_predicted_upper_90",
+                ],
+            )
 
         # merge output into a single dataframe
         # df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions)).round(4)
-        df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions)).round(4)
+        df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(prediction_df).round(4)
         # rename observed water column for clarity
         df_output.rename(columns={dataset.water_column: "water_observed"}, inplace=True)
         # calculate residuals

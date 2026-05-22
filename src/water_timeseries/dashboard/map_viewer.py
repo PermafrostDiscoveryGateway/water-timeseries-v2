@@ -9,6 +9,9 @@ import folium
 import geemap
 import geopandas as gpd
 import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 import xarray as xr
 from streamlit_folium import st_folium
@@ -70,6 +73,9 @@ class MapViewer:
         zoom: int = 10,
         map_backend: str = "folium",  # "folium", or "st_map"
         max_features: Optional[int] = None,  # Limit features for faster loading
+        drained_gdf: Optional[gpd.GeoDataFrame] = None,
+        drained_label: Optional[str] = None,
+        show_main_layer: bool = True,
     ):
         """Initialize the MapViewer.
 
@@ -90,6 +96,9 @@ class MapViewer:
         self.map_center = map_center
         self.map_backend = map_backend  # "folium" or "st_map"
         self.max_features = max_features  # Limit features for faster loading
+        self.drained_gdf = drained_gdf
+        self.drained_label = drained_label
+        self.show_main_layer = show_main_layer
 
         # Load data if parquet_path provided
         if gdf is None and parquet_path is not None:
@@ -145,7 +154,6 @@ class MapViewer:
 
         # Apply sampling if max_features specified (for faster loading)
         if self.max_features and len(valid_gdf) > self.max_features:
-            # valid_gdf = valid_gdf.sample(n=self.max_features, random_state=42).reset_index(drop=True)
             valid_gdf = valid_gdf.head(n=self.max_features).reset_index(drop=True)
             st.caption(f"Showing largest {self.max_features} of {len(self.gdf)} features (use max_features to change)")
 
@@ -219,6 +227,7 @@ class MapViewer:
             ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
             ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
         ]
+        valid_gdf = _sanitize_geojson_properties(valid_gdf)
         valid_gdf, fields_to_show, aliases_to_show = format_tooltip_columns(
             valid_gdf,
             id_column=self.id_column,
@@ -228,12 +237,47 @@ class MapViewer:
         folium.GeoJson(
             valid_gdf,
             name="Lakes",
+            show=self.show_main_layer,
             style_function=style_function,
             tooltip=folium.GeoJsonTooltip(
                 fields=fields_to_show,
                 aliases=aliases_to_show,
             ),
         ).add_to(m)
+
+        drained_gdf = getattr(self, "drained_gdf", None)
+        if drained_gdf is not None and len(drained_gdf) > 0:
+            drained_gdf = drained_gdf[drained_gdf.geometry.notna() & ~drained_gdf.geometry.is_empty].copy()
+            if len(drained_gdf) > 0:
+                drained_gdf = _sanitize_geojson_properties(drained_gdf)
+                drained_tooltip_columns = [
+                    ("water_residual", "Water residual:", "{:.2f}", ""),
+                    ("water_observed", "Observed water:", "{:.2f}", ""),
+                    ("water_predicted", "Predicted water:", "{:.2f}", ""),
+                ]
+                drained_gdf, drained_fields, drained_aliases = format_tooltip_columns(
+                    drained_gdf,
+                    id_column=self.id_column,
+                    tooltip_columns=drained_tooltip_columns,
+                )
+                drained_label = getattr(self, "drained_label", None)
+                drained_layer_name = "Drained last month"
+                if drained_label:
+                    drained_layer_name = f"{drained_layer_name} ({drained_label})"
+                folium.GeoJson(
+                    drained_gdf,
+                    name=drained_layer_name,
+                    style_function=get_default_style_function(
+                        fill_color="#d73027",
+                        edge_color="#7f0000",
+                        edge_weight=2,
+                        fill_opacity=0.7,
+                    ),
+                    tooltip=folium.GeoJsonTooltip(
+                        fields=drained_fields,
+                        aliases=drained_aliases,
+                    ),
+                ).add_to(m)
 
         folium.LayerControl().add_to(m)
 
@@ -284,10 +328,219 @@ class MapViewer:
         st.session_state.selected_geohash = None
 
 
+
+def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """Convert non-JSON-serializable values (e.g., Timestamp) to strings."""
+    sanitized = gdf.copy()
+    geometry_col = sanitized.geometry.name
+
+    datetime_cols = sanitized.select_dtypes(include=["datetime", "datetimetz"]).columns
+    for col in datetime_cols:
+        if col != geometry_col:
+            sanitized[col] = sanitized[col].astype(str)
+
+    object_cols = sanitized.select_dtypes(include=["object"]).columns
+    for col in object_cols:
+        if col == geometry_col:
+            continue
+        sanitized[col] = sanitized[col].apply(
+            lambda value: (
+                pd.to_datetime(value).isoformat()
+                if isinstance(value, (pd.Timestamp, np.datetime64))
+                else value
+            )
+        )
+
+    return sanitized
+
+
+_MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def _render_drain_heatmap(
+    precomputed_counts: pd.DataFrame,
+    precomputed_breaks: Optional[pd.DataFrame],
+    container=None,
+) -> None:
+    """Render an interactive month × year heatmap of drained lake counts.
+
+    Args:
+        precomputed_counts: DataFrame with columns ``analysis_month`` and
+            ``drained_lake_count``.
+        precomputed_breaks: Optional per-lake detail DataFrame.
+        container: Streamlit container to render into (e.g. ``st.sidebar``).
+            Defaults to the main content area (``st``).
+    """
+    c = container if container is not None else st
+
+    c.caption("Click a cell to pre-select that month below.")
+
+    # Parse analysis_month ("YYYY-MM") into numeric year/month
+    df = precomputed_counts.copy()
+    df["year"] = df["analysis_month"].str[:4].astype(int)
+    df["month"] = df["analysis_month"].str[5:7].astype(int)
+
+    pivot = df.pivot_table(index="year", columns="month", values="drained_lake_count", fill_value=0)
+    pivot = pivot.sort_index(ascending=False)  # newest year at top
+
+    years = pivot.index.tolist()
+    months_in_data = pivot.columns.tolist()
+    month_labels = [_MONTH_NAMES[m - 1] for m in months_in_data]
+
+    z_values = pivot.values.tolist()
+    text_values = [[str(int(v)) if v > 0 else "" for v in row] for row in pivot.values]
+
+    # Build flat lists for the invisible scatter overlay (the only way to capture
+    # single-click events in Streamlit – go.Heatmap cells are not selectable points).
+    scatter_x: list = []
+    scatter_y: list = []
+    scatter_color: list = []
+    scatter_custom: list = []
+    scatter_text: list = []
+    for year in years:
+        for mi, month in enumerate(months_in_data):
+            count = int(pivot.at[year, month])
+            scatter_x.append(month_labels[mi])
+            scatter_y.append(str(year))
+            scatter_color.append(count)
+            scatter_custom.append(f"{year}-{month:02d}")
+            scatter_text.append(str(count) if count > 0 else "")
+
+    fig = go.Figure()
+
+    # Layer 1: heatmap for colour fill and axis labels
+    fig.add_trace(
+        go.Heatmap(
+            z=z_values,
+            x=month_labels,
+            y=[str(y) for y in years],
+            colorscale="Blues",
+            text=text_values,
+            texttemplate="%{text}",
+            hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{z}<extra></extra>",
+            colorbar=dict(title="n", thickness=10, len=0.8),
+            xgap=2,
+            ygap=2,
+        )
+    )
+
+    # Layer 2: invisible scatter squares – these fire selection events on click
+    fig.add_trace(
+        go.Scatter(
+            x=scatter_x,
+            y=scatter_y,
+            mode="markers",
+            marker=dict(
+                symbol="square",
+                size=22,
+                opacity=0.01,  # effectively invisible but still hittable
+                color=scatter_color,
+                colorscale="Blues",
+                showscale=False,
+            ),
+            customdata=scatter_custom,
+            text=scatter_text,
+            hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{text}<extra></extra>",
+            showlegend=False,
+        )
+    )
+
+    fig.update_layout(
+        xaxis=dict(side="bottom", tickfont=dict(size=10)),
+        yaxis=dict(type="category", tickfont=dict(size=10)),
+        height=max(200, len(years) * 28 + 80),
+        margin=dict(l=40, r=40, t=10, b=30),
+        plot_bgcolor="rgba(0,0,0,0)",
+    )
+
+    # Key is versioned so that incrementing it remounts the widget with no selection state
+    heatmap_key = f"drain_heatmap_{st.session_state.get('heatmap_version', 0)}"
+    event = c.plotly_chart(fig, use_container_width=True, on_select="rerun", key=heatmap_key)
+
+    # Decode click – scatter overlay points carry analysis_month in customdata
+    selected_analysis_month: Optional[str] = None
+    if event and getattr(event, "selection", None) and event.selection.get("points"):
+        pt = event.selection["points"][0]
+        # Scatter points store the analysis_month string in customdata
+        raw = pt.get("customdata")
+        if raw and isinstance(raw, str) and len(raw) == 7:
+            selected_analysis_month = raw
+
+    # Only raise the sync flag when the selection actually changes (the Plotly
+    # on_select event persists the last clicked point on every rerun, so we must
+    # compare against the previously stored value to detect genuine new clicks).
+    prev_cell = st.session_state.get("heatmap_selected_cell")
+    if selected_analysis_month is not None:
+        st.session_state["heatmap_selected_cell"] = selected_analysis_month
+        if selected_analysis_month != prev_cell:
+            st.session_state["heatmap_sync_dropdown"] = True
+    selected_analysis_month = st.session_state.get("heatmap_selected_cell")
+
+    if selected_analysis_month:
+        try:
+            sel_year_disp = int(selected_analysis_month[:4])
+            sel_month_disp = int(selected_analysis_month[5:7])
+            month_name = _MONTH_NAMES[sel_month_disp - 1]
+        except (ValueError, IndexError):
+            sel_year_disp, sel_month_disp, month_name = None, None, selected_analysis_month
+
+        count_row = int(
+            df.query("analysis_month == @selected_analysis_month")["drained_lake_count"].sum()
+            if not df.empty
+            else 0
+        )
+
+        c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drained")
+
+        if count_row > 0 and precomputed_breaks is not None:
+            month_breaks = precomputed_breaks.query("analysis_month == @selected_analysis_month").copy()
+            if not month_breaks.empty:
+                display_cols = [
+                    col for col in ["id_geohash", "water_residual", "water_observed", "water_predicted", "date"]
+                    if col in month_breaks.columns
+                ]
+                c.dataframe(month_breaks[display_cols].reset_index(drop=True), use_container_width=True)
+
+        if c.button("✖ Clear selection", key="clear_heatmap_sel"):
+            st.session_state.pop("heatmap_selected_cell", None)
+            st.session_state.pop("heatmap_sync_dropdown", None)
+            # Bump version so the chart remounts with no internal selection state
+            st.session_state["heatmap_version"] = st.session_state.get("heatmap_version", 0) + 1
+            st.rerun()
+
+
+def _load_precomputed_nrt(
+    precomputed_nrt_dir: Optional[Path | str],
+) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+    """Load pre-computed NRT monthly results from *precomputed_nrt_dir*.
+
+    Returns ``(counts_df, breaks_df)`` where either may be ``None`` if the
+    corresponding file does not exist.
+    """
+    if precomputed_nrt_dir is None:
+        return None, None
+
+    nrt_dir = Path(precomputed_nrt_dir)
+    counts_path = nrt_dir / "nrt_monthly_drain_counts.parquet"
+    breaks_path = nrt_dir / "nrt_monthly_drain_breaks.parquet"
+
+    counts_df: Optional[pd.DataFrame] = None
+    breaks_df: Optional[pd.DataFrame] = None
+
+    if counts_path.exists():
+        counts_df = pd.read_parquet(counts_path)
+
+    if breaks_path.exists():
+        breaks_df = pd.read_parquet(breaks_path)
+
+    return counts_df, breaks_df
+
+
 def create_app(
     data_path: str | Path = "tests/data/lake_polygons.parquet",
     zarr_path: str | Path = "tests/data/lakes_dw_test.zarr",
     zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
+    precomputed_nrt_dir: Optional[str | Path] = None,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -295,6 +548,10 @@ def create_app(
         data_path: Path to the parquet file containing lake polygons.
         zarr_path: Path to the zarr file containing Dynamic World time series data.
         zarr_path_jrc: Path to the zarr file containing JRC time series data.
+        precomputed_nrt_dir: Directory containing pre-computed NRT parquet files
+            (``nrt_monthly_drain_counts.parquet`` and
+            ``nrt_monthly_drain_breaks.parquet``).  When provided, the dashboard
+            loads these files instead of running NRT on the fly.
     """
     st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
 
@@ -355,6 +612,122 @@ def create_app(
     if "downloaded_dsjrc" not in st.session_state:
         st.session_state.downloaded_dsjrc = None
 
+    # Load pre-computed NRT results (once per session)
+    if "precomputed_nrt_counts" not in st.session_state:
+        counts_loaded, breaks_loaded = _load_precomputed_nrt(precomputed_nrt_dir)
+        st.session_state.precomputed_nrt_counts = counts_loaded
+        st.session_state.precomputed_nrt_breaks = breaks_loaded
+    precomputed_counts: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_counts
+    precomputed_breaks: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_breaks
+
+    # Near-real-time drainage overlay
+    st.sidebar.divider()
+    st.sidebar.subheader("Near-real-time drainage")
+    show_drained = st.sidebar.checkbox(
+        "Show lakes drained in the last month",
+        value=False,
+        help="Uses pre-computed NRT breakpoints (water_residual < -0.25).",
+    )
+    drained_breaks = None
+    drained_label = None
+
+    if show_drained:
+        if precomputed_counts is None and precomputed_breaks is None:
+            st.sidebar.warning(
+                "No pre-computed NRT data found. "
+                "Run `water-timeseries nrt-precompute` to generate it."
+            )
+        else:
+            available_months = (
+                sorted(precomputed_counts["analysis_month"].unique().tolist())
+                if precomputed_counts is not None
+                else sorted(precomputed_breaks["analysis_month"].unique().tolist())
+            )
+            if not available_months:
+                st.sidebar.warning("Pre-computed NRT files are empty.")
+            else:
+                # Build a counts lookup so we can annotate each month with its drain count
+                counts_lookup: dict = {}
+                if precomputed_counts is not None and "drained_lake_count" in precomputed_counts.columns:
+                    counts_lookup = dict(
+                        zip(
+                            precomputed_counts["analysis_month"],
+                            precomputed_counts["drained_lake_count"],
+                        )
+                    )
+
+                # Show a compact sparkline in the sidebar before the selector
+                if counts_lookup:
+                    spark_df = (
+                        pd.DataFrame(
+                            {"month": list(counts_lookup.keys()), "drained": list(counts_lookup.values())}
+                        )
+                        .sort_values("month")
+                        .set_index("month")
+                    )
+                    st.sidebar.caption("Drained lake counts per month:")
+                    st.sidebar.bar_chart(spark_df, height=80)
+
+                # Heatmap in sidebar – click a cell to pre-select the month dropdown
+                _render_drain_heatmap(precomputed_counts, precomputed_breaks, container=st.sidebar)
+
+                # Optional filter: hide months with zero drainages
+                only_nonzero = st.sidebar.toggle(
+                    "Only show months with drainages",
+                    value=False,
+                    help="Hide months where no lakes were flagged as drained.",
+                )
+                selectable_months = available_months
+                if only_nonzero and counts_lookup:
+                    selectable_months = [m for m in available_months if counts_lookup.get(m, 0) > 0]
+                    if not selectable_months:
+                        st.sidebar.info("No months with drainages found.")
+                        selectable_months = available_months
+
+                # Build display labels that include the drain count
+                def _month_label(m: str) -> str:
+                    n = counts_lookup.get(m, 0)
+                    return f"{m}  ·  {n} drained" if n != 1 else f"{m}  ·  1 drained"
+
+                month_labels = [_month_label(m) for m in selectable_months]
+
+                # Sync dropdown with heatmap click: consume the one-shot flag and write
+                # directly to the selectbox session-state key so Streamlit picks it up.
+                heatmap_pick = st.session_state.get("heatmap_selected_cell")
+                if st.session_state.pop("heatmap_sync_dropdown", False):
+                    if heatmap_pick and heatmap_pick in selectable_months:
+                        st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
+
+                default_idx = (
+                    selectable_months.index(heatmap_pick)
+                    if heatmap_pick and heatmap_pick in selectable_months
+                    else len(selectable_months) - 1
+                )
+
+                selected_label = st.sidebar.selectbox(
+                    "NRT analysis month",
+                    month_labels,
+                    index=default_idx,
+                    key="nrt_month_selector",
+                    help="Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
+                )
+                # Map label back to raw month string
+                selected_analysis_month = selectable_months[month_labels.index(selected_label)]
+                drained_label = selected_analysis_month
+
+                if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
+                    month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
+                    if not month_slice.empty:
+                        drained_breaks = (
+                            month_slice.set_index("id_geohash")
+                            if "id_geohash" in month_slice.columns
+                            else month_slice
+                        )
+                    else:
+                        pass  # caption shown via annotated label above
+                else:
+                    st.sidebar.caption(f"No per-lake break data available for {drained_label}")
+
     # Create map viewer
     try:
         viewer = MapViewer(
@@ -364,7 +737,19 @@ def create_app(
             map_backend=map_backend,
             max_features=max_features,
         )
-        # viewer.layer_column = layer_column  # Set layer column for folium
+        if show_drained and drained_breaks is not None and not drained_breaks.empty:
+            drained_gdf = viewer.gdf.merge(
+                drained_breaks.reset_index(),
+                on=id_column,
+                how="inner",
+            )
+            viewer.drained_gdf = drained_gdf
+            viewer.drained_label = drained_label
+            viewer.show_main_layer = False
+        elif show_drained:
+            viewer.drained_gdf = None
+            viewer.drained_label = drained_label
+            viewer.show_main_layer = True
 
         # Render the map
         selected = viewer.render()  # noqa: F841
@@ -444,8 +829,6 @@ def create_app(
             id_available_dw = check_dataset_availability(st.session_state.dw_dataset, current)
             id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
             st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
-
-            ""  # Already handled in the unified loading code above"
 
             # Automatically download if not available
             if not id_available_dw or not id_available_jrc:
