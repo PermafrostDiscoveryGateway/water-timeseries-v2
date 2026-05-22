@@ -61,6 +61,9 @@ dependencies = [
     "dask[dataframe]>=2026.3.0",
     "xarray>=2026.2.0",
     "ee-extra>=2025.7.2",
+    "geoparquet-io>=1.1.1",
+    "tqdm-joblib>=0.0.5",
+    "polars>=1.40.1",
 ]
 
 [project.optional-dependencies]
