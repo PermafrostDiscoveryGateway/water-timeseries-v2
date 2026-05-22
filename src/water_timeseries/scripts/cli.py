@@ -431,37 +431,33 @@ def plot_timeseries(
 @app.command(group="Analysis")
 def nrt_precompute(
     dataset_file: Path,
-    output_dir: Optional[Path] = None,
+    analysis_date: Optional[str] = None,
+    output_file: Optional[Path] = None,
     drain_threshold: float = -0.25,
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
-    no_resume: bool = False,
     vector_file: Optional[Path] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
-    """Pre-compute NRT monthly drained-lake results from a DW dataset.
+    """Pre-compute NRT drained-lake results for a single analysis month.
 
-    Iterates over every available analysis month in *dataset_file*, runs
-    ``NRTBreakpoint.calculate_break`` for each, and writes two parquet files:
-
-    ``nrt_monthly_drain_counts.parquet``
-        One row per month: ``analysis_month`` and ``drained_lake_count``.
-
-    ``nrt_monthly_drain_breaks.parquet``
-        Full per-lake NRT break results (drained lakes only) with an
-        ``analysis_month`` column, ready for the dashboard map overlay.
-
-    The dashboard will automatically detect and load these files when they are
-    placed in the same directory as the vector parquet dataset.
+    Runs ``NRTBreakpoint.calculate_break`` for *analysis_date* and writes the
+    per-lake break results (drained lakes only) to *output_file*.  The output
+    parquet includes an ``analysis_month`` column and is ready for the
+    dashboard map overlay.
 
     Parameters
     ----------
     dataset_file:
         Path to the DW dataset file (``.ncin`` / ``.nc`` NetCDF or ``.zarr``).
-    output_dir:
-        Directory where results are written. Defaults to the parent directory
+    analysis_date:
+        Month to analyse as a ``YYYY-MM`` string (e.g. ``2024-01``).
+        **Required.**
+    output_file:
+        Destination parquet file for the results.  Defaults to
+        ``nrt_<analysis_date>_drain_breaks.parquet`` in the parent directory
         of *dataset_file*.
     drain_threshold:
         ``water_residual`` threshold below which a lake is classified as
@@ -469,11 +465,9 @@ def nrt_precompute(
     data_aggregation_period:
         Passed to ``NRTBreakpoint.calculate_break`` (default ``"all"``).
     lake_chunk_size:
-        Lakes processed per chunk per month. Smaller = less RAM. Default 5000.
+        Lakes processed per chunk. Smaller = less RAM. Default 5000.
     n_jobs:
         Parallel ARIMA workers per chunk. Reduce if RAM is tight. Default 4.
-    no_resume:
-        When set, re-process all months even if output files already exist.
     vector_file:
         Optional path to a GeoParquet vector file (e.g. the dashboard's lake
         polygons).  When provided, only the ``id_geohash`` values present in
@@ -488,20 +482,32 @@ def nrt_precompute(
     .. code-block:: bash
 
         water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
-            --output-dir precomputed/nrt
+            --analysis-date 2024-01 \\
+            --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet
 
         # Only the demo visualization lakes (fast)
         water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
-            --output-dir precomputed/nrt \\
+            --analysis-date 2024-01 \\
+            --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet \\
             --vector-file tests/data/lake_polygons.parquet
 
         # Tune for low-RAM machines
         water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
-            --output-dir precomputed/nrt --lake-chunk-size 2000 --n-jobs 2
+            --analysis-date 2024-01 \\
+            --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet \\
+            --lake-chunk-size 2000 --n-jobs 2
     """
     setup_logging(logfile=logfile, verbose=verbose)
 
-    resolved_output = output_dir if output_dir is not None else Path(dataset_file).parent
+    if not analysis_date:
+        logger.error("--analysis-date is required (e.g. --analysis-date 2024-01)")
+        raise SystemExit(1)
+
+    resolved_output_file = (
+        output_file
+        if output_file is not None
+        else Path(dataset_file).parent / f"nrt_{analysis_date}_drain_breaks.parquet"
+    )
 
     # Resolve lake IDs from vector file if provided
     lake_ids = None
@@ -515,23 +521,23 @@ def nrt_precompute(
         logger.info("Loaded %d lake IDs from vector file: %s", len(lake_ids), vector_file)
 
     logger.info(
-        "Starting NRT monthly pre-computation:\n"
+        "Starting NRT pre-computation:\n"
         f"  dataset_file          = {dataset_file}\n"
-        f"  output_dir            = {resolved_output}\n"
+        f"  analysis_date         = {analysis_date}\n"
+        f"  output_file           = {resolved_output_file}\n"
         f"  drain_threshold       = {drain_threshold}\n"
         f"  data_aggregation      = {data_aggregation_period}\n"
         f"  lake_chunk_size       = {lake_chunk_size}\n"
         f"  n_jobs                = {n_jobs}\n"
-        f"  resume                = {not no_resume}\n"
         f"  lake_ids filter       = {len(lake_ids) if lake_ids is not None else 'all'}"
     )
 
-    counts_df, breaks_df = precompute_nrt_monthly(
+    breaks_df = precompute_nrt_monthly(
         dataset_file=dataset_file,
-        output_dir=resolved_output,
+        output_file=resolved_output_file,
+        analysis_date=analysis_date,
         drain_threshold=drain_threshold,
         data_aggregation_period=data_aggregation_period,
-        resume=not no_resume,
         lake_chunk_size=lake_chunk_size,
         n_jobs=n_jobs,
         lake_ids=lake_ids,
@@ -539,8 +545,9 @@ def nrt_precompute(
 
     logger.info(
         "Pre-computation complete.\n"
-        f"  months processed : {len(counts_df)}\n"
-        f"  total drained rows: {len(breaks_df)}"
+        f"  analysis_date     : {analysis_date}\n"
+        f"  drained lakes     : {len(breaks_df)}\n"
+        f"  output_file       : {resolved_output_file}"
     )
 
 
