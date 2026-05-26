@@ -536,10 +536,7 @@ def breakpoint_analysis_nrt(
     single_mode = analysis_date is not None
 
     if single_mode and range_mode:
-        logger.error(
-            "--analysis-date cannot be combined with "
-            "--analysis-date-start / --analysis-date-end"
-        )
+        logger.error("--analysis-date cannot be combined with --analysis-date-start / --analysis-date-end")
         raise SystemExit(1)
 
     if not single_mode and not range_mode:
@@ -550,15 +547,14 @@ def breakpoint_analysis_nrt(
         raise SystemExit(1)
 
     if range_mode and (analysis_date_start is None or analysis_date_end is None):
-        logger.error(
-            "--analysis-date-start and --analysis-date-end must both be provided."
-        )
+        logger.error("--analysis-date-start and --analysis-date-end must both be provided.")
         raise SystemExit(1)
 
     # --- Resolve lake IDs from vector file ----------------------------------
     lake_ids = None
     if vector_file is not None:
         import geopandas as gpd
+
         gdf = gpd.read_parquet(vector_file)
         if "id_geohash" not in gdf.columns:
             logger.error("vector_file %s does not contain an 'id_geohash' column", vector_file)
@@ -617,7 +613,8 @@ def breakpoint_analysis_nrt(
     if end_ts < start_ts:
         logger.error(
             "--analysis-date-end (%s) must be >= --analysis-date-start (%s)",
-            analysis_date_end, analysis_date_start,
+            analysis_date_end,
+            analysis_date_start,
         )
         raise SystemExit(1)
 

@@ -59,6 +59,7 @@ logger = logging.getLogger(__name__)
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _open_dataset(dataset_file: str | Path, id_chunk: int = 2000) -> xr.Dataset:
     """Open a dataset file with dask chunking so all operations stay lazy.
 
@@ -163,6 +164,7 @@ def _run_nrt_for_month(
 # Core pre-computation
 # ---------------------------------------------------------------------------
 
+
 def precompute_nrt_monthly(
     dataset_file: str | Path,
     output_file: str | Path,
@@ -212,9 +214,7 @@ def precompute_nrt_monthly(
     try:
         month_ts = pd.Timestamp(analysis_date)
     except Exception as exc:
-        raise ValueError(
-            f"Invalid analysis_date {analysis_date!r}. Expected 'YYYY-MM' format."
-        ) from exc
+        raise ValueError(f"Invalid analysis_date {analysis_date!r}. Expected 'YYYY-MM' format.") from exc
 
     output_file = Path(output_file)
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -230,7 +230,8 @@ def precompute_nrt_monthly(
             logger.warning("%d of %d requested lake IDs not found in dataset", missing, len(lake_ids))
         logger.info(
             "Filtering dataset to %d requested lake IDs (of %d total)",
-            len(filtered), len(available_in_ds),
+            len(filtered),
+            len(available_in_ds),
         )
         raw_ds = raw_ds.sel(id_geohash=filtered)
 
@@ -238,7 +239,10 @@ def precompute_nrt_monthly(
     n_lakes = len(raw_ds.id_geohash.values)
     logger.info(
         "Dataset opened: %d lakes, water column = %s, chunk_size = %d, n_jobs = %d",
-        n_lakes, water_col, lake_chunk_size, n_jobs,
+        n_lakes,
+        water_col,
+        lake_chunk_size,
+        n_jobs,
     )
 
     # Validate that the requested date exists in the dataset
@@ -284,7 +288,9 @@ def precompute_nrt_monthly(
         drained_df.to_parquet(output_file, index=False)
         logger.info(
             "%s: %d drained lakes written to %s",
-            month_str, drained_count, output_file,
+            month_str,
+            drained_count,
+            output_file,
         )
     else:
         logger.info("%s: no drained lakes found (threshold %.3f)", month_str, drain_threshold)
@@ -292,7 +298,8 @@ def precompute_nrt_monthly(
 
     logger.info(
         "%s: %d drained lakes (of %d valid)",
-        month_str, drained_count,
+        month_str,
+        drained_count,
         len(month_breaks) if month_breaks is not None else 0,
     )
     return drained_df
