@@ -635,7 +635,7 @@ def create_app(
         if precomputed_counts is None and precomputed_breaks is None:
             st.sidebar.warning(
                 "No pre-computed NRT data found. "
-                "Run `water-timeseries nrt-precompute` to generate it."
+                "Run `water-timeseries breakpoint-analysis-nrt` to generate it."
             )
         else:
             available_months = (

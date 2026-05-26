@@ -24,13 +24,13 @@ Example
 .. code-block:: bash
 
     # Process a single month
-    uv run water-timeseries nrt-precompute \\
+    uv run water-timeseries breakpoint-analysis-nrt \\
         downloads/lakes_dw_V2d.nc \\
         --analysis-date 2024-01 \\
         --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet
 
     # Tune memory vs speed
-    uv run water-timeseries nrt-precompute \\
+    uv run water-timeseries breakpoint-analysis-nrt \\
         downloads/lakes_dw_V2d.nc \\
         --analysis-date 2024-01 \\
         --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet \\

@@ -138,7 +138,7 @@ ds = dl.download_dw_monthly(
 uv run water-timeseries dashboard
 
 # Run breakpoint analysis
-uv run water-timeseries breakpoint-analysis \
+uv run water-timeseries breakpoint-analysis-historical \
     data.zarr \
     output.parquet \
     --chunksize 100 \
@@ -150,7 +150,7 @@ uv run water-timeseries breakpoint-analysis \
 You can also use a YAML configuration file:
 
 ```bash
-uv run water-timeseries breakpoint-analysis --config-file configs/config.yaml
+uv run water-timeseries breakpoint-analysis-historical --config-file configs/config.yaml
 ```
 
 Example config file:

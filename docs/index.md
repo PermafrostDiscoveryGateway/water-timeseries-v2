@@ -64,17 +64,17 @@ pip install .
 # Show help
 uv run water-timeseries --help
 
-# Show breakpoint-analysis subcommand help
-uv run water-timeseries breakpoint-analysis --help
+# Show breakpoint-analysis-historical subcommand help
+uv run water-timeseries breakpoint-analysis-historical --help
 
 # Show plot-timeseries subcommand help
 uv run water-timeseries plot-timeseries --help
 
 # Run with required arguments
-uv run water-timeseries breakpoint-analysis data.zarr output.parquet
+uv run water-timeseries breakpoint-analysis-historical data.zarr output.parquet
 
 # Run with optional parameters
-uv run water-timeseries breakpoint-analysis \
+uv run water-timeseries breakpoint-analysis-historical \
     data.zarr \
     output.parquet \
     --chunksize 100 \
@@ -86,7 +86,7 @@ uv run water-timeseries breakpoint-analysis \
 You can also use a YAML configuration file:
 
 ```bash
-uv run water-timeseries breakpoint-analysis --config-file configs/config.yaml
+uv run water-timeseries breakpoint-analysis-historical --config-file configs/config.yaml
 ```
 
 Example config file:

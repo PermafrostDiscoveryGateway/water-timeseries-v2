@@ -2,8 +2,8 @@
 """Hierarchical CLI for water-timeseries.
 
 Usage:
-    water-timeseries breakpoint-analysis data.zarr output.parquet
-    water-timeseries breakpoint-analysis data.zarr output.parquet -c 100 -j 20
+    water-timeseries breakpoint-analysis-historical data.zarr output.parquet
+    water-timeseries breakpoint-analysis-historical data.zarr output.parquet -c 100 -j 20
     water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
 """
 
@@ -141,7 +141,7 @@ def dashboard(
 
 # Subcommand: breakpoint analysis
 @app.command(group="Analysis")
-def breakpoint_analysis(
+def breakpoint_analysis_historical(
     water_dataset_file: Optional[Path] = None,
     output_file: Optional[Path] = None,
     config_file: Optional[Path] = None,
@@ -160,7 +160,7 @@ def breakpoint_analysis(
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
-    """Run breakpoint analysis on water dataset.
+    """Run historical breakpoint analysis on water dataset.
 
     This command performs breakpoint detection on lake water area time series
     data to identify significant changes in water availability. It supports
@@ -251,19 +251,19 @@ def breakpoint_analysis(
     ------------
     Basic usage with required arguments::
 
-        water-timeseries breakpoint-analysis tests/data/lakes_dw_test.zarr output.parquet
+        water-timeseries breakpoint-analysis-historical tests/data/lakes_dw_test.zarr output.parquet
 
     With custom chunk size and parallel jobs::
 
-        water-timeseries breakpoint-analysis tests/data/lakes_dw_test.zarr output.parquet -c 100 -j 20
+        water-timeseries breakpoint-analysis-historical tests/data/lakes_dw_test.zarr output.parquet -c 100 -j 20
 
     Using a configuration file::
 
-        water-timeseries breakpoint-analysis --config-file configs/config.yaml
+        water-timeseries breakpoint-analysis-historical --config-file configs/config.yaml
 
     Spatial filtering with bounding box::
 
-        water-timeseries breakpoint-analysis data.zarr output.parquet \\
+        water-timeseries breakpoint-analysis-historical data.zarr output.parquet \\
             --bbox-west 100 --bbox-south 20 --bbox-east 110 --bbox-north 30
     """
     # Load config file if provided
