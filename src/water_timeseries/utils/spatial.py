@@ -1,6 +1,6 @@
 """Spatial utilities for working with geospatial data."""
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import geopandas as gpd
 import numpy as np
@@ -155,3 +155,45 @@ def chunk_gdf_simple(gdf: gpd.GeoDataFrame, chunk_size: int) -> list[gpd.GeoData
         chunk = gdf.iloc[i : i + chunk_size]
         chunks.append(chunk)
     return chunks
+
+
+def create_longitude_latitude_grid(
+    lon_range: Tuple[float, float] = (-180.0, 180.0),
+    lat_range: Tuple[float, float] = (60.0, 80.0),
+    bbox_size_lon: float = 10.0,
+    bbox_size_lat: float = 2.0,
+) -> np.ndarray:
+    """
+    Create a regular grid of longitude-latitude coordinates.
+
+    Parameters
+    ----------
+    lon_range : Tuple[float, float], optional
+        (min_lon, max_lon) for longitude range (default: (-180.0, 180.0))
+    lat_range : Tuple[float, float], optional
+        (min_lat, max_lat) for latitude range (default: (60.0, 80.0))
+    bbox_size_lon : float, optional
+        Step size for longitude (default: 10.0)
+    bbox_size_lat : float, optional
+        Step size for latitude (default: 2.0)
+
+    Returns
+    -------
+    np.ndarray
+        2D array of unique (longitude, latitude) pairs with shape (N, 2).
+        Each row is [longitude, latitude].
+    """
+    # Generate coordinate arrays
+    lons: np.ndarray = np.arange(lon_range[0], lon_range[1], bbox_size_lon)
+    lats: np.ndarray = np.arange(lat_range[0], lat_range[1], bbox_size_lat)
+
+    # Create meshgrid and flatten
+    lon_grid, lat_grid = np.meshgrid(lons, lats)
+    lon_flat: np.ndarray = lon_grid.ravel()
+    lat_flat: np.ndarray = lat_grid.ravel()
+
+    # Stack and get unique combinations
+    coords: np.ndarray = np.column_stack([lon_flat, lat_flat])
+    unique_coords: np.ndarray = np.unique(coords, axis=0)
+
+    return unique_coords
