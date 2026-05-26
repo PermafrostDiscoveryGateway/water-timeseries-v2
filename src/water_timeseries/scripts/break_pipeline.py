@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from water_timeseries.breakpoint import BeastBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
-from water_timeseries.utils.io import load_vector_dataset
+from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
 
 
@@ -210,7 +210,7 @@ class BreakpointPipeline:
         Returns:
             xarray Dataset with water time series data.
         """
-        ds = xr.open_zarr(self.water_dataset_file)
+        ds = load_xarray_dataset(self.water_dataset_file)
         self.process_ids = ds.id_geohash.values
         return ds
 

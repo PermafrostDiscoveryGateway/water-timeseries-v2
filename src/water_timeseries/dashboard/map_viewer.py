@@ -13,7 +13,6 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-import xarray as xr
 from streamlit_folium import st_folium
 
 from water_timeseries.dataset import DWDataset, JRCDataset
@@ -23,7 +22,7 @@ from water_timeseries.utils.dashboard import (
     load_dataset,
     plot_time_series_data,
 )
-from water_timeseries.utils.io import load_vector_dataset
+from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.map_styling import (
     create_tile_layers,
     format_tooltip_columns,
@@ -537,6 +536,7 @@ def create_app(
     zarr_path: str | Path = "tests/data/lakes_dw_test.zarr",
     zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
     precomputed_nrt_dir: Optional[str | Path] = None,
+    offline_mode: bool = False,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -548,7 +548,12 @@ def create_app(
             (``nrt_monthly_drain_counts.parquet`` and
             ``nrt_monthly_drain_breaks.parquet``).  When provided, the dashboard
             loads these files instead of running NRT on the fly.
+        offline_mode: If True, disables Google Earth Engine download functionality.
+            Use when running without internet access or EE authentication.
     """
+    # Store offline_mode in session state so it's accessible throughout the app
+    st.session_state.offline_mode = offline_mode
+
     st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
 
     st.title("🗺️ Lake Polygon Map Viewer")
@@ -561,6 +566,10 @@ def create_app(
 
     # Create sidebar for controls
     st.sidebar.header("Settings")
+
+    # Show offline mode indicator
+    if offline_mode:
+        st.sidebar.warning("⚠️ Offline mode: Data downloads and timelapse generation are disabled.")
 
     # Plotting mode selection (static vs dynamic/interactive) - defaults to interactive
     is_interactive = st.sidebar.toggle(
@@ -823,6 +832,13 @@ def create_app(
 
             # Automatically download if not available
             if not id_available_dw or not id_available_jrc:
+                if st.session_state.get("offline_mode", False):
+                    st.warning(
+                        "⚠️ Offline mode enabled: Data download is disabled. "
+                        "Please provide data files via --dw-dataset-file and --jrc-dataset-file, "
+                        "or run without --offline-mode to enable downloads."
+                    )
+                    return  # Exit early to prevent download attempts
                 st.caption("Downloading...")
 
                 # Download data for the specific geohash
@@ -965,7 +981,13 @@ def create_app(
             timelapse_clicked = st.button("🎬 Create Timelapse", key="create_timelapse")
 
             if timelapse_clicked:
-                if not create_sentinel2 and not create_landsat:
+                if st.session_state.get("offline_mode", False):
+                    st.warning(
+                        "⚠️ Offline mode enabled: Timelapse generation is disabled. "
+                        "Timelapses require Google Earth Engine access. "
+                        "Run without --offline-mode to enable timelapse generation."
+                    )
+                elif not create_sentinel2 and not create_landsat:
                     st.warning("Please select at least one data source (Sentinel-2 or Landsat)")
                 else:
                     with st.spinner("Generating timelapse... This may take a up to a minute."):
@@ -1113,7 +1135,7 @@ def create_app(
                         st.error(f"Error processing downloaded data: {e}")
                 elif st.session_state.dw_dataset is None:
                     try:
-                        ds = xr.open_zarr(zarr_path_input)
+                        ds = load_xarray_dataset(zarr_path_input)
                         st.session_state.dw_dataset = DWDataset(ds)
                     except Exception as e:
                         st.error(f"Error loading time series data: {e}")
@@ -1127,7 +1149,7 @@ def create_app(
                         st.error(f"Error processing downloaded JRC data: {e}")
                 elif st.session_state.jrc_dataset is None:
                     try:
-                        ds_jrc = xr.open_zarr(zarr_path_jrc_input)
+                        ds_jrc = load_xarray_dataset(zarr_path_jrc_input)
                         st.session_state.jrc_dataset = JRCDataset(ds_jrc)
                     except Exception as e:
                         st.error(f"Error loading JRC time series data: {e}")
@@ -1145,26 +1167,33 @@ def create_app(
 
                 # Automatically download if not available
                 if not id_available:
-                    st.caption("Downloading...")
-                    try:
-                        downloader = EarthEngineDownloader(ee_auth=True)
-                        ds_downloaded = downloader.download_dw_monthly(
-                            vector_dataset=data_path_input,
-                            name_attribute=id_column,
-                            id_list=[current],
-                            years=list(range(2017, 2026)),
-                            months=[6, 7, 8, 9],
-                            date_list=None,
+                    if st.session_state.get("offline_mode", False):
+                        st.warning(
+                            "⚠️ Offline mode enabled: Data download is disabled. "
+                            "Please provide data files via --dw-dataset-file and --jrc-dataset-file, "
+                            "or run without --offline-mode to enable downloads."
                         )
-                        if ds_downloaded is not None:
-                            st.session_state.downloaded_dsdw = ds_downloaded
-                            st.session_state.dw_dataset = DWDataset(ds_downloaded)
-                            id_available = True
-                            st.rerun()
-                        else:
-                            st.error("Download returned no data.")
-                    except Exception as e:
-                        st.error(f"Error downloading data: {e}")
+                    else:
+                        st.caption("Downloading...")
+                        try:
+                            downloader = EarthEngineDownloader(ee_auth=True)
+                            ds_downloaded = downloader.download_dw_monthly(
+                                vector_dataset=data_path_input,
+                                name_attribute=id_column,
+                                id_list=[current],
+                                years=list(range(2017, 2026)),
+                                months=[6, 7, 8, 9],
+                                date_list=None,
+                            )
+                            if ds_downloaded is not None:
+                                st.session_state.downloaded_dsdw = ds_downloaded
+                                st.session_state.dw_dataset = DWDataset(ds_downloaded)
+                                id_available = True
+                                st.rerun()
+                            else:
+                                st.error("Download returned no data.")
+                        except Exception as e:
+                            st.error(f"Error downloading data: {e}")
 
                 # Plot time series
                 if st.session_state.dw_dataset is not None and id_available:
