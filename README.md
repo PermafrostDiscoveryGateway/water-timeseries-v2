@@ -146,7 +146,7 @@ uv run water-timeseries breakpoint-analysis-historical \
 
 # Run Near real-time breakpoint analysis
 uv run water-timeseries breakpoint-analysis-nrt \
-    --dataset-file  data.zarr \
+    --dataset-file data.zarr \
     --analysis-date 2026-06 \
     --output-dir ./output \
 ```
