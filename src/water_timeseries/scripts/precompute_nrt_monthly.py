@@ -51,6 +51,7 @@ import xarray as xr
 
 from water_timeseries.breakpoint import NRTBreakpoint
 from water_timeseries.dataset import DWDataset
+from water_timeseries.utils.io import load_xarray_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -73,12 +74,13 @@ def _open_dataset(dataset_file: str | Path, id_chunk: int = 2000) -> xr.Dataset:
     path = Path(dataset_file)
     if path.suffix.lower() == ".zarr" or path.is_dir():
         logger.info("Opening dataset as Zarr: %s", path)
-        return xr.open_zarr(str(path))
+        return load_xarray_dataset(str(path))
     else:
         logger.info("Opening dataset as NetCDF with dask chunks (id_geohash=%d): %s", id_chunk, path)
-        return xr.open_dataset(str(path), chunks={"id_geohash": id_chunk})
+        return load_xarray_dataset(str(path), chunks={"id_geohash": id_chunk})
 
 
+# TODO: typically autodetected in specific dataset
 def _detect_water_column(raw_ds: xr.Dataset) -> str:
     """Return the water column name for a raw DW or JRC dataset."""
     if "water" in raw_ds.data_vars:
@@ -235,6 +237,7 @@ def precompute_nrt_monthly(
         )
         raw_ds = raw_ds.sel(id_geohash=filtered)
 
+    # TODO:simplify
     water_col = _detect_water_column(raw_ds)
     n_lakes = len(raw_ds.id_geohash.values)
     logger.info(
@@ -246,6 +249,7 @@ def precompute_nrt_monthly(
     )
 
     # Validate that the requested date exists in the dataset
+    # TODO: also internatlly
     available_dates_vals = raw_ds["date"].values
     available_dates = sorted(pd.to_datetime(available_dates_vals).tolist())
     if not available_dates:

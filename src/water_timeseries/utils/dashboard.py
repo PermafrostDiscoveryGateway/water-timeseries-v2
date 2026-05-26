@@ -6,10 +6,10 @@ from typing import Optional, Tuple
 
 import matplotlib.pyplot as plt
 import streamlit as st
-import xarray as xr
 
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
+from water_timeseries.utils.io import load_xarray_dataset
 
 
 def load_dataset(
@@ -47,7 +47,7 @@ def load_dataset(
 
     # Priority 3: Load from zarr file
     try:
-        ds = xr.open_zarr(str(zarr_path))
+        ds = load_xarray_dataset(str(zarr_path))
         return dataset_class(ds), True
     except Exception as e:
         st.error(f"Error loading {dataset_type.upper()} time series data: {e}")

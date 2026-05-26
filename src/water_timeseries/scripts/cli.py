@@ -7,6 +7,7 @@ Usage:
     water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
 """
 
+import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -76,11 +77,13 @@ def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
 # Subcommand: dashboard
 @app.command(group="Visualization")
 def dashboard(
-    port: int = 8501,
+    port: Optional[int] = None,
     vector_file: Optional[str] = None,
     dw_dataset_file: Optional[str] = None,
     jrc_dataset_file: Optional[str] = None,
     precomputed_nrt_dir: Optional[str] = None,
+    offline_mode: Optional[bool] = None,
+    config_file: Optional[Path] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
@@ -93,6 +96,10 @@ def dashboard(
         jrc_dataset_file: Path to JRC dataset file (zarr)
         precomputed_nrt_dir: Directory with pre-computed NRT parquet files.
             Auto-detected from ``precomputed/nrt/`` in the repo root when present.
+        offline_mode: If set, disables Google Earth Engine download functionality.
+            Use this when running without internet access or Earth Engine authentication.
+        config_file: Path to a YAML or JSON configuration file containing default
+            parameters. CLI arguments take priority over config file values.
         logfile: Path to log file
         verbose: Verbosity level (-v for DEBUG)
 
@@ -104,9 +111,36 @@ def dashboard(
             --dw-dataset-file downloads/data.zarr \\
             --jrc-dataset-file downloads/downloads/lakes_jrc_viz.zarr \\
             --precomputed-nrt-dir precomputed/nrt-demo
+        water-timeseries dashboard --offline-mode
+        water-timeseries dashboard --config-file configs/dashboard_config.yaml
     """
-    import subprocess
-    import sys
+    # Load config file if provided"
+    config_dict = load_config(config_file) if config_file else {}
+
+    # Debug: Log loaded config
+    logger.debug(f"Loaded config from {config_file}: {config_dict}")
+    logger.debug(f"CLI args: offline_mode={offline_mode}, port={port}")
+
+    # Merge config with CLI args (CLI takes priority)
+    # For boolean values, we need to handle the case where CLI doesn't pass the flag
+    # In that case, we want to preserve the config file value
+    config_dict = merge_config_with_args(
+        config_dict,
+        vector_file=vector_file,
+        dw_dataset_file=dw_dataset_file,
+        jrc_dataset_file=jrc_dataset_file,
+        precomputed_nrt_dir=precomputed_nrt_dir,
+        offline_mode=offline_mode,
+        port=port,
+    )
+
+    # Get values from merged config with defaults
+    port = config_dict.get("port", 8501)
+    vector_file = config_dict.get("vector_file")
+    dw_dataset_file = config_dict.get("dw_dataset_file")
+    jrc_dataset_file = config_dict.get("jrc_dataset_file")
+    precomputed_nrt_dir = config_dict.get("precomputed_nrt_dir")
+    offline_mode = config_dict.get("offline_mode", False)
 
     # Setup logging
     setup_logging(logfile=logfile, verbose=verbose)
@@ -132,10 +166,17 @@ def dashboard(
         script_args.extend(["--jrc-dataset-file", jrc_dataset_file])
     if precomputed_nrt_dir:
         script_args.extend(["--precomputed-nrt-dir", precomputed_nrt_dir])
+    if offline_mode:
+        script_args.append("--offline-mode")
     if script_args:
         cmd.extend(["--"] + script_args)
 
     logger.info(f"Starting dashboard with command: {' '.join(cmd)}")
+    logger.info(
+        f"Dashboard config: port={port}, vector_file={vector_file}, "
+        f"dw_dataset_file={dw_dataset_file}, jrc_dataset_file={jrc_dataset_file}, "
+        f"precomputed_nrt_dir={precomputed_nrt_dir}, offline_mode={offline_mode}"
+    )
     subprocess.run(cmd)
 
 

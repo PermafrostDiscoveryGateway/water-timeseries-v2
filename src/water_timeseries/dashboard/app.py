@@ -41,6 +41,12 @@ def parse_args():
             f"Defaults to {_DEFAULT_NRT_DIR} when that directory exists."
         ),
     )
+    parser.add_argument(
+        "--offline-mode",
+        action="store_true",
+        default=False,
+        help="Disable Google Earth Engine download functionality. Use when running without internet access or EE authentication.",
+    )
     return parser.parse_args()
 
 
@@ -49,6 +55,7 @@ def main(
     dw_dataset_file: str | Path = None,
     jrc_dataset_file: str | Path = None,
     precomputed_nrt_dir: str | Path = None,
+    offline_mode: bool = False,
 ):
     """Run the dashboard app.
 
@@ -58,6 +65,7 @@ def main(
         jrc_dataset_file: Path to JRC dataset file (zarr). Defaults to test data.
         precomputed_nrt_dir: Directory with pre-computed NRT parquet files.
             Auto-detected from ``precomputed/nrt/`` in the repo root when present.
+        offline_mode: If True, disables Google Earth Engine download functionality.
     """
     # Default paths to test data
     default_vector_file = _REPO_ROOT / "tests" / "data" / "lake_polygons.parquet"
@@ -103,6 +111,7 @@ def main(
         zarr_path=dw_dataset_file,
         zarr_path_jrc=jrc_dataset_file,
         precomputed_nrt_dir=precomputed_nrt_dir,
+        offline_mode=offline_mode,
     )
 
 
@@ -113,4 +122,5 @@ if __name__ == "__main__":
         dw_dataset_file=args.dw_dataset_file,
         jrc_dataset_file=args.jrc_dataset_file,
         precomputed_nrt_dir=args.precomputed_nrt_dir,
+        offline_mode=args.offline_mode,
     )
