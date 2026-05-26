@@ -143,6 +143,12 @@ uv run water-timeseries breakpoint-analysis-historical \
     output.parquet \
     --chunksize 100 \
     --n-jobs 4
+
+# Run Near real-time breakpoint analysis
+uv run water-timeseries breakpoint-analysis-nrt \
+    --dataset-file  data.zarr \
+    --analysis-date 2026-06 \
+    --output-dir ./output \
 ```
 
 #### Using a Config File
