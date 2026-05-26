@@ -328,7 +328,6 @@ class MapViewer:
         st.session_state.selected_geohash = None
 
 
-
 def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Convert non-JSON-serializable values (e.g., Timestamp) to strings."""
     sanitized = gdf.copy()
@@ -345,9 +344,7 @@ def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
             continue
         sanitized[col] = sanitized[col].apply(
             lambda value: (
-                pd.to_datetime(value).isoformat()
-                if isinstance(value, (pd.Timestamp, np.datetime64))
-                else value
+                pd.to_datetime(value).isoformat() if isinstance(value, (pd.Timestamp, np.datetime64)) else value
             )
         )
 
@@ -485,9 +482,7 @@ def _render_drain_heatmap(
             sel_year_disp, sel_month_disp, month_name = None, None, selected_analysis_month
 
         count_row = int(
-            df.query("analysis_month == @selected_analysis_month")["drained_lake_count"].sum()
-            if not df.empty
-            else 0
+            df.query("analysis_month == @selected_analysis_month")["drained_lake_count"].sum() if not df.empty else 0
         )
 
         c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drained")
@@ -496,7 +491,8 @@ def _render_drain_heatmap(
             month_breaks = precomputed_breaks.query("analysis_month == @selected_analysis_month").copy()
             if not month_breaks.empty:
                 display_cols = [
-                    col for col in ["id_geohash", "water_residual", "water_observed", "water_predicted", "date"]
+                    col
+                    for col in ["id_geohash", "water_residual", "water_observed", "water_predicted", "date"]
                     if col in month_breaks.columns
                 ]
                 c.dataframe(month_breaks[display_cols].reset_index(drop=True), use_container_width=True)
@@ -634,8 +630,7 @@ def create_app(
     if show_drained:
         if precomputed_counts is None and precomputed_breaks is None:
             st.sidebar.warning(
-                "No pre-computed NRT data found. "
-                "Run `water-timeseries nrt-precompute` to generate it."
+                "No pre-computed NRT data found. Run `water-timeseries breakpoint-analysis-nrt` to generate it."
             )
         else:
             available_months = (
@@ -659,9 +654,7 @@ def create_app(
                 # Show a compact sparkline in the sidebar before the selector
                 if counts_lookup:
                     spark_df = (
-                        pd.DataFrame(
-                            {"month": list(counts_lookup.keys()), "drained": list(counts_lookup.values())}
-                        )
+                        pd.DataFrame({"month": list(counts_lookup.keys()), "drained": list(counts_lookup.values())})
                         .sort_values("month")
                         .set_index("month")
                     )
@@ -719,9 +712,7 @@ def create_app(
                     month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
                     if not month_slice.empty:
                         drained_breaks = (
-                            month_slice.set_index("id_geohash")
-                            if "id_geohash" in month_slice.columns
-                            else month_slice
+                            month_slice.set_index("id_geohash") if "id_geohash" in month_slice.columns else month_slice
                         )
                     else:
                         pass  # caption shown via annotated label above

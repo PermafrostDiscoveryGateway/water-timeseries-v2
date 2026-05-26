@@ -222,8 +222,8 @@ uv sync
 # Show all options
 uv run water-timeseries --help
 
-# Show breakpoint-analysis subcommand help
-uv run water-timeseries breakpoint-analysis --help
+# Show breakpoint-analysis-historical subcommand help
+uv run water-timeseries breakpoint-analysis-historical --help
 
 # Show plot-timeseries subcommand help
 uv run water-timeseries plot-timeseries --help
@@ -232,27 +232,27 @@ uv run water-timeseries plot-timeseries --help
 uv run water-timeseries dashboard --help
 
 # Run breakpoint analysis
-uv run water-timeseries breakpoint-analysis data.zarr output.parquet
+uv run water-timeseries breakpoint-analysis-historical data.zarr output.parquet
 
 # Run with optional parameters
-uv run water-timeseries breakpoint-analysis \
+uv run water-timeseries breakpoint-analysis-historical \
     data.zarr \
     output.parquet \
     --chunksize 100 \
     --n-jobs 4
 
 # Run with a config file
-uv run water-timeseries breakpoint-analysis --config-file configs/config.yaml
+uv run water-timeseries breakpoint-analysis-historical --config-file configs/config.yaml
 
 # Run with ray backend (default) using all available CPUs
-uv run water-timeseries breakpoint-analysis \
+uv run water-timeseries breakpoint-analysis-historical \
     data.zarr \
     output.parquet \
     --chunksize 50 \
     --n-jobs -1
 
 # Run with joblib backend and simple break method
-uv run water-timeseries breakpoint-analysis \
+uv run water-timeseries breakpoint-analysis-historical \
     data.zarr \
     output.parquet \
     --parallel-backend joblib \
@@ -261,7 +261,7 @@ uv run water-timeseries breakpoint-analysis \
     --n-jobs 20
 
 # Run without geometry in output
-uv run water-timeseries breakpoint-analysis \
+uv run water-timeseries breakpoint-analysis-historical \
     data.zarr \
     output.parquet \
     --no-output-geometry

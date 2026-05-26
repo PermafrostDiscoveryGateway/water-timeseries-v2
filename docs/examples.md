@@ -226,19 +226,19 @@ The hierarchical CLI tool provides a convenient way to run breakpoint detection 
 
 ```bash
 # Basic usage with required arguments
-uv run water-timeseries breakpoint-analysis \
+uv run water-timeseries breakpoint-analysis-historical \
     /path/to/lakes.zarr \
     /path/to/breaks.parquet
 
 # With parallel processing
-uv run water-timeseries breakpoint-analysis \
+uv run water-timeseries breakpoint-analysis-historical \
     /path/to/lakes.zarr \
     /path/to/breaks.parquet \
     --chunksize 100 \
     --n-jobs 20
 
 # With bounding box filter
-uv run water-timeseries breakpoint-analysis \
+uv run water-timeseries breakpoint-analysis-historical \
     /path/to/lakes.zarr \
     /path/to/breaks.parquet \
     --vector-dataset-file /path/to/lakes.gpkg \
@@ -268,10 +268,10 @@ min_chunksize: 10
 
 ```bash
 # Run with config file
-uv run water-timeseries breakpoint-analysis --config-file config.yaml
+uv run water-timeseries breakpoint-analysis-historical --config-file config.yaml
 
 # Override specific config values from CLI
-uv run water-timeseries breakpoint-analysis --config-file config.yaml --n-jobs 8
+uv run water-timeseries breakpoint-analysis-historical --config-file config.yaml --n-jobs 8
 ```
 
 ### CLI Options Reference
