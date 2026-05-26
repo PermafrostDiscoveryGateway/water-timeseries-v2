@@ -430,7 +430,7 @@ def plot_timeseries(
 
 # Subcommand: NRT monthly pre-computation
 @app.command(group="Analysis")
-def nrt_precompute(
+def breakpoint_analysis_nrt(
     dataset_file: Path,
     analysis_date: Optional[str] = None,
     analysis_date_start: Optional[str] = None,
@@ -446,7 +446,7 @@ def nrt_precompute(
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
-    """Pre-compute NRT drained-lake results for one month or a date range.
+    """Pre-compute near real-time drained-lake results for one month or a date range.
 
     **Single-month mode** (``--analysis-date``): runs for exactly one month
     and writes results to ``--output-file``.
@@ -506,24 +506,24 @@ def nrt_precompute(
     .. code-block:: bash
 
         # Single month
-        water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
+        water-timeseries breakpoint-analysis-nrt downloads/lakes_dw_V2d.nc \\
             --analysis-date 2024-01 \\
             --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet
 
         # Date range (one file per month written to --output-dir)
-        water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
+        water-timeseries breakpoint-analysis-nrt downloads/lakes_dw_V2d.nc \\
             --analysis-date-start 2024-01 \\
             --analysis-date-end 2024-06 \\
             --output-dir precomputed/nrt
 
         # Resume a previously interrupted range run
-        water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
+        water-timeseries breakpoint-analysis-nrt downloads/lakes_dw_V2d.nc \\
             --analysis-date-start 2024-01 \\
             --analysis-date-end 2024-12 \\
             --output-dir precomputed/nrt
 
         # Force re-process all months in range
-        water-timeseries nrt-precompute downloads/lakes_dw_V2d.nc \\
+        water-timeseries breakpoint-analysis-nrt downloads/lakes_dw_V2d.nc \\
             --analysis-date-start 2024-01 \\
             --analysis-date-end 2024-12 \\
             --output-dir precomputed/nrt \\
