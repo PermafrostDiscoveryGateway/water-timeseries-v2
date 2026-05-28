@@ -40,14 +40,16 @@ _ee_project = os.environ.get("EE_PROJECT") or None
 
 def _init_ee() -> None:
     try:
-        if "EARTHENGINE_TOKEN" in os.environ:
+        env_token = os.environ.get("EARTHENGINE_TOKEN")
+        if env_token:
             print("setting up EE with EARTHENGINE_TOKEN env var")
             initialize_earth_engine(project=_ee_project)
             return
         try:
-            if "EARTHENGINE_TOKEN" in st.secrets:
+            secret_token = st.secrets.get("EARTHENGINE_TOKEN")
+            if secret_token:
                 print("setting up EE with EARTHENGINE_TOKEN from Streamlit secrets")
-                os.environ["EARTHENGINE_TOKEN"] = st.secrets["EARTHENGINE_TOKEN"]
+                os.environ["EARTHENGINE_TOKEN"] = secret_token
                 project = _ee_project or st.secrets.get("EE_PROJECT")
                 initialize_earth_engine(project=project)
                 return

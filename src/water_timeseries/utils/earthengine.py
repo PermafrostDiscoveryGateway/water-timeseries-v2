@@ -33,9 +33,10 @@ def initialize_earth_engine(project: str | None = None, token_name: str = "EARTH
         pass
 
     if hasattr(geemap, "ee_initialize"):
-        geemap.ee_initialize(project=project)
+        geemap.ee_initialize(token_name=token_name, project=project)
         return
 
+    # ee.Initialize uses persisted credentials only; token_name is not applicable.
     ee.Initialize(project=project)
 
 
