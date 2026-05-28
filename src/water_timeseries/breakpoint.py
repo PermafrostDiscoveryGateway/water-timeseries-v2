@@ -572,6 +572,54 @@ class NRTBreakpoint(BreakpointMethod):
         out_df = dataset.to_dataframe()[water_column].groupby("id_geohash").agg(["mean", "median", "std", "min", "max"])
         return out_df
 
+    def _add_confidence_level(self, break_output_df: pd.DataFrame) -> pd.DataFrame:
+        """Add a drainage confidence level to the breakpoint output DataFrame.
+
+        The confidence level is computed by evaluating three criteria that
+        indicate abnormal water drainage:
+
+        * **Cat 1** – Residual below threshold: ``water_residual < -0.25``
+        * **Cat 2** – Observed water below prediction interval:
+        ``water_observed < water_predicted_lower_90``
+        * **Cat 3** – Observed water below historical minimum:
+        ``water_observed < water_historical_min``
+
+        Each satisfied criterion contributes 1 to the score. The final
+        ``drainage_confidence`` column contains:
+
+        | Score | Meaning   |
+        |-------|-----------|
+        | 1     | Low       |
+        | 2     | Medium    |
+        | 3     | High      |
+
+        Parameters
+        ----------
+        break_output_df : pd.DataFrame
+            DataFrame with at least the following columns: ``water_residual``,
+            ``water_observed``, ``water_predicted_lower_90``, and
+            ``water_historical_min``.
+
+        Returns
+        -------
+        pd.DataFrame
+            Input DataFrame with an additional ``drainage_confidence`` column.
+        """
+
+        cat1 = break_output_df["water_residual"] < -0.25  # observed water area min. 25 less than expected
+        cat2 = (
+            break_output_df["water_observed"] < break_output_df["water_predicted_lower_90"]
+        )  # water area less than lower 90% confidence
+        cat3 = (
+            break_output_df["water_observed"] < break_output_df["water_historical_min"]
+        )  # minimum observed water extent ever
+
+        # sum all 3 criteria and output confidence (1:low, 2: medium, 3: high)
+        drain_confidence = pd.concat([cat1, cat2, cat3], axis=1).sum(axis=1)
+        break_output_df["drainage_confidence"] = drain_confidence
+
+        return break_output_df
+
     def calculate_break(
         self,
         dataset: LakeDataset,
@@ -676,5 +724,8 @@ class NRTBreakpoint(BreakpointMethod):
         df_historical_stats.columns = "water_historical_" + df_historical_stats.columns.astype(str)
 
         df_output = df_output.join(df_historical_stats, how="left").round(4)
+
+        # add confidence level to output
+        df_output = self._add_confidence_level(df_output)
 
         return df_output
