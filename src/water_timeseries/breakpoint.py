@@ -617,6 +617,9 @@ class NRTBreakpoint(BreakpointMethod):
         # sum all 3 criteria and output confidence (1:low, 2: medium, 3: high)
         drain_confidence = pd.concat([cat1, cat2, cat3], axis=1).sum(axis=1)
         break_output_df["drainage_confidence"] = drain_confidence
+        
+        # force int dtype
+        break_output_df['drainage_confidence'] = break_output_df['drainage_confidence'].astype(int)
 
         return break_output_df
 
@@ -626,6 +629,7 @@ class NRTBreakpoint(BreakpointMethod):
         analysis_date: str | pd.Timestamp,
         data_aggregation_period: str = "all",
         object_id: str | Optional[str] = None,
+        process_nans: bool | Optional[bool] = False,
     ) -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 
@@ -643,6 +647,8 @@ class NRTBreakpoint(BreakpointMethod):
             The date for which to perform the NRT breakpoint analysis.
         data_aggregation_period : str, optional
             The period of data to consider for the analysis (e.g., "all", "monthly")
+        process_nans : bool, optional
+            Set True if you want to return historical water stats
         Returns
         -------
         pd.DataFrame
@@ -675,17 +681,23 @@ class NRTBreakpoint(BreakpointMethod):
             print("Filtering to monthly data for analysis date month:", analysis_date.month)
             ds_historical = ds_historical.where(ds_historical.date.dt.month == analysis_date.month, drop=True)
 
-        # filter to dates wherea nalysis date has some data
+        # filter to dates where analysis date has some data
         ds_analysis_filtered, ds_historical_filtered, valid_ids = self._filter_valid_ids(ds_analysis, ds_historical)
 
         if len(valid_ids) == 0:
             return pd.DataFrame(
                 columns=[
+                    "date",
                     "water_observed",
                     "water_predicted",
                     "water_predicted_lower_90",
                     "water_predicted_upper_90",
-                    "water_residual",
+                    "water_historical_mean",
+                    "water_historical_median",
+                    "water_historical_std",
+                    "water_historical_min",
+                    "water_historical_max",
+                    "drainage_confidence",
                 ]
             )
 
@@ -706,10 +718,18 @@ class NRTBreakpoint(BreakpointMethod):
             prediction_df = pd.DataFrame(
                 index=ds_analysis_filtered.id_geohash.values,
                 columns=[
+                    "date",
+                    "water_observed",
                     "water_predicted",
                     "water_predicted_lower_90",
                     "water_predicted_upper_90",
-                ],
+                    "water_historical_mean",
+                    "water_historical_median",
+                    "water_historical_std",
+                    "water_historical_min",
+                    "water_historical_max",
+                    "drainage_confidence",
+                    ],
             )
 
         # merge output into a single dataframe
