@@ -22,6 +22,7 @@ from water_timeseries.utils.dashboard import (
     load_dataset,
     plot_time_series_data,
 )
+from water_timeseries.utils.earthengine import initialize_earth_engine
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.map_styling import (
     create_tile_layers,
@@ -34,21 +35,32 @@ from water_timeseries.utils.visualization import (
     get_legend_html_net_change,
 )
 
-# Initialize Earth Engine - only if running in Streamlit context
-# Check environment variable first (works outside Streamlit)
-if "EARTHENGINE_TOKEN" in os.environ.keys():
-    print("setting up with TOKEN")
-    geemap.ee_initialize()
-else:
-    # Try Streamlit secrets (only works when running in Streamlit)
+# Initialize Earth Engine when credentials are available
+_ee_project = os.environ.get("EE_PROJECT") or None
+
+
+def _init_ee() -> None:
     try:
-        if "EARTHENGINE_TOKEN" in st.secrets.keys():
-            print("setting up with TOKEN from secrets")
-            os.environ["EARTHENGINE_TOKEN"] = st.secrets["EARTHENGINE_TOKEN"]
-            geemap.ee_initialize()
-    except Exception:
-        # Not running in Streamlit context, skip initialization
-        pass
+        if "EARTHENGINE_TOKEN" in os.environ:
+            print("setting up EE with EARTHENGINE_TOKEN env var")
+            initialize_earth_engine(project=_ee_project)
+            return
+        try:
+            if "EARTHENGINE_TOKEN" in st.secrets:
+                print("setting up EE with EARTHENGINE_TOKEN from Streamlit secrets")
+                os.environ["EARTHENGINE_TOKEN"] = st.secrets["EARTHENGINE_TOKEN"]
+                project = _ee_project or st.secrets.get("EE_PROJECT")
+                initialize_earth_engine(project=project)
+                return
+        except Exception:
+            pass
+        print("setting up EE with credentials file")
+        initialize_earth_engine(project=_ee_project)
+    except Exception as exc:
+        print(f"Earth Engine initialization failed: {exc}")
+
+
+_init_ee()
 
 
 class MapViewer:

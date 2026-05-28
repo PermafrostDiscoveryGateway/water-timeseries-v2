@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import List, Optional
@@ -10,6 +11,32 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import xarray as xr
 from shapely.geometry import box
+
+
+def initialize_earth_engine(project: str | None = None, token_name: str = "EARTHENGINE_TOKEN") -> None:
+    """Initialize the Earth Engine Python client.
+
+    geemap >= 0.37 moved ``ee_initialize`` to ``geemap.coreutils``; older releases
+    expose it on the top-level ``geemap`` module.
+    """
+    if project is None:
+        project = os.environ.get("EE_PROJECT") or None
+    if project == "":
+        project = None
+
+    try:
+        from geemap.coreutils import ee_initialize as _geemap_ee_initialize
+
+        _geemap_ee_initialize(token_name=token_name, project=project)
+        return
+    except (ImportError, AttributeError):
+        pass
+
+    if hasattr(geemap, "ee_initialize"):
+        geemap.ee_initialize(project=project)
+        return
+
+    ee.Initialize(project=project)
 
 
 def get_bbox(gdf, to_crs=4326, return_ee=True):
