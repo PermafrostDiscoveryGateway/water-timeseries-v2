@@ -448,6 +448,27 @@ class NRTBreakpoint(BreakpointMethod):
         self.kwargs_break = kwargs_break
         # may need some update
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
+        self.output_columns = [
+            "date",
+            "water_observed",
+            "water_predicted",
+            "water_predicted_lower_90",
+            "water_predicted_upper_90",
+            "water_historical_mean",
+            "water_historical_median",
+            "water_historical_std",
+            "water_historical_min",
+            "water_historical_max",
+            "drainage_confidence",
+        ]
+        self.output_columns_base = [
+            "date",
+            "water_observed",
+            "water_predicted",
+            "water_predicted_lower_90",
+            "water_predicted_upper_90",
+            "drainage_confidence",
+        ]
 
     def predict_nrt_arima(
         self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3, water_column: str = "water"
@@ -551,8 +572,12 @@ class NRTBreakpoint(BreakpointMethod):
         # Get valid id_geohash values that have non-NaN data in ds_analysis
         valid_ids = ds_analysis.dropna(dim="id_geohash", how="all").id_geohash.values
 
+        # get invalid ids with nan values
+        all_ids = ds_analysis.id_geohash.values
+        nan_ids = all_ids[~pd.Series(all_ids).isin(pd.Series(valid_ids))]
+
         # Count total ids and valid ids for logging
-        total_ids = len(ds_analysis.id_geohash.values)
+        total_ids = len(all_ids)
         valid_count = len(valid_ids)
         filtered_count = total_ids - valid_count
 
@@ -563,7 +588,7 @@ class NRTBreakpoint(BreakpointMethod):
         ds_analysis_filtered = ds_analysis.sel(id_geohash=valid_ids)
         ds_historical_filtered = ds_historical.sel(id_geohash=valid_ids)
 
-        return ds_analysis_filtered, ds_historical_filtered, valid_ids
+        return ds_analysis_filtered, ds_historical_filtered, valid_ids, nan_ids
 
     def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int = None, water_column: str = "water") -> pd.DataFrame:
         """Calculate statistics for the given dataset."""
@@ -572,12 +597,64 @@ class NRTBreakpoint(BreakpointMethod):
         out_df = dataset.to_dataframe()[water_column].groupby("id_geohash").agg(["mean", "median", "std", "min", "max"])
         return out_df
 
+    def _add_confidence_level(self, break_output_df: pd.DataFrame) -> pd.DataFrame:
+        """Add a drainage confidence level to the breakpoint output DataFrame.
+
+        The confidence level is computed by evaluating three criteria that
+        indicate abnormal water drainage:
+
+        * **Cat 1** – Residual below threshold: ``water_residual < -0.25``
+        * **Cat 2** – Observed water below prediction interval:
+        ``water_observed < water_predicted_lower_90``
+        * **Cat 3** – Observed water below historical minimum:
+        ``water_observed < water_historical_min``
+
+        Each satisfied criterion contributes 1 to the score. The final
+        ``drainage_confidence`` column contains:
+
+        | Score | Meaning   |
+        |-------|-----------|
+        | 1     | Low       |
+        | 2     | Medium    |
+        | 3     | High      |
+
+        Parameters
+        ----------
+        break_output_df : pd.DataFrame
+            DataFrame with at least the following columns: ``water_residual``,
+            ``water_observed``, ``water_predicted_lower_90``, and
+            ``water_historical_min``.
+
+        Returns
+        -------
+        pd.DataFrame
+            Input DataFrame with an additional ``drainage_confidence`` column.
+        """
+
+        cat1 = break_output_df["water_residual"] < -0.25  # observed water area min. 25 less than expected
+        cat2 = (
+            break_output_df["water_observed"] < break_output_df["water_predicted_lower_90"]
+        )  # water area less than lower 90% confidence
+        cat3 = (
+            break_output_df["water_observed"] < break_output_df["water_historical_min"]
+        )  # minimum observed water extent ever
+
+        # sum all 3 criteria and output confidence (1:low, 2: medium, 3: high)
+        drain_confidence = pd.concat([cat1, cat2, cat3], axis=1).sum(axis=1)
+        break_output_df["drainage_confidence"] = drain_confidence
+
+        # force int dtype
+        break_output_df["drainage_confidence"] = break_output_df["drainage_confidence"].astype(int)
+
+        return break_output_df
+
     def calculate_break(
         self,
         dataset: LakeDataset,
         analysis_date: str | pd.Timestamp,
         data_aggregation_period: str = "all",
         object_id: str | Optional[str] = None,
+        keep_nans: bool | Optional[bool] = False,
     ) -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 
@@ -595,6 +672,8 @@ class NRTBreakpoint(BreakpointMethod):
             The date for which to perform the NRT breakpoint analysis.
         data_aggregation_period : str, optional
             The period of data to consider for the analysis (e.g., "all", "monthly")
+        process_nans : bool, optional
+            Set True if you want to return historical water stats
         Returns
         -------
         pd.DataFrame
@@ -627,19 +706,16 @@ class NRTBreakpoint(BreakpointMethod):
             print("Filtering to monthly data for analysis date month:", analysis_date.month)
             ds_historical = ds_historical.where(ds_historical.date.dt.month == analysis_date.month, drop=True)
 
-        # filter to dates wherea nalysis date has some data
-        ds_analysis_filtered, ds_historical_filtered, valid_ids = self._filter_valid_ids(ds_analysis, ds_historical)
+        # filter to dates where analysis date has some data
+        ds_analysis_filtered, ds_historical_filtered, valid_ids, nan_ids = self._filter_valid_ids(
+            ds_analysis, ds_historical
+        )
 
         if len(valid_ids) == 0:
-            return pd.DataFrame(
-                columns=[
-                    "water_observed",
-                    "water_predicted",
-                    "water_predicted_lower_90",
-                    "water_predicted_upper_90",
-                    "water_residual",
-                ]
-            )
+            if keep_nans:
+                return pd.DataFrame(index=nan_ids, columns=self.output_columns)
+            else:
+                return pd.DataFrame(columns=self.output_columns)
 
         # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
         # predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in tqdm(valid_ids, desc='NRT breakpoints')]
@@ -652,23 +728,20 @@ class NRTBreakpoint(BreakpointMethod):
             for idx in tqdm(valid_ids, desc="NRT breakpoints")
         )
         # remove None values
+        # if not process_nans:
         predictions = [prediction for prediction in predictions if prediction is not None]
         prediction_df = pd.DataFrame(predictions)
         if prediction_df.empty:
             prediction_df = pd.DataFrame(
                 index=ds_analysis_filtered.id_geohash.values,
-                columns=[
-                    "water_predicted",
-                    "water_predicted_lower_90",
-                    "water_predicted_upper_90",
-                ],
+                columns=self.output_columns,
             )
 
         # merge output into a single dataframe
-        # df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(pd.DataFrame(predictions)).round(4)
         df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(prediction_df).round(4)
         # rename observed water column for clarity
         df_output.rename(columns={dataset.water_column: "water_observed"}, inplace=True)
+
         # calculate residuals
         df_output["water_residual"] = df_output["water_observed"] - df_output["water_predicted"]
 
@@ -677,4 +750,20 @@ class NRTBreakpoint(BreakpointMethod):
 
         df_output = df_output.join(df_historical_stats, how="left").round(4)
 
-        return df_output
+        # add confidence level to output
+        df_output = self._add_confidence_level(df_output)
+
+        # if keep_nans is selected: calculate historical stats for these and append to calculated data
+        if keep_nans:
+            prediction_df_nan = pd.DataFrame(
+                index=nan_ids,
+                columns=self.output_columns_base,
+            )
+            df_historical_stats_nans = self._get_ds_stats(
+                ds_historical.sel(id_geohash=nan_ids), water_column=dataset.water_column
+            ).round(4)
+            df_historical_stats_nans.columns = "water_historical_" + df_historical_stats_nans.columns.astype(str)
+            df_output_nan = prediction_df_nan.join(df_historical_stats_nans, how="left").round(4)
+            df_output = pd.concat([df_output, df_output_nan]).sort_index()
+
+        return df_output[self.output_columns]
