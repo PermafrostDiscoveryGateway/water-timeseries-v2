@@ -461,6 +461,14 @@ class NRTBreakpoint(BreakpointMethod):
             "water_historical_max",
             "drainage_confidence",
         ]
+        self.output_columns_base = [
+            "date",
+            "water_observed",
+            "water_predicted",
+            "water_predicted_lower_90",
+            "water_predicted_upper_90",
+            "drainage_confidence",
+        ]
 
     def predict_nrt_arima(
         self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3, water_column: str = "water"
@@ -745,12 +753,17 @@ class NRTBreakpoint(BreakpointMethod):
         # add confidence level to output
         df_output = self._add_confidence_level(df_output)
 
+        # if keep_nans is selected: calculate historical stats for these and append to calculated data
         if keep_nans:
             prediction_df_nan = pd.DataFrame(
                 index=nan_ids,
-                columns=self.output_columns,
+                columns=self.output_columns_base,
             )
-            # print(prediction_df_nan)
-        df_output = pd.concat([df_output, prediction_df_nan]).sort_index()
+            df_historical_stats_nans = self._get_ds_stats(
+                ds_historical.sel(id_geohash=nan_ids), water_column=dataset.water_column
+            ).round(4)
+            df_historical_stats_nans.columns = "water_historical_" + df_historical_stats_nans.columns.astype(str)
+            df_output_nan = prediction_df_nan.join(df_historical_stats_nans, how="left").round(4)
+            df_output = pd.concat([df_output, df_output_nan]).sort_index()
 
-        return df_output
+        return df_output[self.output_columns]
