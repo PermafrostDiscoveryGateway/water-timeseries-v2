@@ -84,7 +84,9 @@ class EarthEngineDownloader:
         # Check and record EE initialization status
         self._check_ee_initialization_status()
 
-        self.output_dir = Path(output_dir) if output_dir else Path("downloads")
+        if output_dir is not None:
+            self._log_warning('Setting an output_dir is being ignored now and will be removed eventually!')
+        self.output_dir = None
         self.ee_auth = ee_auth
         self.dw_bandnames = dw_bandnames
         self.jrc_bandnames = jrc_bandnames
@@ -94,7 +96,7 @@ class EarthEngineDownloader:
             geemap.ee_initialize(project=self.ee_project)
             self._check_ee_initialization_status()
 
-        self._log_info(f"EarthEngineDownloader initialized successfully. Output directory: {self.output_dir}")
+        self._log_info("EarthEngineDownloader initialized successfully.")
 
     def _log_info(self, message: str):
         """Log an info message using the provided logger or print."""
@@ -621,9 +623,8 @@ class EarthEngineDownloader:
         # Save to file if requested
         if save_to_file is not None:
             # Determine output_dir for relative paths
-            save_path = Path(save_to_file)
-            output_dir = str(self.output_dir) if not save_path.is_absolute() else None
-            save_xarray_dataset(ds, save_to_file, output_dir=output_dir, logger=self.logger)
+            save_path = Path(save_to_file).absolute()
+            save_xarray_dataset(ds=ds, save_path=save_path, logger=self.logger)
 
         return ds
 
@@ -846,9 +847,8 @@ class EarthEngineDownloader:
         # Save to file if requested
         if save_to_file is not None:
             # Determine output_dir for relative paths
-            save_path = Path(save_to_file)
-            output_dir = str(self.output_dir) if not save_path.is_absolute() else None
-            save_xarray_dataset(ds, save_to_file, output_dir=output_dir, logger=self.logger)
+            save_path = Path(save_to_file).absolute()
+            save_xarray_dataset(ds=ds, save_path=save_path, logger=self.logger)
 
         return ds
 
