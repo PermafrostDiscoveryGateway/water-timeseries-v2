@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import List, Optional
 
 import folium
-import geemap
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
