@@ -53,6 +53,31 @@ def parse_args():
         default=None,
         help="Google Earth Engine project ID. Required for EE downloads.",
     )
+    parser.add_argument(
+        "--dw-start-year",
+        type=int,
+        default=2017,
+        help="Start year for Dynamic World time series (inclusive). Default is 2017.",
+    )
+    parser.add_argument(
+        "--dw-end-year",
+        type=int,
+        default=2025,
+        help="End year for Dynamic World time series (inclusive). Default is 2025.",
+    )
+    parser.add_argument(
+        "--dw-start-month",
+        type=int,
+        default=6,
+        help="Start month for Dynamic World time series (inclusive). Default is 6.",
+    )
+    parser.add_argument(
+        "--dw-end-month",
+        type=int,
+        default=9,
+        help="End month for Dynamic World time series (inclusive). Default is 9.",
+    )
+
     return parser.parse_args()
 
 
@@ -63,6 +88,10 @@ def main(
     precomputed_nrt_dir: str | Path = None,
     offline_mode: bool = False,
     ee_project: str = None,
+    dw_start_year: int = None,
+    dw_end_year: int = None,
+    dw_start_month: int = None,
+    dw_end_month: int = None,
 ):
     """Run the dashboard app.
 
@@ -120,6 +149,10 @@ def main(
         precomputed_nrt_dir=precomputed_nrt_dir,
         offline_mode=offline_mode,
         ee_project=ee_project,
+        dw_start_year=dw_start_year,
+        dw_end_year=dw_end_year,
+        dw_start_month=dw_start_month,
+        dw_end_month=dw_end_month,
     )
 
 
@@ -132,4 +165,8 @@ if __name__ == "__main__":
         precomputed_nrt_dir=args.precomputed_nrt_dir,
         offline_mode=args.offline_mode,
         ee_project=args.ee_project,
+        dw_start_year=args.dw_start_year,
+        dw_end_year=args.dw_end_year,
+        dw_start_month=args.dw_start_month,
+        dw_end_month=args.dw_end_month,
     )

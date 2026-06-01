@@ -144,6 +144,10 @@ def dashboard(
     precomputed_nrt_dir = config_dict.get("precomputed_nrt_dir")
     offline_mode = config_dict.get("offline_mode", False)
     ee_project = config_dict.get("ee_project")
+    dw_start_year = config_dict.get("dw_start_year", 2017)
+    dw_end_year = config_dict.get("dw_end_year", 2025)
+    dw_start_month = config_dict.get("dw_start_month", 6)
+    dw_end_month = config_dict.get("dw_end_month", 9)
 
     # Setup logging
     setup_logging(logfile=logfile, verbose=verbose)
@@ -173,6 +177,14 @@ def dashboard(
         script_args.append("--offline-mode")
     if ee_project:
         script_args.extend(["--ee-project", ee_project])
+    if dw_start_year is not None:
+        script_args.extend(["--dw-start-year", str(dw_start_year)])
+    if dw_end_year is not None:
+        script_args.extend(["--dw-end-year", str(dw_end_year)])
+    if dw_start_month is not None:
+        script_args.extend(["--dw-start-month", str(dw_start_month)])
+    if dw_end_month is not None:
+        script_args.extend(["--dw-end-month", str(dw_end_month)])
     if script_args:
         cmd.extend(["--"] + script_args)
 
@@ -182,7 +194,9 @@ def dashboard(
         f"dw_dataset_file={dw_dataset_file}, jrc_dataset_file={jrc_dataset_file}, "
         f"precomputed_nrt_dir={precomputed_nrt_dir}, offline_mode={offline_mode}, "
         f"ee_project={ee_project}"
-    )
+        f"dw_start_year={dw_start_year}, dw_end_year={dw_end_year}, "
+        f"dw_start_month={dw_start_month}, dw_end_month={dw_end_month}"
+        )
     subprocess.run(cmd)
 
 
