@@ -24,7 +24,6 @@ from water_timeseries.utils.dashboard import (
 )
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.map_styling import (
-    create_tile_layers,
     format_tooltip_columns,
     get_colored_style_function,
     get_default_style_function,
