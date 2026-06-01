@@ -1,0 +1,38 @@
+services:
+  app:
+    build: .
+    image: water-timeseries-streamlit:latest
+    working_dir: /app
+    command:
+      - streamlit
+      - run
+      - src/water_timeseries/dashboard/app.py
+      - --server.port=8501
+      - --server.address=0.0.0.0
+      - --
+      - --vector-file
+      - ${VECTOR_FILE:-tests/data/lake_polygons.parquet}
+      - --dw-dataset-file
+      - ${DW_DATASET_FILE:-downloads/data.zarr}
+      - --jrc-dataset-file
+      - ${JRC_DATASET_FILE:-downloads/downloads/lakes_jrc_viz.zarr}
+      - --precomputed-nrt-dir
+      - ${PRECOMPUTED_NRT_DIR:-precomputed/nrt-demo}
+    volumes:
+      - .:/app
+      # Keep image .venv; a plain .:/app mount would hide it with an empty host dir
+      - /app/.venv
+      # Large/local datasets (gitignored downloads/; override host dirs via .env)
+      - ${DOWNLOADS_DIR:-./downloads}:/app/downloads:ro
+      - ${PRECOMPUTED_DIR:-./precomputed}:/app/precomputed:ro
+      # Optional: host EE credentials (alternative to EARTHENGINE_TOKEN in .env)
+      - ${EARTHENGINE_CREDENTIALS_DIR:-${HOME}/.config/earthengine}:/root/.config/earthengine:ro
+    ports:
+      - "8501:8501"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      MPLBACKEND: Agg
+      EE_PROJECT: ${EE_PROJECT:-}
+      EARTHENGINE_TOKEN: ${EARTHENGINE_TOKEN:-}
