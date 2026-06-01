@@ -7,6 +7,7 @@ Automated analysis of water timeseries data from satellite imagery and remote se
 **📖 Full Documentation**: [View Documentation](https://PermafrostDiscoveryGateway.github.io/water-timeseries-v2/)
 
 The documentation includes:
+
 - Getting started guide
 - API reference (auto-generated from code)
 - Usage examples
@@ -113,29 +114,121 @@ n_jobs: 20
 min_chunksize: 10
 ```
 
-#### CLI Options
+#### Breakpoint Analysis Historical
+
+Run historical breakpoint analysis on water dataset. This command performs breakpoint detection on lake water area time series data to identify significant changes in water availability.
 
 | Option | Short | Description | Default |
-| --------| ------- | ------------- | -------- |
-| `water_dataset_file` | | Path to water dataset (zarr or parquet) | Required* |
-| `output_file` | | Path to output parquet file | Required* |
-| `--config-file` | | Path to config YAML/JSON file | None |
-| `--vector-dataset-file` | `-v` | Path to vector dataset (gpkg, shp, geojson) | None |
-| `--chunksize` | `-c` | Number of IDs per chunk | 100 |
-| `--n-jobs` | `-j` | Number of parallel jobs (>1 for Ray) | 1 |
-| `--min-chunksize` | `-m` | Minimum chunk size | 10 |
-| `--bbox-west` | | Minimum longitude (west) | -180 |
-| `--bbox-south` | | Minimum latitude (south) | 60 |
-| `--bbox-east` | | Maximum longitude (east) | 180 |
-| `--bbox-north` | | Maximum latitude (north) | 90 |
-| `--output-geometry` | | Export output with geometries | True |
-| `--output-geometry-all` | | Export output all geometries including non breakpoints | True |
+| -------- | ------- | ------------- | -------- |
+| `water_dataset_file` | | Path to water dataset file in zarr or parquet format. Can be specified via CLI argument or config file | Required* |
+| `output_file` | | Path to output parquet file where results will be saved. A YAML config file with the same name will also be created with the parameters used | Required* |
+| `--config-file` | | Path to a YAML or JSON configuration file containing default parameters. CLI arguments take priority over config file values | `None` |
+| `--vector-dataset-file` | `-v` | Path to vector dataset file (GeoParquet) containing lake boundary geometries for spatial analysis | `None` |
+| `--chunksize` | `-c` | Number of lake IDs to process per chunk. Controls memory usage during parallel processing | `100` |
+| `--parallel-backend` | | Parallelization backend to use. Options: "joblib" or "ray" | `ray` |
+| `--break-method` | | Breakpoint detection method. Options: "simple" (rolling window statistical detector) or "beast" (Bayesian RBEAST-based detector) | `beast` |
+| `--n-jobs` | `-j` | Number of parallel jobs. Use >1 for parallel processing | `1` |
+| `--min-chunksize` | `-m` | Minimum chunk size for parallel processing | `10` |
+| `--bbox-west` | | Western boundary of bounding box for spatial filtering (minimum longitude) | `None` |
+| `--bbox-south` | | Southern boundary of bounding box for spatial filtering (minimum latitude) | `None` |
+| `--bbox-east` | | Eastern boundary of bounding box for spatial filtering (maximum longitude) | `None` |
+| `--bbox-north` | | Northern boundary of bounding box for spatial filtering (maximum latitude) | `None` |
+| `--output-geometry` | | Whether to include geometry data in the output | `True` |
+| `--output-geometry-all` | | Whether to include geometry for all lakes (not just those with breakpoints) | `True` |
+| `--logfile` | | Path to log file | Auto-generated |
+| `--verbose` | `-v` | Verbosity level. 0 = INFO (default), 1 or more = DEBUG | `0` |
 
 *Can also be provided via config file
 
+**Example usage:**
+
+```bash
+# Basic usage with required arguments
+uv run water-timeseries breakpoint-analysis-historical tests/data/lakes_dw_test.zarr output.parquet
+
+# With custom chunk size and parallel jobs
+uv run water-timeseries breakpoint-analysis-historical tests/data/lakes_dw_test.zarr output.parquet -c 100 -j 20
+
+# Using a configuration file
+uv run water-timeseries breakpoint-analysis-historical --config-file configs/config.yaml
+
+# Spatial filtering with bounding box
+uv run water-timeseries breakpoint-analysis-historical data.zarr output.parquet \
+    --bbox-west 100 --bbox-south 20 --bbox-east 110 --bbox-north 30
+```
+
+#### Breakpoint Analysis NRT
+
+Pre-compute near real-time drained-lake results for one month or a date range.
+
+**Single-month mode** (`--analysis-date`): runs for exactly one month and writes results to `--output-file`.
+
+**Range mode** (`--analysis-date-start` + `--analysis-date-end`): runs for every month in the inclusive range and writes one parquet file per month to `--output-dir`, auto-named `nrt_<YYYY-MM>_drain_breaks.parquet`. Already-present files are skipped unless `--no-resume` is set.
+
+| Option | Short | Description | Default |
+| -------- | ------- | ------------- | -------- |
+| `dataset_file` | | Path to the DW dataset file (`.ncin` / `.nc` NetCDF or `.zarr`) | **Required** |
+| `--analysis-date` | | Single month to analyse, as `YYYY-MM` (e.g. `2024-01`). Mutually exclusive with `--analysis-date-start` / `--analysis-date-end` | `None` |
+| `--analysis-date-start` | | First month of an inclusive range, as `YYYY-MM`. Must be used together with `--analysis-date-end` | `None` |
+| `--analysis-date-end` | | Last month of an inclusive range, as `YYYY-MM`. Must be used together with `--analysis-date-start` | `None` |
+| `--output-file` | | Destination parquet file (single-month mode only). Defaults to `nrt_<analysis_date>_drain_breaks.parquet` next to dataset_file | `None` |
+| `--output-dir` | | Destination directory for range mode. One file per month is written as `nrt_<YYYY-MM>_drain_breaks.parquet`. Defaults to the parent directory of dataset_file | `None` |
+| `--no-resume` | | Range mode only. When set, re-process months even if their output file already exists in `--output-dir` | `False` |
+| `--drain-threshold` | | `water_residual` threshold below which a lake is classified as drained | `-0.25` |
+| `--data-aggregation-period` | | Aggregation period for NRT analysis | `all` |
+| `--lake-chunk-size` | | Lakes processed per chunk. Smaller = less RAM | `5000` |
+| `--n-jobs` | `-j` | Parallel ARIMA workers per chunk. Reduce if RAM is tight | `4` |
+| `--vector-file` | | Optional GeoParquet vector file. When provided, only the `id_geohash` values present in that file are processed | `None` |
+| `--config-file` | | Path to a YAML or JSON configuration file containing default parameters. CLI arguments take priority over config file values | `None` |
+| `--logfile` | | Path to log file | Auto-generated |
+| `--verbose` | `-v` | Verbosity level (0 = INFO, 1 = DEBUG) | `0` |
+
+**Example usage:**
+
+```bash
+# Single month
+uv run water-timeseries breakpoint-analysis-nrt downloads/lakes_dw_V2d.nc \
+    --analysis-date 2024-01 \
+    --output-file precomputed/nrt/nrt_2024-01_drain_breaks.parquet
+
+# Date range (one file per month written to --output-dir)
+uv run water-timeseries breakpoint-analysis-nrt downloads/lakes_dw_V2d.nc \
+    --analysis-date-start 2024-01 \
+    --analysis-date-end 2024-06 \
+    --output-dir precomputed/nrt
+
+# Resume a previously interrupted range run
+uv run water-timeseries breakpoint-analysis-nrt downloads/lakes_dw_V2d.nc \
+    --analysis-date-start 2024-01 \
+    --analysis-date-end 2024-12 \
+    --output-dir precomputed/nrt
+
+# Force re-process all months in range
+uv run water-timeseries breakpoint-analysis-nrt downloads/lakes_dw_V2d.nc \
+    --analysis-date-start 2024-01 \
+    --analysis-date-end 2024-12 \
+    --output-dir precomputed/nrt \
+    --no-resume
+```
+
 #### Plot Timeseries
 
-Plot time series for a specific lake:
+Plot time series for a specific lake.
+
+| Option | Short | Description | Default |
+| -------- | ------- | ------------- | -------- |
+| `water_dataset_file` | | Path to water dataset file (zarr or netCDF). Can be specified via CLI argument or config file | Required* |
+| `lake_id` | | Geohash ID of the lake to plot. Can be specified via CLI argument or config file | Required* |
+| `--output-figure` | | Path to save the output figure | `None` |
+| `--break-method` | | Break method to overlay (beast or simple) | `None` |
+| `--config-file` | | Path to a YAML or JSON configuration file containing default parameters. CLI arguments take priority over config file values | `None` |
+| `--show` | | Whether to display the plot | `True` |
+| `--logfile` | | Path to log file | Auto-generated |
+| `--verbose` | `-v` | Verbosity level (`-v` for DEBUG) | `0` |
+
+*Can also be provided via config file
+
+**Example usage:**
 
 ```bash
 # Plot lake timeseries
@@ -143,9 +236,6 @@ uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc
 
 # Save figure to file
 uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc --output-figure plot.png
-
-# Save only (no popup window)
-uv run water-timeseries plot-timeseries data.zarr --lake-id b7uefy0bvcrc --output-figure plot.png --no-show
 
 # Use config file
 uv run water-timeseries plot-timeseries --config-file configs/plot_config.yaml
@@ -162,19 +252,6 @@ uv run water-timeseries plot-timeseries tests/data/lakes_jrc_test.zarr --lake-id
 ```
 
 ![Example Timeseries Plot](../examples/jrc_example_b7uefy0bvcrc.png)
-
-Plot options:
-
-| Option | Short | Description | Default |
-| -------- | ------- | ------------- | -------- |
-| `water_dataset_file` | | Path to water dataset (zarr or netCDF) | Required* |
-| `--lake-id` | | Geohash ID of the lake | Required* |
-| `--output-figure` | | Path to save output figure | None |
-| `--break-method` | | Break method to overlay (beast or simple) | None |
-| `--no-show` | | Don't show popup window, only save if output-figure is provided | False |
-| `--config-file` | | Path to config YAML/JSON file | None |
-
-*Can also be provided via config file
 
 ## Main Classes
 
@@ -212,15 +289,15 @@ uv run water-timeseries dashboard
 - **Popup View**: Click "Open Time Series in Popup" for a larger view
 - **EE Project Config**: Set your Google Earth Engine project in the sidebar
 
-### Configuration
+### Dashboard Configuration
 
 The dashboard accepts the following optional arguments:
 
 | Parameter | Description | Default |
 | ----------- | ------------- | --------- |
 | `vector_file` | Path to vector dataset file (GeoParquet) | `tests/data/lake_polygons.parquet` |
-| `dw_dataset_file` | Path to Dynamic World dataset file (zarr or nc) | `tests/data/lakes_dw_test.zarr` |
-| `jrc_dataset_file` | Path to JRC dataset file (zarr or nc) | `tests/data/lakes_jrc_test.zarr` |
+| `dw_dataset_file` | Path to Dynamic World dataset file (zarr) | `tests/data/lakes_dw_test.zarr` |
+| `jrc_dataset_file` | Path to JRC dataset file (zarr) | `tests/data/lakes_jrc_test.zarr` |
 | `precomputed_nrt_dir` | Directory with pre-computed NRT parquet files. Auto-detected from `precomputed/nrt/` in the repo root when present | `None` |
 | `offline_mode` | If set, disables Google Earth Engine download functionality. Use this when running without internet access or Earth Engine authentication | `False` |
 | `ee_project` | Google Earth Engine project ID. Required for EE downloads | `None` |
@@ -229,11 +306,11 @@ The dashboard accepts the following optional arguments:
 | `dw_start_month` | Start month (1-12) for Dynamic World dataset time series filtering | `6` (June) |
 | `dw_end_month` | End month (1-12) for Dynamic World dataset time series filtering | `9` (September) |
 | `port` | Port to run the dashboard on | `8501` |
-| `logfile` | Path to log file. If not provided, a default logfile is created with the format `{subcommand}_{timestamp}.log` | Auto-generated |
+| `logfile` | Path to log file | Auto-generated |
 | `verbose` | Verbosity level (`-v` for DEBUG) | `0` (INFO) |
 | `config_file` | Path to a YAML or JSON configuration file containing default parameters. CLI arguments take priority over config file values | `None` |
 
-#### Example usage
+**Example usage:**
 
 ```bash
 uv run water-timeseries dashboard
@@ -244,7 +321,7 @@ uv run water-timeseries dashboard --dw-start-year 2017 --dw-end-year 2026
 uv run water-timeseries dashboard --config-file configs/dashboard_config.yaml
 ```
 
-#### Example config file
+**Example config file:**
 
 ```yaml
 # dashboard with downloading time-series on the fly for 2017-2026 (May-October)
