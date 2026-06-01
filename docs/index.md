@@ -305,6 +305,7 @@ The dashboard accepts the following optional arguments:
 | `dw_end_year` | End year for Dynamic World dataset time series | `2025` |
 | `dw_start_month` | Start month (1-12) for Dynamic World dataset time series filtering | `6` (June) |
 | `dw_end_month` | End month (1-12) for Dynamic World dataset time series filtering | `9` (September) |
+| `viz_configuration_name` | Name for vizualization configuration | `colored_historical` (default) or `nrt_drainage`  |
 | `port` | Port to run the dashboard on | `8501` |
 | `logfile` | Path to log file | Auto-generated |
 | `verbose` | Verbosity level (`-v` for DEBUG) | `0` (INFO) |
