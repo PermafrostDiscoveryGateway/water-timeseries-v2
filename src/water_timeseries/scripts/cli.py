@@ -83,6 +83,7 @@ def dashboard(
     jrc_dataset_file: Optional[str] = None,
     precomputed_nrt_dir: Optional[str] = None,
     offline_mode: Optional[bool] = None,
+    ee_project: Optional[str] = None,
     config_file: Optional[Path] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
@@ -132,6 +133,7 @@ def dashboard(
         precomputed_nrt_dir=precomputed_nrt_dir,
         offline_mode=offline_mode,
         port=port,
+        ee_project=ee_project,
     )
 
     # Get values from merged config with defaults
@@ -141,6 +143,7 @@ def dashboard(
     jrc_dataset_file = config_dict.get("jrc_dataset_file")
     precomputed_nrt_dir = config_dict.get("precomputed_nrt_dir")
     offline_mode = config_dict.get("offline_mode", False)
+    ee_project = config_dict.get("ee_project")
 
     # Setup logging
     setup_logging(logfile=logfile, verbose=verbose)
@@ -168,6 +171,8 @@ def dashboard(
         script_args.extend(["--precomputed-nrt-dir", precomputed_nrt_dir])
     if offline_mode:
         script_args.append("--offline-mode")
+    if ee_project:
+        script_args.extend(["--ee-project", ee_project])
     if script_args:
         cmd.extend(["--"] + script_args)
 
@@ -175,7 +180,8 @@ def dashboard(
     logger.info(
         f"Dashboard config: port={port}, vector_file={vector_file}, "
         f"dw_dataset_file={dw_dataset_file}, jrc_dataset_file={jrc_dataset_file}, "
-        f"precomputed_nrt_dir={precomputed_nrt_dir}, offline_mode={offline_mode}"
+        f"precomputed_nrt_dir={precomputed_nrt_dir}, offline_mode={offline_mode}, "
+        f"ee_project={ee_project}"
     )
     subprocess.run(cmd)
 

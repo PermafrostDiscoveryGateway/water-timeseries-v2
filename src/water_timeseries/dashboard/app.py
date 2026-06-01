@@ -47,6 +47,12 @@ def parse_args():
         default=False,
         help="Disable Google Earth Engine download functionality. Use when running without internet access or EE authentication.",
     )
+    parser.add_argument(
+        "--ee-project",
+        type=str,
+        default=None,
+        help="Google Earth Engine project ID. Required for EE downloads.",
+    )
     return parser.parse_args()
 
 
@@ -56,6 +62,7 @@ def main(
     jrc_dataset_file: str | Path = None,
     precomputed_nrt_dir: str | Path = None,
     offline_mode: bool = False,
+    ee_project: str = None,
 ):
     """Run the dashboard app.
 
@@ -112,6 +119,7 @@ def main(
         zarr_path_jrc=jrc_dataset_file,
         precomputed_nrt_dir=precomputed_nrt_dir,
         offline_mode=offline_mode,
+        ee_project=ee_project,
     )
 
 
@@ -123,4 +131,5 @@ if __name__ == "__main__":
         jrc_dataset_file=args.jrc_dataset_file,
         precomputed_nrt_dir=args.precomputed_nrt_dir,
         offline_mode=args.offline_mode,
+        ee_project=args.ee_project,
     )

@@ -537,6 +537,7 @@ def create_app(
     zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
     precomputed_nrt_dir: Optional[str | Path] = None,
     offline_mode: bool = False,
+    ee_project: Optional[str] = None,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -844,7 +845,7 @@ def create_app(
                 # Download data for the specific geohash
                 try:
                     # Create downloader with the project from environment
-                    downloader = EarthEngineDownloader(ee_auth=True)
+                    downloader = EarthEngineDownloader(ee_auth=True, ee_project=ee_project)
 
                     if not id_available_dw:
                         # Download data for the specific geohash
@@ -853,8 +854,8 @@ def create_app(
                             vector_dataset=data_path_input,
                             name_attribute=id_column,
                             id_list=[current],
-                            years=list(range(2017, 2026)),
-                            months=[6, 7, 8, 9],
+                            years=list(range(2017, 2027)),
+                            months=[5, 6, 7, 8, 9, 10],
                             date_list=None,
                         )
 
@@ -1176,7 +1177,7 @@ def create_app(
                     else:
                         st.caption("Downloading...")
                         try:
-                            downloader = EarthEngineDownloader(ee_auth=True)
+                            downloader = EarthEngineDownloader(ee_auth=True, ee_project=ee_project)
                             ds_downloaded = downloader.download_dw_monthly(
                                 vector_dataset=data_path_input,
                                 name_attribute=id_column,
