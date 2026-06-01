@@ -452,6 +452,7 @@ class NRTBreakpoint(BreakpointMethod):
             "date",
             "water_observed",
             "water_predicted",
+            "water_residual",
             "water_predicted_lower_90",
             "water_predicted_upper_90",
             "water_historical_mean",
@@ -465,6 +466,7 @@ class NRTBreakpoint(BreakpointMethod):
             "date",
             "water_observed",
             "water_predicted",
+            "water_residual",
             "water_predicted_lower_90",
             "water_predicted_upper_90",
             "drainage_confidence",
@@ -506,7 +508,7 @@ class NRTBreakpoint(BreakpointMethod):
             seasonal=False,
         )
 
-        # catch wild warnings to declutter console
+        # TODO. catch wild warnings to declutter console
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
 
