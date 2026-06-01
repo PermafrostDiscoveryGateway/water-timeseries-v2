@@ -76,23 +76,25 @@ def save_xarray_dataset(
     Raises:
         ValueError: If the file extension is not supported.
     """
+
     # Logging helper
     def _log(msg: str):
         if logger is not None:
             logger.info(msg)
         else:
             print(msg)
-            
+
         # Logging helper
+
     def _log_warning(msg: str):
         if logger is not None:
             logger.warning(msg)
         else:
             print(msg)
-    
+
     if output_dir is not None:
-        _log_warning('Setting an output_dir is being ignored and will be removed eventually!')
-        
+        _log_warning("Setting an output_dir is being ignored and will be removed eventually!")
+
     path = Path(save_path).absolute()
 
     # Ensure parent directory exists

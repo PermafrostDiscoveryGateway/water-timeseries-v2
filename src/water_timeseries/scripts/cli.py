@@ -215,7 +215,7 @@ def dashboard(
         f"ee_project={ee_project}"
         f"dw_start_year={dw_start_year}, dw_end_year={dw_end_year}, "
         f"dw_start_month={dw_start_month}, dw_end_month={dw_end_month}"
-        )
+    )
     subprocess.run(cmd)
 
 
