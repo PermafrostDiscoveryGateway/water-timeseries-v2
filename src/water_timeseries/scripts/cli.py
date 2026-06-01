@@ -77,21 +77,24 @@ def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
 # Subcommand: dashboard
 @app.command(group="Visualization")
 def dashboard(
-    port: Optional[int] = None,
     vector_file: Optional[str] = None,
     dw_dataset_file: Optional[str] = None,
     jrc_dataset_file: Optional[str] = None,
     precomputed_nrt_dir: Optional[str] = None,
     offline_mode: Optional[bool] = None,
     ee_project: Optional[str] = None,
-    config_file: Optional[Path] = None,
+    dw_start_year: Optional[int] = None,
+    dw_end_year: Optional[int] = None,
+    dw_start_month: Optional[int] = None,
+    dw_end_month: Optional[int] = None,
+    port: Optional[int] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
+    config_file: Optional[Path] = None,
 ):
     """Launch the Streamlit dashboard.
 
     Args:
-        port: Port to run the dashboard on (default: 8501)
         vector_file: Path to vector dataset file (GeoParquet)
         dw_dataset_file: Path to Dynamic World dataset file (zarr)
         jrc_dataset_file: Path to JRC dataset file (zarr)
@@ -99,10 +102,16 @@ def dashboard(
             Auto-detected from ``precomputed/nrt/`` in the repo root when present.
         offline_mode: If set, disables Google Earth Engine download functionality.
             Use this when running without internet access or Earth Engine authentication.
-        config_file: Path to a YAML or JSON configuration file containing default
-            parameters. CLI arguments take priority over config file values.
+        ee_project: Google Earth Engine project ID. Required for EE downloads.
+        dw_start_year: Start year for Dynamic World dataset
+        dw_end_year: End year for Dynamic World dataset
+        dw_start_month: Start month for Dynamic World dataset
+        dw_end_month: End month for Dynamic World dataset
+        port: Port to run the dashboard on (default: 8501)
         logfile: Path to log file
         verbose: Verbosity level (-v for DEBUG)
+        config_file: Path to a YAML or JSON configuration file containing default
+            parameters. CLI arguments take priority over config file values.
 
     Example usage:
         water-timeseries dashboard
@@ -132,12 +141,18 @@ def dashboard(
         jrc_dataset_file=jrc_dataset_file,
         precomputed_nrt_dir=precomputed_nrt_dir,
         offline_mode=offline_mode,
-        port=port,
         ee_project=ee_project,
+        dw_start_year=dw_start_year,
+        dw_end_year=dw_end_year,
+        dw_start_month=dw_start_month,
+        dw_end_month=dw_end_month,
+        port=port,
+        logfile=logfile,
+        verbose=verbose,
+        config_file=config_file,
     )
 
     # Get values from merged config with defaults
-    port = config_dict.get("port", 8501)
     vector_file = config_dict.get("vector_file")
     dw_dataset_file = config_dict.get("dw_dataset_file")
     jrc_dataset_file = config_dict.get("jrc_dataset_file")
@@ -148,6 +163,10 @@ def dashboard(
     dw_end_year = config_dict.get("dw_end_year", 2025)
     dw_start_month = config_dict.get("dw_start_month", 6)
     dw_end_month = config_dict.get("dw_end_month", 9)
+    port = config_dict.get("port", 8501)
+    logfile = config_dict.get("logfile")
+    verbose = config_dict.get("verbose", 0)
+    config_file = config_dict.get("config_file")
 
     # Setup logging
     setup_logging(logfile=logfile, verbose=verbose)
@@ -196,7 +215,7 @@ def dashboard(
         f"ee_project={ee_project}"
         f"dw_start_year={dw_start_year}, dw_end_year={dw_end_year}, "
         f"dw_start_month={dw_start_month}, dw_end_month={dw_end_month}"
-        )
+    )
     subprocess.run(cmd)
 
 
