@@ -77,6 +77,16 @@ def parse_args():
         default=9,
         help="End month for Dynamic World time series (inclusive). Default is 9.",
     )
+    parser.add_argument(
+        "--viz-configuration",
+        type=str,
+        default="colored_historical",
+        help=(
+            "Visualization configuration name for the map viewer. "
+            "Options include 'colored_historical' (default) and 'nrt_drainage'. "
+            "This controls the styling and color scheme of the map layers."
+        ),
+    )
 
     return parser.parse_args()
 
@@ -88,6 +98,7 @@ def main(
     precomputed_nrt_dir: str | Path = None,
     offline_mode: bool = False,
     ee_project: str = None,
+    viz_configuration: str = None,
     dw_start_year: int = None,
     dw_end_year: int = None,
     dw_start_month: int = None,
@@ -102,6 +113,7 @@ def main(
         precomputed_nrt_dir: Directory with pre-computed NRT parquet files.
             Auto-detected from ``precomputed/nrt/`` in the repo root when present.
         offline_mode: If True, disables Google Earth Engine download functionality.
+        viz_configuration: The visualization configuration name for the map viewer.
     """
     # Default paths to test data
     default_vector_file = _REPO_ROOT / "tests" / "data" / "lake_polygons.parquet"
@@ -142,6 +154,9 @@ def main(
         if counts_file.exists() or breaks_file.exists():
             precomputed_nrt_dir = _DEFAULT_NRT_DIR
 
+    if viz_configuration is None:
+        viz_configuration = "colored_historical"
+
     create_app(
         data_path=vector_file,
         zarr_path=dw_dataset_file,
@@ -153,6 +168,7 @@ def main(
         dw_end_year=dw_end_year,
         dw_start_month=dw_start_month,
         dw_end_month=dw_end_month,
+        viz_configuration_name=viz_configuration,
     )
 
 
@@ -169,4 +185,5 @@ if __name__ == "__main__":
         dw_end_year=args.dw_end_year,
         dw_start_month=args.dw_start_month,
         dw_end_month=args.dw_end_month,
+        viz_configuration=args.viz_configuration,
     )

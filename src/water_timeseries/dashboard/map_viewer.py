@@ -75,6 +75,7 @@ class MapViewer:
         drained_gdf: Optional[gpd.GeoDataFrame] = None,
         drained_label: Optional[str] = None,
         show_main_layer: bool = True,
+        viz_configuration_name: Optional[str] = "colored_historical",
     ):
         """Initialize the MapViewer.
 
@@ -98,6 +99,7 @@ class MapViewer:
         self.drained_gdf = drained_gdf
         self.drained_label = drained_label
         self.show_main_layer = show_main_layer
+        self.viz_configuration_name = viz_configuration_name
 
         # Load data if parquet_path provided
         if gdf is None and parquet_path is not None:
@@ -169,9 +171,10 @@ class MapViewer:
             return None
 
         # Default: use folium
-        return self._render_folium(valid_gdf, layer_column=getattr(self, "layer_column", None))
+        return self._render_folium(valid_gdf, layer_column=getattr(self, "layer_column", None), viz_configuration_name=self.viz_configuration_name)
 
-    def _render_folium(self, valid_gdf: gpd.GeoDataFrame, layer_column: Optional[str] = None) -> Optional[str]:
+    # TODO: create configuration option 
+    def _render_folium(self, valid_gdf: gpd.GeoDataFrame, layer_column: Optional[str] = None, viz_configuration_name: Optional[str] = "colored_historical") -> Optional[str]:
         """Render using folium with optional layer selection.
 
         Args:
@@ -207,25 +210,59 @@ class MapViewer:
             layers="tcvis",
         ).add_to(m)
 
-        # Create style function based on whether NetChange_perc column exists
-        if "NetChange_perc" in valid_gdf.columns:
-            style_function = get_colored_style_function(
-                color_column="NetChange_perc",
-                vmin=-40,
-                vmax=40,
-                colormap=plt.cm.RdYlBu,
-            )
+        if viz_configuration_name == "colored_historical":
+            # Create style function based on whether NetChange_perc column exists
+            if "NetChange_perc" in valid_gdf.columns:
+                style_function = get_colored_style_function(
+                    color_column="NetChange_perc",
+                    vmin=-40,
+                    vmax=40,
+                    colormap=plt.cm.RdYlBu,
+                )
+
+                # Format tooltip columns using utility function
+                # Include Area columns for full tooltip display
+                tooltip_columns = [
+                    ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
+                    ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
+                    ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
+                    ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
+                ]
+            else:
+                style_function = get_default_style_function()
+
+        elif viz_configuration_name == "nrt_drainage":
+            # Create style function based on whether NetChange_perc column exists
+            if "drainage_confidence" in valid_gdf.columns:
+
+                style_function = get_colored_style_function(
+                    color_column="drainage_confidence",
+                    vmin=0,
+                    vmax=3,
+                    colormap=plt.cm.Reds,
+                    edge_weight=3,
+                    fill_opacity = 0.4,
+                    edge_color = "#dddddd",
+                )
+
+                # Format tooltip columns using utility function
+                # Include Area columns for full tooltip display
+                tooltip_columns = [
+                    ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
+                    ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
+                    ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
+                    ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
+                    # ("water_residual", "Water residual:", "{:.2f}", ""),
+                    ("water_observed", "Observed water:", "{:.2f}", ""),
+                    ("water_predicted", "Predicted water:", "{:.2f}", ""),
+                ]
+            else:
+                
+                style_function = get_default_style_function()
         else:
+            
             style_function = get_default_style_function()
 
-        # Format tooltip columns using utility function
-        # Include Area columns for full tooltip display
-        tooltip_columns = [
-            ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
-            ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
-            ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
-            ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
-        ]
         valid_gdf = _sanitize_geojson_properties(valid_gdf)
         valid_gdf, fields_to_show, aliases_to_show = format_tooltip_columns(
             valid_gdf,
@@ -542,6 +579,7 @@ def create_app(
     dw_end_year: int = 2025,
     dw_start_month: int = 6,
     dw_end_month: int = 9,
+    viz_configuration_name: Optional[str] = "colored_historical",
 ):
     """Create the Streamlit app with map viewer.
 
@@ -746,6 +784,7 @@ def create_app(
             zoom=zoom_level,
             map_backend=map_backend,
             max_features=max_features,
+            viz_configuration_name=viz_configuration_name
         )
         if show_drained and drained_breaks is not None and not drained_breaks.empty:
             drained_gdf = viewer.gdf.merge(
