@@ -87,6 +87,12 @@ class MapViewer:
             hover_columns: List of column names to show on hover. If None, shows all.
             map_center: Dictionary with 'lat' and 'lon' keys for map center.
             zoom: Initial zoom level for the map.
+            map_backend: Which mapping backend to use ("folium" or "st_map").
+            max_features: Maximum number of features to display (for performance).
+            drained_gdf: Optional GeoDataFrame of recently drained lakes to overlay.
+            drained_label: Optional label to show in the legend for the drained layer.
+            show_main_layer: Whether to show the main layer (gdf) by default. If False, it will be added but initially hidden.
+            viz_configuration_name: The visualization configuration name to determine styling and tooltip content.
         """
         self.geometry_column = geometry_column
         self.id_column = id_column
@@ -195,24 +201,30 @@ class MapViewer:
 
         m = folium.Map(location=center, zoom_start=self.zoom)
 
-        # Add tile layers using utility function
-        for tile_name in create_tile_layers():
-            folium.TileLayer(tile_name).add_to(m)
+        # # Add tile layers using utility function
 
         # Add WMS layer for permafrost data
         wms_url = "https://maps.awi.de/services/common/permafrost/ows"
-        folium.WmsTileLayer(
+        tcvis_tile_layer = folium.WmsTileLayer(
             url=wms_url,
             name="TCVIS Landsat Trends 2005-2024 (AWI)",
             styles="composite",
             transparent=True,
             overlay=False,
             layers="tcvis",
-        ).add_to(m)
+        )
+        tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
+        tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
 
         if viz_configuration_name == "colored_historical":
             # Create style function based on whether NetChange_perc column exists
             if "NetChange_perc" in valid_gdf.columns:
+
+                # add tile layers
+                tile_layer_darkmatter.add_to(m)
+                tile_layer_esriworld.add_to(m)
+                tcvis_tile_layer.add_to(m)
+
                 style_function = get_colored_style_function(
                     color_column="NetChange_perc",
                     vmin=-40,
@@ -233,15 +245,20 @@ class MapViewer:
 
         elif viz_configuration_name == "nrt_drainage":
             # Create style function based on whether NetChange_perc column exists
-            if "drainage_confidence" in valid_gdf.columns:
+            if "water_residual" in valid_gdf.columns:
 
+                # add tile layers
+                tcvis_tile_layer.add_to(m)
+                tile_layer_esriworld.add_to(m)
+                tile_layer_darkmatter.add_to(m)
+                
                 style_function = get_colored_style_function(
-                    color_column="drainage_confidence",
-                    vmin=0,
-                    vmax=3,
-                    colormap=plt.cm.Reds,
-                    edge_weight=3,
-                    fill_opacity = 0.4,
+                    color_column="water_residual",
+                    vmin=-1,
+                    vmax=0,
+                    colormap=plt.cm.Reds_r,
+                    edge_weight=2,
+                    fill_opacity = 0.8,
                     edge_color = "#dddddd",
                 )
 
@@ -252,7 +269,7 @@ class MapViewer:
                     ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
                     ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
                     ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
-                    # ("water_residual", "Water residual:", "{:.2f}", ""),
+                    ("water_residual", "Water residual:", "{:.2f}", ""),
                     ("water_observed", "Observed water:", "{:.2f}", ""),
                     ("water_predicted", "Predicted water:", "{:.2f}", ""),
                 ]
@@ -598,6 +615,7 @@ def create_app(
         dw_end_year: End year for Dynamic World time series (inclusive).
         dw_start_month: Start month for Dynamic World time series (1-12).
         dw_end_month: End month for Dynamic World time series (1-12).
+        viz
     """
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
@@ -639,7 +657,7 @@ def create_app(
         "Max features to load",
         min_value=10,
         max_value=50000,
-        value=1000,
+        value=2000,
         step=100,
         help="Limit number of polygons for faster loading. Set to 0 for no limit.",
     )
