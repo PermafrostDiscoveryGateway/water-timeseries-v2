@@ -60,25 +60,27 @@ pip install .
 
 #### Basic Usage
 
+##### Show Help for cli
+
 ```bash
 # Show help
 uv run water-timeseries --help
+```
+
+##### Main CLI tools
+
+```bash
+# Show breakpoint-analysis-historical subcommand help
+uv run water-timeseries breakpoint-analysis-historical
 
 # Show breakpoint-analysis-historical subcommand help
-uv run water-timeseries breakpoint-analysis-historical --help
+uv run water-timeseries breakpoint-analysis-nrt
 
 # Show plot-timeseries subcommand help
-uv run water-timeseries plot-timeseries --help
+uv run water-timeseries plot-timeseries
 
-# Run with required arguments
-uv run water-timeseries breakpoint-analysis-historical data.zarr output.parquet
-
-# Run with optional parameters
-uv run water-timeseries breakpoint-analysis-historical \
-    data.zarr \
-    output.parquet \
-    --chunksize 100 \
-    --n-jobs 4
+# run dashboard
+uv run water-timeseries dashboard
 ```
 
 #### Using a Config File
@@ -89,7 +91,7 @@ You can also use a YAML configuration file:
 uv run water-timeseries breakpoint-analysis-historical --config-file configs/config.yaml
 ```
 
-Example config file:
+Example config file for breakpoint-analysis-historical:
 
 ```yaml
 # config.yaml
@@ -114,7 +116,7 @@ min_chunksize: 10
 #### CLI Options
 
 | Option | Short | Description | Default |
-|--------|-------|-------------|--------|
+| --------| ------- | ------------- | -------- |
 | `water_dataset_file` | | Path to water dataset (zarr or parquet) | Required* |
 | `output_file` | | Path to output parquet file | Required* |
 | `--config-file` | | Path to config YAML/JSON file | None |
@@ -164,7 +166,7 @@ uv run water-timeseries plot-timeseries tests/data/lakes_jrc_test.zarr --lake-id
 Plot options:
 
 | Option | Short | Description | Default |
-|--------|-------|-------------|--------|
+| -------- | ------- | ------------- | -------- |
 | `water_dataset_file` | | Path to water dataset (zarr or netCDF) | Required* |
 | `--lake-id` | | Geohash ID of the lake | Required* |
 | `--output-figure` | | Path to save output figure | None |
@@ -197,7 +199,7 @@ The package includes an interactive Streamlit dashboard for visualizing lake pol
 ### Running the Dashboard
 
 ```bash
-streamlit run src/water_timeseries/dashboard/app.py
+uv run water-timeseries dashboard
 ```
 
 ### Features
@@ -210,29 +212,48 @@ streamlit run src/water_timeseries/dashboard/app.py
 - **Popup View**: Click "Open Time Series in Popup" for a larger view
 - **EE Project Config**: Set your Google Earth Engine project in the sidebar
 
-### Dashboard UI
-
-![Dashboard](../figures/dashboard.png)
-
 ### Configuration
 
-The dashboard accepts two optional arguments:
+The dashboard accepts the following optional arguments:
 
 | Parameter | Description | Default |
-|-----------|-------------|---------|
-| `data_path` | Path to parquet file with lake polygons | `tests/data/lake_polygons.parquet` |
-| `zarr_path` | Path to zarr file with cached time series data | `tests/data/lakes_dw_test.zarr` |
+| ----------- | ------------- | --------- |
+| `vector_file` | Path to vector dataset file (GeoParquet) | `tests/data/lake_polygons.parquet` |
+| `dw_dataset_file` | Path to Dynamic World dataset file (zarr or nc) | `tests/data/lakes_dw_test.zarr` |
+| `jrc_dataset_file` | Path to JRC dataset file (zarr or nc) | `tests/data/lakes_jrc_test.zarr` |
+| `precomputed_nrt_dir` | Directory with pre-computed NRT parquet files. Auto-detected from `precomputed/nrt/` in the repo root when present | `None` |
+| `offline_mode` | If set, disables Google Earth Engine download functionality. Use this when running without internet access or Earth Engine authentication | `False` |
+| `ee_project` | Google Earth Engine project ID. Required for EE downloads | `None` |
+| `dw_start_year` | Start year for Dynamic World dataset time series | `2017` |
+| `dw_end_year` | End year for Dynamic World dataset time series | `2025` |
+| `dw_start_month` | Start month (1-12) for Dynamic World dataset time series filtering | `6` (June) |
+| `dw_end_month` | End month (1-12) for Dynamic World dataset time series filtering | `9` (September) |
+| `port` | Port to run the dashboard on | `8501` |
+| `logfile` | Path to log file. If not provided, a default logfile is created with the format `{subcommand}_{timestamp}.log` | Auto-generated |
+| `verbose` | Verbosity level (`-v` for DEBUG) | `0` (INFO) |
+| `config_file` | Path to a YAML or JSON configuration file containing default parameters. CLI arguments take priority over config file values | `None` |
 
-Example custom paths:
+#### Example usage
 
-```python
-from water_timeseries.dashboard.map_viewer import create_app
+```bash
+uv run water-timeseries dashboard
+uv run water-timeseries dashboard --vector-file data/lakes.parquet --dw-dataset-file data/lakes.zarr
+uv run water-timeseries dashboard --offline-mode
+uv run water-timeseries dashboard --ee-project my-ee-project
+uv run water-timeseries dashboard --dw-start-year 2017 --dw-end-year 2026
+uv run water-timeseries dashboard --config-file configs/dashboard_config.yaml
+```
 
-# With custom paths
-create_app(
-    data_path="/path/to/lakes.parquet",
-    zarr_path="/path/to/data.zarr"
-)
+#### Example config file
+
+```yaml
+# dashboard with downloading time-series on the fly for 2017-2026 (May-October)
+vector_file: notebooks_temporary/drain_2026-05_high_confidence.parquet
+ee_project: my-ee-project
+dw_start_year: 2017
+dw_end_year: 2026
+dw_start_month: 5
+dw_end_month: 10
 ```
 
 ## Documentation Links
@@ -244,6 +265,7 @@ create_app(
 ## Contributing
 
 We welcome contributions! Please ensure you:
+
 1. Add docstrings to new functions and classes (Google style)
 2. Update documentation in the `docs/` folder
 3. Run tests before submitting PRs
