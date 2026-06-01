@@ -537,6 +537,11 @@ def create_app(
     zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
     precomputed_nrt_dir: Optional[str | Path] = None,
     offline_mode: bool = False,
+    ee_project: Optional[str] = None,
+    dw_start_year: int = 2017,
+    dw_end_year: int = 2025,
+    dw_start_month: int = 6,
+    dw_end_month: int = 9,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -550,6 +555,11 @@ def create_app(
             loads these files instead of running NRT on the fly.
         offline_mode: If True, disables Google Earth Engine download functionality.
             Use when running without internet access or EE authentication.
+        ee_project: Google Earth Engine project ID. Required for EE downloads.
+        dw_start_year: Start year for Dynamic World time series (inclusive).
+        dw_end_year: End year for Dynamic World time series (inclusive).
+        dw_start_month: Start month for Dynamic World time series (1-12).
+        dw_end_month: End month for Dynamic World time series (1-12).
     """
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
@@ -844,7 +854,7 @@ def create_app(
                 # Download data for the specific geohash
                 try:
                     # Create downloader with the project from environment
-                    downloader = EarthEngineDownloader(ee_auth=True)
+                    downloader = EarthEngineDownloader(ee_auth=True, ee_project=ee_project)
 
                     if not id_available_dw:
                         # Download data for the specific geohash
@@ -853,8 +863,8 @@ def create_app(
                             vector_dataset=data_path_input,
                             name_attribute=id_column,
                             id_list=[current],
-                            years=list(range(2017, 2026)),
-                            months=[6, 7, 8, 9],
+                            years=list(range(dw_start_year, dw_end_year + 1)),
+                            months=list(range(dw_start_month, dw_end_month + 1)),
                             date_list=None,
                         )
 
@@ -1176,7 +1186,7 @@ def create_app(
                     else:
                         st.caption("Downloading...")
                         try:
-                            downloader = EarthEngineDownloader(ee_auth=True)
+                            downloader = EarthEngineDownloader(ee_auth=True, ee_project=ee_project)
                             ds_downloaded = downloader.download_dw_monthly(
                                 vector_dataset=data_path_input,
                                 name_attribute=id_column,
