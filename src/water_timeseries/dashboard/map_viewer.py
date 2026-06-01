@@ -177,10 +177,19 @@ class MapViewer:
             return None
 
         # Default: use folium
-        return self._render_folium(valid_gdf, layer_column=getattr(self, "layer_column", None), viz_configuration_name=self.viz_configuration_name)
+        return self._render_folium(
+            valid_gdf,
+            layer_column=getattr(self, "layer_column", None),
+            viz_configuration_name=self.viz_configuration_name,
+        )
 
-    # TODO: create configuration option 
-    def _render_folium(self, valid_gdf: gpd.GeoDataFrame, layer_column: Optional[str] = None, viz_configuration_name: Optional[str] = "colored_historical") -> Optional[str]:
+    # TODO: create configuration option
+    def _render_folium(
+        self,
+        valid_gdf: gpd.GeoDataFrame,
+        layer_column: Optional[str] = None,
+        viz_configuration_name: Optional[str] = "colored_historical",
+    ) -> Optional[str]:
         """Render using folium with optional layer selection.
 
         Args:
@@ -219,7 +228,6 @@ class MapViewer:
         if viz_configuration_name == "colored_historical":
             # Create style function based on whether NetChange_perc column exists
             if "NetChange_perc" in valid_gdf.columns:
-
                 # add tile layers
                 tile_layer_darkmatter.add_to(m)
                 tile_layer_esriworld.add_to(m)
@@ -246,38 +254,34 @@ class MapViewer:
         elif viz_configuration_name == "nrt_drainage":
             # Create style function based on whether NetChange_perc column exists
             if "water_residual" in valid_gdf.columns:
-
                 # add tile layers
                 tcvis_tile_layer.add_to(m)
                 tile_layer_esriworld.add_to(m)
                 tile_layer_darkmatter.add_to(m)
-                
+
                 style_function = get_colored_style_function(
                     color_column="water_residual",
                     vmin=-1,
                     vmax=0,
                     colormap=plt.cm.Reds_r,
                     edge_weight=2,
-                    fill_opacity = 0.8,
-                    edge_color = "#dddddd",
+                    fill_opacity=0.8,
+                    edge_color="#dddddd",
                 )
 
                 # Format tooltip columns using utility function
                 # Include Area columns for full tooltip display
                 tooltip_columns = [
-                    ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
-                    ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
-                    ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
-                    ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
                     ("water_residual", "Water residual:", "{:.2f}", ""),
                     ("water_observed", "Observed water:", "{:.2f}", ""),
                     ("water_predicted", "Predicted water:", "{:.2f}", ""),
+                    ("water_historical_median", "Historical median water:", "{:.2f}", ""),
+                    ("water_historical_min", "Historical minimum:", "{:.2f}", ""),
+                    ("drainage_confidence", "Drainage Confidence:", "{:}", ""),
                 ]
             else:
-                
                 style_function = get_default_style_function()
         else:
-            
             style_function = get_default_style_function()
 
         valid_gdf = _sanitize_geojson_properties(valid_gdf)
@@ -624,10 +628,9 @@ def create_app(
 
     st.title("🗺️ Lake Polygon Map Viewer")
     st.markdown("""
-    This dashboard displays lake polygons from a GeoDataFrame. 
-    - Polygons are **colored by NetChange_perc** (red = decrease, blue = increase)
+    This dashboard displays lake polygons from a GeoDataFrame.
     - **Hover** over a feature to see its attributes
-    - **Click** on a feature to select it and view time series & create timelapses
+    - **Click** on a feature to select it and view time series & create timelapse animations
     """)
 
     # Create sidebar for controls
@@ -802,7 +805,7 @@ def create_app(
             zoom=zoom_level,
             map_backend=map_backend,
             max_features=max_features,
-            viz_configuration_name=viz_configuration_name
+            viz_configuration_name=viz_configuration_name,
         )
         if show_drained and drained_breaks is not None and not drained_breaks.empty:
             drained_gdf = viewer.gdf.merge(
