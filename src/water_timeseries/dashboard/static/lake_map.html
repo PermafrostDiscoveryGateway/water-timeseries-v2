@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/pmtiles@4.1.0/dist/pmtiles.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; }
+    #map {
+      width: 100%;
+      height: var(--map-height, 620px);
+    }
+    #status {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 3;
+      background: rgba(255,255,255,0.92);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font: 12px system-ui, sans-serif;
+      color: #333;
+      max-width: 90%;
+      display: none;
+    }
+    #status.error { color: #b00020; display: block; }
+    .maplibregl-popup-content {
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      max-width: 280px;
+    }
+    .select-lake-btn {
+      margin-top: 8px;
+      padding: 6px 10px;
+      background: #0068c9;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .select-lake-btn:hover { background: #0050a0; }
+    .legend {
+      position: absolute;
+      bottom: 24px;
+      right: 10px;
+      background: white;
+      padding: 10px 12px;
+      border-radius: 5px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.2);
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      z-index: 2;
+      max-width: 200px;
+    }
+    .legend-bar {
+      height: 14px;
+      margin: 6px 0 4px;
+      border: 1px solid #ccc;
+      background: linear-gradient(to right, #d73027, #fee090, #4575b4);
+    }
+  </style>
+</head>
+<body>
+  <div id="status"></div>
+  <div id="map"></div>
+  <div class="legend" id="legend"></div>
+  <script>
+    const CONFIG = __CONFIG_JSON__;
+    document.documentElement.style.setProperty(
+      "--map-height",
+      (CONFIG.height || 620) + "px"
+    );
+
+    const statusEl = document.getElementById("status");
+    function showError(msg) {
+      statusEl.textContent = msg;
+      statusEl.className = "error";
+      console.error(msg);
+    }
+
+    const pmtilesHttpUrl = CONFIG.pmtiles_url;
+    const protocol = new pmtiles.Protocol();
+    protocol.add(new pmtiles.PMTiles(pmtilesHttpUrl));
+    maplibregl.addProtocol("pmtiles", protocol.tile);
+
+    const pmtilesUrl = "pmtiles://" + pmtilesHttpUrl;
+    const idField = CONFIG.id_column || "id_geohash";
+    const viz = CONFIG.viz_configuration || "colored_historical";
+    const sourceLayer = CONFIG.source_layer || "lakes";
+
+    const historicalPaint = {
+      "fill-color": [
+        "interpolate",
+        ["linear"],
+        ["get", "NetChange_perc"],
+        -40, "#d73027",
+        -20, "#f46d43",
+        0, "#fee090",
+        20, "#74add1",
+        40, "#4575b4"
+      ],
+      "fill-opacity": 0.85,
+      "fill-outline-color": "#222222"
+    };
+
+    const nrtPaint = {
+      "fill-color": [
+        "interpolate",
+        ["linear"],
+        ["get", "water_residual"],
+        -1, "#7f0000",
+        -0.5, "#d73027",
+        0, "#fcae91"
+      ],
+      "fill-opacity": 0.85,
+      "fill-outline-color": "#7f0000"
+    };
+
+    const lakePaint = viz === "nrt_drainage" ? nrtPaint : historicalPaint;
+
+    const map = new maplibregl.Map({
+      container: "map",
+      style: {
+        version: 8,
+        sources: {
+          basemap: {
+            type: "raster",
+            tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"],
+            tileSize: 256,
+            attribution: "&copy; OpenStreetMap &copy; CARTO"
+          },
+          lakes: {
+            type: "vector",
+            url: pmtilesUrl,
+            attribution: "Lake polygons (PMTiles)"
+          }
+        },
+        layers: [
+          { id: "basemap", type: "raster", source: "basemap" },
+          {
+            id: "lakes-fill",
+            type: "fill",
+            source: "lakes",
+            "source-layer": sourceLayer,
+            paint: lakePaint
+          },
+          {
+            id: "lakes-outline",
+            type: "line",
+            source: "lakes",
+            "source-layer": sourceLayer,
+            paint: {
+              "line-color": "#1a1a1a",
+              "line-width": 1.5,
+              "line-opacity": 0.9
+            }
+          }
+        ]
+      },
+      center: CONFIG.center || [-164.1, 66.5],
+      zoom: CONFIG.zoom || 8
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    map.on("load", () => {
+      if (CONFIG.bounds) {
+        map.fitBounds(CONFIG.bounds, { padding: 48, maxZoom: 11, duration: 0 });
+      }
+      map.resize();
+      setTimeout(() => map.resize(), 200);
+      setTimeout(() => map.resize(), 800);
+    });
+
+    map.on("idle", () => {
+      const features = map.queryRenderedFeatures({ layers: ["lakes-fill"] });
+      if (!features.length) {
+        showError(
+          "No lake tiles in view. Check that PMTiles is reachable at " + pmtilesHttpUrl
+        );
+      }
+    });
+
+    map.on("error", (e) => {
+      if (e.error && e.error.message) {
+        showError(e.error.message);
+      }
+    });
+
+    function formatProps(props) {
+      const lines = [];
+      const fmt = (v) => (v === null || v === undefined ? "N/A" : v);
+      if (props.NetChange_perc !== undefined) {
+        lines.push(`<b>Net change:</b> ${fmt(props.NetChange_perc)}%`);
+        lines.push(`<b>Net change (ha):</b> ${fmt(props.NetChange_ha)}`);
+        lines.push(`<b>Area 2000 (ha):</b> ${fmt(props.Area_start_ha)}`);
+        lines.push(`<b>Area 2020 (ha):</b> ${fmt(props.Area_end_ha)}`);
+      }
+      if (props.water_residual !== undefined) {
+        lines.push(`<b>Water residual:</b> ${fmt(props.water_residual)}`);
+        lines.push(`<b>Observed water:</b> ${fmt(props.water_observed)}`);
+      }
+      lines.push(`<b>ID:</b> ${fmt(props[idField])}`);
+      return lines.join("<br/>");
+    }
+
+    function selectLake(geohash) {
+      if (geohash == null || geohash === "") return;
+      const id = String(geohash);
+      // Embedded in Streamlit st.iframe (cross-origin): postMessage to parent.
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "water_timeseries_select_lake", id }, "*");
+        return;
+      }
+      // Standalone map tab: update URL directly.
+      const url = new URL(window.location.href);
+      url.searchParams.set("selected_lake", id);
+      window.location.href = url.toString();
+    }
+
+    map.on("click", "lakes-fill", (e) => {
+      if (!e.features || !e.features.length) return;
+      const props = e.features[0].properties || {};
+      const geohash = props[idField];
+      const html = formatProps(props) +
+        `<br/><button class="select-lake-btn" type="button">Select for time series</button>`;
+
+      new maplibregl.Popup({ closeOnClick: true })
+        .setLngLat(e.lngLat)
+        .setHTML(html)
+        .addTo(map)
+        .getElement()
+        .querySelector(".select-lake-btn")
+        ?.addEventListener("click", () => selectLake(geohash));
+    });
+
+    map.on("mouseenter", "lakes-fill", () => { map.getCanvas().style.cursor = "pointer"; });
+    map.on("mouseleave", "lakes-fill", () => { map.getCanvas().style.cursor = ""; });
+
+    const legend = document.getElementById("legend");
+    if (viz === "nrt_drainage") {
+      legend.innerHTML = "<b>Water residual</b><div class='legend-bar' style='background:linear-gradient(to right,#7f0000,#fcae91)'></div>";
+    } else {
+      legend.innerHTML = "<b>Net change (%)</b><div class='legend-bar'></div><div style='display:flex;justify-content:space-between'><span>-40%</span><span>0</span><span>+40%</span></div>";
+    }
+  </script>
+</body>
+</html>

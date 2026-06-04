@@ -372,6 +372,34 @@ uv run water-timeseries dashboard --port 8502
 streamlit run src/water_timeseries/dashboard/app.py
 ```
 
+### Fast map rendering with PMTiles (millions of lakes)
+
+For large lake datasets, convert GeoParquet to vector tiles once, then let the dashboard
+load only the tiles visible in the viewport (MapLibre GL + PMTiles).
+
+**Prerequisites:** [tippecanoe](https://github.com/felt/tippecanoe) on your PATH (`brew install tippecanoe`).
+
+```bash
+# 1. Build a single .pmtiles archive from your lake parquet
+uv run water-timeseries build-pmtiles /path/to/lakes.parquet tiles/lakes.pmtiles
+
+# 2a. Local dashboard (starts a small HTTP server with Range support)
+uv run water-timeseries dashboard \
+  --vector-file /path/to/lakes.parquet \
+  --pmtiles-file tiles/lakes.pmtiles
+
+# 2b. Production: upload lakes.pmtiles to S3 (or GCS) and pass the public URL
+uv run water-timeseries dashboard \
+  --vector-file /path/to/lakes.parquet \
+  --pmtiles-url https://your-bucket.s3.amazonaws.com/lakes.pmtiles
+
+# Optional: standalone tile server for testing MapLibre outside Streamlit
+uv run water-timeseries serve-tiles tiles/lakes.pmtiles --port 8080
+```
+
+On the PMTiles map, click a lake and press **Select for time series** to load plots below.
+The parquet path is still used for time-series and attribute lookups; only the map uses tiles.
+
 ### Dashboard Features
 
 The dashboard provides a graphical interface for:

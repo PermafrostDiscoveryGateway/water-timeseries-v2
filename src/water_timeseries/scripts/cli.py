@@ -30,6 +30,9 @@ from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
 
 # Import NRT pre-computation
 from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
+from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_archive
+from water_timeseries.utils.pmtiles_build import build_pmtiles_for_nrt, find_tippecanoe
+from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
 # Create the main app
 app = cyclopts.App(name="water-timeseries", help="Water timeseries analysis tools")
@@ -88,6 +91,8 @@ def dashboard(
     dw_start_month: Optional[int] = None,
     dw_end_month: Optional[int] = None,
     viz_configuration: Optional[str] = None,
+    pmtiles_file: Optional[str] = None,
+    pmtiles_url: Optional[str] = None,
     port: Optional[int] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
@@ -109,6 +114,8 @@ def dashboard(
         dw_start_month: Start month for Dynamic World dataset
         dw_end_month: End month for Dynamic World dataset
         viz_configuration: The visualization configuration name for the map viewer.
+        pmtiles_file: Path to a .pmtiles archive for fast vector-tile rendering.
+        pmtiles_url: HTTP(S) URL to a hosted .pmtiles file (e.g. on S3).
         port: Port to run the dashboard on (default: 8501)
         logfile: Path to log file
         verbose: Verbosity level (-v for DEBUG)
@@ -149,6 +156,8 @@ def dashboard(
         dw_start_month=dw_start_month,
         dw_end_month=dw_end_month,
         viz_configuration=viz_configuration,
+        pmtiles_file=pmtiles_file,
+        pmtiles_url=pmtiles_url,
         port=port,
         logfile=logfile,
         verbose=verbose,
@@ -167,6 +176,8 @@ def dashboard(
     dw_start_month = config_dict.get("dw_start_month", 6)
     dw_end_month = config_dict.get("dw_end_month", 9)
     viz_configuration = config_dict.get("viz_configuration", "colored_historical")
+    pmtiles_file = config_dict.get("pmtiles_file")
+    pmtiles_url = config_dict.get("pmtiles_url")
     port = config_dict.get("port", 8501)
     logfile = config_dict.get("logfile")
     verbose = config_dict.get("verbose", 0)
@@ -210,6 +221,10 @@ def dashboard(
         script_args.extend(["--dw-end-month", str(dw_end_month)])
     if viz_configuration:
         script_args.extend(["--viz-configuration", viz_configuration])
+    if pmtiles_file:
+        script_args.extend(["--pmtiles-file", pmtiles_file])
+    if pmtiles_url:
+        script_args.extend(["--pmtiles-url", pmtiles_url])
     if script_args:
         cmd.extend(["--"] + script_args)
 
@@ -223,6 +238,74 @@ def dashboard(
         f"dw_start_month={dw_start_month}, dw_end_month={dw_end_month}"
     )
     subprocess.run(cmd)
+
+
+@app.command(group="Visualization")
+def build_pmtiles(
+    vector_file: Path,
+    output_file: Path,
+    viz_configuration: str = "colored_historical",
+    keep_geojsonl: bool = False,
+    logfile: Optional[str] = None,
+    verbose: int = 0,
+):
+    """Convert a lake GeoParquet file to a single .pmtiles archive for fast map rendering.
+
+    Requires tippecanoe on PATH (``brew install tippecanoe``). Upload the resulting
+    ``.pmtiles`` file to object storage (S3, GCS, etc.) and pass ``--pmtiles-url`` to
+    the dashboard, or use ``--pmtiles-file`` for local development.
+
+    Example:
+        water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
+        water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
+    """
+    if logfile:
+        setup_logging(logfile=logfile, verbose=verbose)
+
+    if not find_tippecanoe():
+        raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
+
+    print(f"Building PMTiles from {vector_file} -> {output_file}")
+    if viz_configuration == "nrt_drainage":
+        build_pmtiles_for_nrt(vector_file, output_file, keep_geojsonl=keep_geojsonl)
+    else:
+        build_pmtiles_archive(vector_file, output_file, keep_geojsonl=keep_geojsonl)
+    print(f"Wrote PMTiles archive: {output_file}")
+
+
+@app.command(group="Visualization")
+def serve_tiles(
+    pmtiles_file: Path,
+    host: str = "localhost",
+    port: int = 8080,
+    logfile: Optional[str] = None,
+    verbose: int = 0,
+):
+    """Serve a .pmtiles file over HTTP with Range request support.
+
+    Use the printed URL with MapLibre (``pmtiles://<url>``) or pass it to the
+    dashboard via ``--pmtiles-url``.
+
+    Example:
+        water-timeseries serve-tiles tiles/lakes.pmtiles --port 8080
+    """
+    if logfile:
+        setup_logging(logfile=logfile, verbose=verbose)
+    pmtiles_path = Path(pmtiles_file).resolve()
+    if not pmtiles_path.is_file():
+        raise FileNotFoundError(pmtiles_path)
+
+    with PmtilesServer(pmtiles_path.parent, host=host, port=port) as server:
+        url = server.url_for(pmtiles_path.name)
+        logger.info("Serving %s at %s (Ctrl+C to stop)", pmtiles_path.name, url)
+        logger.info("Dashboard: water-timeseries dashboard --pmtiles-url %s", url)
+        try:
+            import time
+
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            logger.info("Stopped tile server")
 
 
 # Subcommand: breakpoint analysis

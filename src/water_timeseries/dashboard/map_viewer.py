@@ -28,6 +28,10 @@ from water_timeseries.utils.map_styling import (
     get_colored_style_function,
     get_default_style_function,
 )
+from water_timeseries.dashboard.pmtiles_viewer import (
+    render_pmtiles_map,
+    sync_query_param_selection,
+)
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
@@ -82,8 +86,10 @@ class MapViewer:
         hover_columns: Optional[List[str]] = None,
         map_center: Optional[dict] = None,
         zoom: int = 10,
-        map_backend: str = "folium",  # "folium", or "st_map"
+        map_backend: str = "folium",  # "folium", "st_map", or "pmtiles"
         max_features: Optional[int] = None,  # Limit features for faster loading
+        pmtiles_file: Optional[Path | str] = None,
+        pmtiles_url: Optional[str] = None,
         drained_gdf: Optional[gpd.GeoDataFrame] = None,
         drained_label: Optional[str] = None,
         show_main_layer: bool = True,
@@ -99,8 +105,10 @@ class MapViewer:
             hover_columns: List of column names to show on hover. If None, shows all.
             map_center: Dictionary with 'lat' and 'lon' keys for map center.
             zoom: Initial zoom level for the map.
-            map_backend: Which mapping backend to use ("folium" or "st_map").
+            map_backend: Which mapping backend to use ("folium", "st_map", or "pmtiles").
             max_features: Maximum number of features to display (for performance).
+            pmtiles_file: Local ``.pmtiles`` archive (vector tiles; fast for millions of lakes).
+            pmtiles_url: Remote HTTP(S) URL to a ``.pmtiles`` file (e.g. on S3).
             drained_gdf: Optional GeoDataFrame of recently drained lakes to overlay.
             drained_label: Optional label to show in the legend for the drained layer.
             show_main_layer: Whether to show the main layer (gdf) by default. If False, it will be added but initially hidden.
@@ -112,20 +120,31 @@ class MapViewer:
         self.hover_columns = hover_columns or DEFAULT_HOVER_COLUMNS
         self.zoom = zoom
         self.map_center = map_center
-        self.map_backend = map_backend  # "folium" or "st_map"
+        self.map_backend = map_backend  # "folium", "st_map", or "pmtiles"
         self.max_features = max_features  # Limit features for faster loading
+        self.pmtiles_file = Path(pmtiles_file) if pmtiles_file else None
+        self.pmtiles_url = pmtiles_url
+        self._parquet_path = Path(parquet_path) if parquet_path else None
         self.drained_gdf = drained_gdf
         self.drained_label = drained_label
         self.show_main_layer = show_main_layer
         self.viz_configuration_name = viz_configuration_name
 
-        # Load data if parquet_path provided
-        if gdf is None and parquet_path is not None:
-            self.gdf = self._load_parquet(parquet_path)
-        elif gdf is not None:
+        use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
+        if use_pmtiles and map_backend != "pmtiles":
+            self.map_backend = "pmtiles"
+
+        # Load vector data when needed (folium or drained-layer merges)
+        if gdf is not None:
             self.gdf = gdf
+        elif parquet_path is not None and self.map_backend != "pmtiles":
+            self.gdf = self._load_parquet(parquet_path)
+        elif parquet_path is not None:
+            self.gdf = None  # lazy load for NRT overlay only
+        elif use_pmtiles:
+            self.gdf = None
         else:
-            raise ValueError("Either gdf or parquet_path must be provided")
+            raise ValueError("Either gdf, parquet_path, or pmtiles_file/pmtiles_url must be provided")
 
         # Initialize session state for storing selected id_geohash
         if "selected_geohash" not in st.session_state:
@@ -159,6 +178,15 @@ class MapViewer:
 
         return gdf
 
+    def _ensure_gdf(self) -> gpd.GeoDataFrame:
+        """Load GeoDataFrame from parquet when required (e.g. NRT overlay)."""
+        if self.gdf is not None:
+            return self.gdf
+        if self._parquet_path is None:
+            raise ValueError("parquet_path is required to load lake attributes for overlays")
+        self.gdf = self._load_parquet(self._parquet_path)
+        return self.gdf
+
     def render(self) -> Optional[str]:
         """Render the interactive map in Streamlit using the selected backend.
 
@@ -167,14 +195,19 @@ class MapViewer:
         """
         st.subheader("Interactive Map Viewer")
 
+        if self.map_backend == "pmtiles":
+            return self._render_pmtiles()
+
+        gdf = self._ensure_gdf()
+
         # Get valid indices (after filtering out invalid geometries)
-        valid_mask = self.gdf.geometry.notna() & ~self.gdf.geometry.is_empty
-        valid_gdf = self.gdf[valid_mask].copy()
+        valid_mask = gdf.geometry.notna() & ~gdf.geometry.is_empty
+        valid_gdf = gdf[valid_mask].copy()
 
         # Apply sampling if max_features specified (for faster loading)
         if self.max_features and len(valid_gdf) > self.max_features:
             valid_gdf = valid_gdf.head(n=self.max_features).reset_index(drop=True)
-            st.caption(f"Showing largest {self.max_features} of {len(self.gdf)} features (use max_features to change)")
+            st.caption(f"Showing largest {self.max_features} of {len(gdf)} features (use max_features to change)")
 
         # Ensure geometry is in proper shapely format
         valid_gdf = valid_gdf.reset_index(drop=True)
@@ -194,6 +227,28 @@ class MapViewer:
             layer_column=getattr(self, "layer_column", None),
             viz_configuration_name=self.viz_configuration_name,
         )
+
+    def _render_pmtiles(self) -> Optional[str]:
+        """Render MapLibre map backed by PMTiles (viewport tile loading)."""
+        st.caption(
+            "Vector tiles (PMTiles): only visible map tiles are loaded. "
+            "Click a lake, then **Select for time series** to load plots below. "
+            "Lakes are colored by net change (red = shrink, blue = grow)."
+        )
+        if self.pmtiles_file:
+            st.caption(f"Tiles: `{self.pmtiles_file}`")
+        render_pmtiles_map(
+            pmtiles_file=self.pmtiles_file,
+            pmtiles_url=self.pmtiles_url,
+            vector_file_for_bounds=None,
+            id_column=self.id_column,
+            viz_configuration=self.viz_configuration_name or "colored_historical",
+        )
+        selected = sync_query_param_selection(self.id_column)
+        if selected and selected != st.session_state.get("_pmtiles_last_rerun"):
+            st.session_state._pmtiles_last_rerun = selected
+            st.rerun()
+        return selected
 
     # TODO: create configuration option
     def _render_folium(
@@ -395,6 +450,9 @@ class MapViewer:
         allowing the user to make a new selection.
         """
         st.session_state.selected_geohash = None
+        st.session_state.pop("_pmtiles_last_rerun", None)
+        if "selected_lake" in st.query_params:
+            del st.query_params["selected_lake"]
 
 
 def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -613,6 +671,8 @@ def create_app(
     dw_start_month: int = 6,
     dw_end_month: int = 9,
     viz_configuration_name: Optional[str] = "colored_historical",
+    pmtiles_file: Optional[str | Path] = None,
+    pmtiles_url: Optional[str] = None,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -631,7 +691,9 @@ def create_app(
         dw_end_year: End year for Dynamic World time series (inclusive).
         dw_start_month: Start month for Dynamic World time series (1-12).
         dw_end_month: End month for Dynamic World time series (1-12).
-        viz
+        viz_configuration_name: Map styling preset.
+        pmtiles_file: Path to a ``.pmtiles`` archive (enables fast vector-tile map).
+        pmtiles_url: HTTP(S) URL to a hosted ``.pmtiles`` file (e.g. on S3).
     """
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
@@ -663,21 +725,26 @@ def create_app(
     else:
         st.sidebar.caption("📊 Static mode - matplotlib plots")
 
-    map_backend = "folium"
+    use_pmtiles = bool(pmtiles_file or pmtiles_url)
+    map_backend = "pmtiles" if use_pmtiles else "folium"
 
     # Performance settings for large datasets
     st.sidebar.divider()
     st.sidebar.subheader("Performance")
-    max_features = st.sidebar.number_input(
-        "Max features to load",
-        min_value=10,
-        max_value=50000,
-        value=2000,
-        step=100,
-        help="Limit number of polygons for faster loading. Set to 0 for no limit.",
-    )
-    if max_features == 0:
+    if use_pmtiles:
+        st.sidebar.success("PMTiles mode: viewport tile loading (millions of lakes)")
         max_features = None
+    else:
+        max_features = st.sidebar.number_input(
+            "Max features to load",
+            min_value=10,
+            max_value=50000,
+            value=2000,
+            step=100,
+            help="Limit number of polygons for faster loading. Set to 0 for no limit.",
+        )
+        if max_features == 0:
+            max_features = None
 
     # Use function parameters for data paths
     data_path_input = str(data_path)
@@ -818,9 +885,16 @@ def create_app(
             map_backend=map_backend,
             max_features=max_features,
             viz_configuration_name=viz_configuration_name,
+            pmtiles_file=pmtiles_file,
+            pmtiles_url=pmtiles_url,
         )
-        if show_drained and drained_breaks is not None and not drained_breaks.empty:
-            drained_gdf = viewer.gdf.merge(
+        if show_drained and map_backend == "pmtiles":
+            st.sidebar.info(
+                "NRT drained-lake map overlay is only available in Folium mode. "
+                "Disable PMTiles or build a separate PMTiles layer for the NRT month."
+            )
+        elif show_drained and drained_breaks is not None and not drained_breaks.empty:
+            drained_gdf = viewer._ensure_gdf().merge(
                 drained_breaks.reset_index(),
                 on=id_column,
                 how="inner",
