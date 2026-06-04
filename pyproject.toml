@@ -64,6 +64,7 @@ dependencies = [
     "geoparquet-io>=1.1.1",
     "tqdm-joblib>=0.0.5",
     "polars>=1.40.1",
+    "duckdb>=1.2.0",
 ]
 
 [project.optional-dependencies]

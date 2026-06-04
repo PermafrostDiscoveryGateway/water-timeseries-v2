@@ -225,6 +225,123 @@ def dashboard(
     subprocess.run(cmd)
 
 
+@app.command(group="Visualization")
+def dashboard_viewport(
+    lakes_parquet: Optional[Path] = None,
+    timeseries_parquet: Optional[Path] = None,
+    timeseries_nc: Optional[Path] = None,
+    dw_dataset_file: Optional[Path] = None,
+    jrc_dataset_file: Optional[Path] = None,
+    polygon_limit: int = 200,
+    simplify_tolerance: Optional[float] = 0.001,
+    port: Optional[int] = None,
+    offline_mode: bool = False,
+    ee_project: Optional[str] = None,
+    dw_start_year: int = 2017,
+    dw_end_year: int = 2025,
+    dw_start_month: int = 6,
+    dw_end_month: int = 9,
+):
+    """Launch the DuckDB viewport-filtered dashboard (large local datasets).
+
+    Requires preprocessed Parquet files from ``preprocess-viewport-data``.
+
+    Example:
+        water-timeseries preprocess-viewport-data
+        water-timeseries dashboard-viewport
+        water-timeseries dashboard-viewport --timeseries-nc data/lakes_dw_V2d.nc
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    data_dir = repo_root / "data"
+    default_lakes = data_dir / "optimized_lakes.parquet"
+    default_ts = data_dir / "lake_timeseries.parquet"
+    preprocessed_ts = repo_root / "preprocessed" / "lake_timeseries.parquet"
+    default_nc = data_dir / "lakes_dw_V2d.nc"
+
+    cmd = [
+        sys.executable,
+        "-m",
+        "streamlit",
+        "run",
+        str(Path(__file__).parent.parent / "dashboard" / "viewport_app.py"),
+        "--server.port",
+        str(port or 8501),
+    ]
+    script_args = []
+    lakes_parquet = lakes_parquet or default_lakes
+    script_args.extend(["--lakes-parquet", str(lakes_parquet)])
+    if timeseries_parquet:
+        script_args.extend(["--timeseries-parquet", str(timeseries_parquet)])
+    elif default_ts.exists():
+        script_args.extend(["--timeseries-parquet", str(default_ts)])
+    elif preprocessed_ts.exists():
+        script_args.extend(["--timeseries-parquet", str(preprocessed_ts)])
+    nc_path = timeseries_nc or default_nc
+    if nc_path.exists():
+        script_args.extend(["--timeseries-nc", str(nc_path)])
+    script_args.extend(["--polygon-limit", str(polygon_limit)])
+    if simplify_tolerance is not None:
+        script_args.extend(["--simplify-tolerance", str(simplify_tolerance)])
+    if offline_mode:
+        script_args.append("--offline-mode")
+    if ee_project:
+        script_args.extend(["--ee-project", ee_project])
+    if dw_dataset_file:
+        script_args.extend(["--dw-dataset-file", str(dw_dataset_file)])
+    if jrc_dataset_file:
+        script_args.extend(["--jrc-dataset-file", str(jrc_dataset_file)])
+    script_args.extend(
+        [
+            "--dw-start-year",
+            str(dw_start_year),
+            "--dw-end-year",
+            str(dw_end_year),
+            "--dw-start-month",
+            str(dw_start_month),
+            "--dw-end-month",
+            str(dw_end_month),
+        ]
+    )
+    cmd.extend(["--"] + script_args)
+    subprocess.run(cmd)
+
+
+@app.command(group="Data")
+def preprocess_viewport_data(
+    lakes_input: Optional[Path] = None,
+    lakes_output: Optional[Path] = None,
+    timeseries_zarr: Optional[Path] = None,
+    timeseries_nc: Optional[Path] = None,
+    timeseries_output: Optional[Path] = None,
+    skip_lakes: bool = False,
+    skip_timeseries: bool = False,
+):
+    """Preprocess full lake polygons and optional time series for the viewport dashboard.
+
+    Example:
+        water-timeseries preprocess-viewport-data --skip-lakes
+        water-timeseries preprocess-viewport-data --timeseries-nc data/lakes_dw_V2d.nc
+    """
+    repo_root = Path(__file__).resolve().parents[3]
+    preprocess_script = repo_root / "preprocess_data.py"
+    cmd = [sys.executable, str(preprocess_script)]
+    if lakes_input:
+        cmd.extend(["--lakes-input", str(lakes_input)])
+    if lakes_output:
+        cmd.extend(["--lakes-output", str(lakes_output)])
+    if timeseries_zarr:
+        cmd.extend(["--timeseries-zarr", str(timeseries_zarr)])
+    if timeseries_nc:
+        cmd.extend(["--timeseries-nc", str(timeseries_nc)])
+    if timeseries_output:
+        cmd.extend(["--timeseries-output", str(timeseries_output)])
+    if skip_lakes:
+        cmd.append("--skip-lakes")
+    if skip_timeseries:
+        cmd.append("--skip-timeseries")
+    subprocess.run(cmd, check=True)
+
+
 # Subcommand: breakpoint analysis
 @app.command(group="Analysis")
 def breakpoint_analysis_historical(
