@@ -215,3 +215,7 @@ docs/_static/
 docs/_templates/
 
 data/
+preprocessed/
+.DS_Store
+*.pmtiles
+*.geojsonl
