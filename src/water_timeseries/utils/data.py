@@ -4,6 +4,19 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
+_ID_FIELD_CANDIDATES = ("lake_id", "id_geohash")
+
+
+def infer_id_field(ds: xr.Dataset) -> str:
+    """Return the coordinate name used for per-lake time series IDs."""
+    for name in _ID_FIELD_CANDIDATES:
+        if name in ds.coords or name in ds.dims:
+            return name
+    raise ValueError(
+        f"No lake ID coordinate found. Expected one of {_ID_FIELD_CANDIDATES}. "
+        f"Coords/dims: {list(ds.coords)} / {list(ds.dims)}"
+    )
+
 
 def calculate_water_area_after(
     df_water, break_date_after, water_column: str, stats=["mean", "median", "std", "min", "max"]

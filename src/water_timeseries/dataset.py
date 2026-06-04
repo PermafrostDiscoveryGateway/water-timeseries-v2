@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import xarray as xr
 
-from water_timeseries.utils.data import dw_bandnames, jrc_bandnames
+from water_timeseries.utils.data import dw_bandnames, infer_id_field, jrc_bandnames
 from water_timeseries.utils.earthengine import create_timelapse
 from water_timeseries.utils.plotting import (
     plot_water_time_series_dw,
@@ -25,7 +25,6 @@ from water_timeseries.utils.plotting_dynamic import (
     plot_water_time_series_dw_interactive,
     plot_water_time_series_jrc_interactive,
 )
-
 
 class LakeDataset:
     """Base class for processing lake and water body datasets.
@@ -63,7 +62,10 @@ class LakeDataset:
         self.data_columns = None
         self.ds_ismasked_ = False
         self.ds_normalized_ismasked_ = False
-        self.id_field = id_field
+        if id_field in ds.coords or id_field in ds.dims:
+            self.id_field = id_field
+        else:
+            self.id_field = infer_id_field(ds)
         self.mask_data = mask_data
         self._preprocess()
         self._normalize_ds()
@@ -379,7 +381,7 @@ class DWDataset(LakeDataset):
             plt.Figure: The matplotlib figure object.
         """
         # self._normalize_ds()
-        df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna()
+        df = self.ds.sel({self.id_field: id_geohash}).load().to_dataframe().dropna()
         df_plot = prepare_data_for_plot_dw(df, group_vegetation=True)
         normalization_factor = df["area_data"].max()
 
@@ -419,7 +421,7 @@ class DWDataset(LakeDataset):
         Returns:
             plotly.graph_objects.Figure: Interactive Plotly figure.
         """
-        df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna()
+        df = self.ds.sel({self.id_field: id_geohash}).load().to_dataframe().dropna()
         df_plot = prepare_data_for_plot_dw(df, group_vegetation=True)
         normalization_factor = df["area_data"].max()
 
@@ -568,7 +570,7 @@ class JRCDataset(LakeDataset):
         Returns:
             plt.Figure: The matplotlib figure object.
         """
-        df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
+        df = self.ds.sel({self.id_field: id_geohash}).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
 
         # TODO: breaks are not visualized correctly
@@ -607,7 +609,7 @@ class JRCDataset(LakeDataset):
         Returns:
             plotly.graph_objects.Figure: Interactive Plotly figure.
         """
-        df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
+        df = self.ds.sel({self.id_field: id_geohash}).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
 
         # Breakpoint processing disabled for now

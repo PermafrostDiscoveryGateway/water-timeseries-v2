@@ -17,6 +17,7 @@ import xarray as xr
 from streamlit_folium import st_folium
 
 from water_timeseries.dataset import DWDataset, JRCDataset
+from water_timeseries.utils.data import infer_id_field
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
@@ -255,6 +256,24 @@ def _lake_map_attribute_columns(lakes_parquet: str) -> tuple[str, ...]:
     return tuple(col for col in _LAKE_MAP_ATTRS if col in columns)
 
 
+@st.cache_data(show_spinner=False)
+def _lake_area_order_sql(lakes_parquet: str) -> str:
+    """SQL expression for ranking lakes by size (largest first when zoomed out)."""
+    conn = get_duckdb_connection()
+    columns = {
+        row[0]
+        for row in conn.execute(
+            "SELECT column_name FROM (DESCRIBE SELECT * FROM read_parquet(?))",
+            [lakes_parquet],
+        ).fetchall()
+    }
+    if "Area_start_ha" in columns:
+        return "Area_start_ha"
+    if "Area_end_ha" in columns:
+        return "Area_end_ha"
+    return "ST_Area(geometry)"
+
+
 def _feature_properties(lake_id: str, attributes: dict[str, Any]) -> dict[str, Any]:
     """Build GeoJSON properties with formatted tooltip fields."""
     props: dict[str, Any] = {"lake_id": str(lake_id)}
@@ -277,7 +296,7 @@ def query_viewport_polygons(
     limit: int = 200,
     simplify_tolerance: float | None = None,
 ) -> list[dict[str, Any]]:
-    """Return GeoJSON features intersecting the map viewport (bounded row count)."""
+    """Return largest GeoJSON features intersecting the map viewport (bounded row count)."""
     min_lon = bounds["min_lon"]
     min_lat = bounds["min_lat"]
     max_lon = bounds["max_lon"]
@@ -286,6 +305,7 @@ def query_viewport_polygons(
     lakes_str = str(lakes_parquet)
     lake_id_expr = _lake_id_sql_expression(lakes_str)
     attr_columns = _lake_map_attribute_columns(lakes_str)
+    area_order = _lake_area_order_sql(lakes_str)
     geom_expr = "geometry"
     if simplify_tolerance is not None:
         geom_expr = f"ST_Simplify(geometry, {simplify_tolerance})"
@@ -300,6 +320,7 @@ def query_viewport_polygons(
             ST_AsGeoJSON({geom_expr}) AS geojson
         FROM read_parquet(?)
         WHERE geometry && ST_MakeEnvelope(?, ?, ?, ?)
+        ORDER BY {area_order} DESC NULLS LAST
         LIMIT ?
     """
     rows = conn.execute(
@@ -371,11 +392,13 @@ def get_lake_timeseries_from_netcdf(
     """Load one lake's time series directly from the NetCDF source."""
     ds = _open_timeseries_netcdf(nc_path)
     try:
-        sub = ds.sel(id_geohash=lake_id)
-    except KeyError:
+        id_field = infer_id_field(ds)
+        sub = ds.sel({id_field: lake_id})
+    except (KeyError, ValueError):
         return pd.DataFrame(columns=["lake_id", "date", "water"])
     df = sub[water_column].to_dataframe(name="water").reset_index()
-    df = df.rename(columns={"id_geohash": "lake_id"})
+    if id_field != "lake_id":
+        df = df.rename(columns={id_field: "lake_id"})
     return df[["lake_id", "date", "water"]].sort_values("date")
 
 
@@ -648,10 +671,11 @@ def _dataset_has_dw_bands(path: str) -> bool:
 
 
 def _dw_subset_for_lake(ds: xr.Dataset, lake_id: str) -> xr.Dataset:
-    """Select one lake and keep the id_geohash dimension for DWDataset."""
-    sub = ds.sel(id_geohash=lake_id)
-    if "id_geohash" not in sub.dims:
-        sub = sub.expand_dims(id_geohash=[lake_id])
+    """Select one lake and keep the lake ID dimension for DWDataset."""
+    id_field = infer_id_field(ds)
+    sub = ds.sel({id_field: lake_id})
+    if id_field not in sub.dims:
+        sub = sub.expand_dims({id_field: [lake_id]})
     return sub.load()
 
 
@@ -970,7 +994,7 @@ def run_app(
     else:
         ts_caption = " · Time series: unavailable (offline mode)"
     st.caption(
-        f"Viewport-filtered map (max {polygon_limit} polygons). "
+        f"Viewport-filtered map (max {polygon_limit} largest polygons). "
         f"Data: `{lakes_path.name}`{ts_caption}"
     )
 
