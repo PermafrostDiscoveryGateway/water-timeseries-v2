@@ -93,7 +93,7 @@ class EarthEngineDownloader:
 
         # Initialize Earth Engine
         if ee_auth:
-            geemap.ee_initialize(project=self.ee_project)
+            geemap.initialize(project=self.ee_project)
             self._check_ee_initialization_status()
 
         self._log_info("EarthEngineDownloader initialized successfully.")
