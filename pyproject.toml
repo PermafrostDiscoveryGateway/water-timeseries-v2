@@ -1,6 +1,6 @@
 [project]
 name = "water-timeseries"
-version = "0.9.2"
+version = "0.9.3"
 description = "Toolbox to download, analyze, and visualize water area time-series"
 readme = "README.md"
 authors = [
@@ -44,7 +44,7 @@ dependencies = [
     "rich>=14.3.3",
     "nbconvert>=7.17.0",
     "tk>=0.1.0",
-    "geemap>=0.37.2",
+    "geemap>=0.37.3",
     "eemont>=2025.7.1",
     "streamlit>=1.40.0",
     "plotly>=6.0.0",

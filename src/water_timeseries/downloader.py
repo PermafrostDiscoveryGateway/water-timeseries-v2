@@ -85,7 +85,7 @@ class EarthEngineDownloader:
         self._check_ee_initialization_status()
 
         if output_dir is not None:
-            self._log_warning('Setting an output_dir is being ignored now and will be removed eventually!')
+            self._log_warning("Setting an output_dir is being ignored now and will be removed eventually!")
         self.output_dir = None
         self.ee_auth = ee_auth
         self.dw_bandnames = dw_bandnames

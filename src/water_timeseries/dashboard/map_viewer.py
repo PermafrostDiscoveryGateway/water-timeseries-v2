@@ -24,7 +24,6 @@ from water_timeseries.utils.dashboard import (
 from water_timeseries.utils.earthengine import initialize_earth_engine
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.map_styling import (
-    create_tile_layers,
     format_tooltip_columns,
     get_colored_style_function,
     get_default_style_function,
@@ -88,6 +87,7 @@ class MapViewer:
         drained_gdf: Optional[gpd.GeoDataFrame] = None,
         drained_label: Optional[str] = None,
         show_main_layer: bool = True,
+        viz_configuration_name: Optional[str] = "colored_historical",
     ):
         """Initialize the MapViewer.
 
@@ -99,6 +99,12 @@ class MapViewer:
             hover_columns: List of column names to show on hover. If None, shows all.
             map_center: Dictionary with 'lat' and 'lon' keys for map center.
             zoom: Initial zoom level for the map.
+            map_backend: Which mapping backend to use ("folium" or "st_map").
+            max_features: Maximum number of features to display (for performance).
+            drained_gdf: Optional GeoDataFrame of recently drained lakes to overlay.
+            drained_label: Optional label to show in the legend for the drained layer.
+            show_main_layer: Whether to show the main layer (gdf) by default. If False, it will be added but initially hidden.
+            viz_configuration_name: The visualization configuration name to determine styling and tooltip content.
         """
         self.geometry_column = geometry_column
         self.id_column = id_column
@@ -111,6 +117,7 @@ class MapViewer:
         self.drained_gdf = drained_gdf
         self.drained_label = drained_label
         self.show_main_layer = show_main_layer
+        self.viz_configuration_name = viz_configuration_name
 
         # Load data if parquet_path provided
         if gdf is None and parquet_path is not None:
@@ -182,9 +189,19 @@ class MapViewer:
             return None
 
         # Default: use folium
-        return self._render_folium(valid_gdf, layer_column=getattr(self, "layer_column", None))
+        return self._render_folium(
+            valid_gdf,
+            layer_column=getattr(self, "layer_column", None),
+            viz_configuration_name=self.viz_configuration_name,
+        )
 
-    def _render_folium(self, valid_gdf: gpd.GeoDataFrame, layer_column: Optional[str] = None) -> Optional[str]:
+    # TODO: create configuration option
+    def _render_folium(
+        self,
+        valid_gdf: gpd.GeoDataFrame,
+        layer_column: Optional[str] = None,
+        viz_configuration_name: Optional[str] = "colored_historical",
+    ) -> Optional[str]:
         """Render using folium with optional layer selection.
 
         Args:
@@ -205,40 +222,80 @@ class MapViewer:
 
         m = folium.Map(location=center, zoom_start=self.zoom)
 
-        # Add tile layers using utility function
-        for tile_name in create_tile_layers():
-            folium.TileLayer(tile_name).add_to(m)
+        # # Add tile layers using utility function
 
         # Add WMS layer for permafrost data
         wms_url = "https://maps.awi.de/services/common/permafrost/ows"
-        folium.WmsTileLayer(
+        tcvis_tile_layer = folium.WmsTileLayer(
             url=wms_url,
             name="TCVIS Landsat Trends 2005-2024 (AWI)",
             styles="composite",
             transparent=True,
             overlay=False,
             layers="tcvis",
-        ).add_to(m)
+        )
+        tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
+        tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
 
-        # Create style function based on whether NetChange_perc column exists
-        if "NetChange_perc" in valid_gdf.columns:
-            style_function = get_colored_style_function(
-                color_column="NetChange_perc",
-                vmin=-40,
-                vmax=40,
-                colormap=plt.cm.RdYlBu,
-            )
+        if viz_configuration_name == "colored_historical":
+            # Create style function based on whether NetChange_perc column exists
+            if "NetChange_perc" in valid_gdf.columns:
+                # add tile layers
+                tile_layer_darkmatter.add_to(m)
+                tile_layer_esriworld.add_to(m)
+                tcvis_tile_layer.add_to(m)
+
+                style_function = get_colored_style_function(
+                    color_column="NetChange_perc",
+                    vmin=-40,
+                    vmax=40,
+                    colormap=plt.cm.RdYlBu,
+                )
+
+                # Format tooltip columns using utility function
+                # Include Area columns for full tooltip display
+                tooltip_columns = [
+                    ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
+                    ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
+                    ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
+                    ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
+                ]
+            else:
+                style_function = get_default_style_function()
+
+        elif viz_configuration_name == "nrt_drainage":
+            # Create style function based on whether NetChange_perc column exists
+            if "water_residual" in valid_gdf.columns:
+                # add tile layers
+                tcvis_tile_layer.add_to(m)
+                tile_layer_esriworld.add_to(m)
+                tile_layer_darkmatter.add_to(m)
+
+                style_function = get_colored_style_function(
+                    color_column="water_residual",
+                    vmin=-1,
+                    vmax=0,
+                    colormap=plt.cm.Reds_r,
+                    edge_weight=2,
+                    fill_opacity=0.8,
+                    edge_color="#dddddd",
+                )
+
+                # Format tooltip columns using utility function
+                # Include Area columns for full tooltip display
+                tooltip_columns = [
+                    ("water_residual", "Water residual:", "{:.2f}", ""),
+                    ("water_observed", "Observed water:", "{:.2f}", ""),
+                    ("water_predicted", "Predicted water:", "{:.2f}", ""),
+                    ("water_historical_median", "Historical median water:", "{:.2f}", ""),
+                    ("water_historical_min", "Historical minimum:", "{:.2f}", ""),
+                    ("drainage_confidence", "Drainage Confidence:", "{:}", ""),
+                ]
+            else:
+                style_function = get_default_style_function()
         else:
             style_function = get_default_style_function()
 
-        # Format tooltip columns using utility function
-        # Include Area columns for full tooltip display
-        tooltip_columns = [
-            ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
-            ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
-            ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
-            ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
-        ]
         valid_gdf = _sanitize_geojson_properties(valid_gdf)
         valid_gdf, fields_to_show, aliases_to_show = format_tooltip_columns(
             valid_gdf,
@@ -550,6 +607,12 @@ def create_app(
     zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
     precomputed_nrt_dir: Optional[str | Path] = None,
     offline_mode: bool = False,
+    ee_project: Optional[str] = None,
+    dw_start_year: int = 2017,
+    dw_end_year: int = 2025,
+    dw_start_month: int = 6,
+    dw_end_month: int = 9,
+    viz_configuration_name: Optional[str] = "colored_historical",
 ):
     """Create the Streamlit app with map viewer.
 
@@ -563,6 +626,12 @@ def create_app(
             loads these files instead of running NRT on the fly.
         offline_mode: If True, disables Google Earth Engine download functionality.
             Use when running without internet access or EE authentication.
+        ee_project: Google Earth Engine project ID. Required for EE downloads.
+        dw_start_year: Start year for Dynamic World time series (inclusive).
+        dw_end_year: End year for Dynamic World time series (inclusive).
+        dw_start_month: Start month for Dynamic World time series (1-12).
+        dw_end_month: End month for Dynamic World time series (1-12).
+        viz
     """
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
@@ -571,10 +640,9 @@ def create_app(
 
     st.title("🗺️ Lake Polygon Map Viewer")
     st.markdown("""
-    This dashboard displays lake polygons from a GeoDataFrame. 
-    - Polygons are **colored by NetChange_perc** (red = decrease, blue = increase)
+    This dashboard displays lake polygons from a GeoDataFrame.
     - **Hover** over a feature to see its attributes
-    - **Click** on a feature to select it and view time series & create timelapses
+    - **Click** on a feature to select it and view time series & create timelapse animations
     """)
 
     # Create sidebar for controls
@@ -604,7 +672,7 @@ def create_app(
         "Max features to load",
         min_value=10,
         max_value=50000,
-        value=1000,
+        value=2000,
         step=100,
         help="Limit number of polygons for faster loading. Set to 0 for no limit.",
     )
@@ -749,6 +817,7 @@ def create_app(
             zoom=zoom_level,
             map_backend=map_backend,
             max_features=max_features,
+            viz_configuration_name=viz_configuration_name,
         )
         if show_drained and drained_breaks is not None and not drained_breaks.empty:
             drained_gdf = viewer.gdf.merge(
@@ -857,7 +926,7 @@ def create_app(
                 # Download data for the specific geohash
                 try:
                     # Create downloader with the project from environment
-                    downloader = EarthEngineDownloader(ee_auth=True)
+                    downloader = EarthEngineDownloader(ee_auth=True, ee_project=ee_project)
 
                     if not id_available_dw:
                         # Download data for the specific geohash
@@ -866,8 +935,8 @@ def create_app(
                             vector_dataset=data_path_input,
                             name_attribute=id_column,
                             id_list=[current],
-                            years=list(range(2017, 2026)),
-                            months=[6, 7, 8, 9],
+                            years=list(range(dw_start_year, dw_end_year + 1)),
+                            months=list(range(dw_start_month, dw_end_month + 1)),
                             date_list=None,
                         )
 
@@ -1189,7 +1258,7 @@ def create_app(
                     else:
                         st.caption("Downloading...")
                         try:
-                            downloader = EarthEngineDownloader(ee_auth=True)
+                            downloader = EarthEngineDownloader(ee_auth=True, ee_project=ee_project)
                             ds_downloaded = downloader.download_dw_monthly(
                                 vector_dataset=data_path_input,
                                 name_attribute=id_column,
