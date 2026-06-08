@@ -15,16 +15,15 @@ services:
       - --dw-dataset-file
       - ${DW_DATASET_FILE:-downloads/data.zarr}
       - --jrc-dataset-file
-      - ${JRC_DATASET_FILE:-downloads/downloads/lakes_jrc_viz.zarr}
+      - ${JRC_DATASET_FILE:-downloads/lakes_jrc_viz.zarr}
       - --precomputed-nrt-dir
-      - ${PRECOMPUTED_NRT_DIR:-precomputed/nrt-demo}
+      - ${PRECOMPUTED_NRT_DIR:-downloads/nrt-demo}
     volumes:
       - .:/app
       # Keep image .venv; a plain .:/app mount would hide it with an empty host dir
       - /app/.venv
       # Large/local datasets (gitignored downloads/; override host dirs via .env)
       - ${DOWNLOADS_DIR:-./downloads}:/app/downloads:ro
-      - ${PRECOMPUTED_DIR:-./precomputed}:/app/precomputed:ro
       # Optional: host EE credentials (alternative to EARTHENGINE_TOKEN in .env)
       - ${EARTHENGINE_CREDENTIALS_DIR:-${HOME}/.config/earthengine}:/root/.config/earthengine:ro
     ports:

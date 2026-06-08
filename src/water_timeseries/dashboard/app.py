@@ -8,6 +8,17 @@ from water_timeseries.dashboard.map_viewer import create_app
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent
 _DEFAULT_NRT_DIR = _REPO_ROOT / "precomputed" / "nrt"
+_TEST_NRT_DIR = _REPO_ROOT / "tests" / "data" / "nrt"
+
+
+def _resolve_default_nrt_dir() -> Path | None:
+    """Return the first NRT fixture directory that contains dashboard parquet files."""
+    for candidate in (_DEFAULT_NRT_DIR, _TEST_NRT_DIR):
+        counts_file = candidate / "nrt_monthly_drain_counts.parquet"
+        breaks_file = candidate / "nrt_monthly_drain_breaks.parquet"
+        if counts_file.exists() or breaks_file.exists():
+            return candidate
+    return None
 
 
 def parse_args():
@@ -38,7 +49,7 @@ def parse_args():
         help=(
             "Directory containing pre-computed NRT parquet files "
             "(nrt_monthly_drain_counts.parquet / nrt_monthly_drain_breaks.parquet). "
-            f"Defaults to {_DEFAULT_NRT_DIR} when that directory exists."
+            f"Defaults to {_DEFAULT_NRT_DIR} or {_TEST_NRT_DIR} when present."
         ),
     )
     parser.add_argument(
@@ -149,10 +160,7 @@ def main(
 
     # Auto-detect precomputed NRT directory if not explicitly provided
     if precomputed_nrt_dir is None:
-        counts_file = _DEFAULT_NRT_DIR / "nrt_monthly_drain_counts.parquet"
-        breaks_file = _DEFAULT_NRT_DIR / "nrt_monthly_drain_breaks.parquet"
-        if counts_file.exists() or breaks_file.exists():
-            precomputed_nrt_dir = _DEFAULT_NRT_DIR
+        precomputed_nrt_dir = _resolve_default_nrt_dir()
 
     if viz_configuration is None:
         viz_configuration = "colored_historical"
