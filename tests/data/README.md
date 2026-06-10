@@ -10,6 +10,11 @@ tests/data/
 ├── lakes_dw_test.zarr/   # Dynamic World test dataset (Zarr)
 ├── lakes_jrc_test.nc     # JRC water test dataset (NetCDF)
 ├── lakes_jrc_test.zarr/  # JRC water test dataset (Zarr)
+├── lake_polygons.parquet # Lake polygons for dashboard tests
+├── nrt/                  # Pre-computed NRT fixtures for dashboard overlay
+│   ├── nrt_monthly_drain_counts.parquet
+│   └── nrt_monthly_drain_breaks.parquet
+├── generate_nrt_test_data.py  # Regenerate nrt/ from lakes_dw_test.zarr
 └── README.md             # This file
 ```
 
@@ -62,6 +67,15 @@ def dw_test_data():
 def jrc_test_data():
     test_data_dir = Path(__file__).parent / "data"
     return xr.open_dataset(test_data_dir / "lakes_jrc_test.nc")
+```
+
+3. **NRT dashboard fixtures** (`nrt/`)
+   - `nrt_monthly_drain_counts.parquet`: columns `analysis_month`, `drained_lake_count`
+   - `nrt_monthly_drain_breaks.parquet`: per-lake drained rows with `analysis_month`, `id_geohash`, `water_residual`, etc.
+   - Generated from `lakes_dw_test.zarr` via:
+
+```bash
+uv run python tests/data/generate_nrt_test_data.py
 ```
 
 ## Notes

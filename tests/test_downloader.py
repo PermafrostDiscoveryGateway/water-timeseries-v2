@@ -56,7 +56,7 @@ class TestEarthEngineDownloaderAuthentication:
     def test_init_with_none_uses_env_var_even_with_auth(self, monkeypatch):
         """Test that None ee_project works with ee_auth=True when env var is set."""
         monkeypatch.setenv("EE_PROJECT", "env-project-id")
-        with mock.patch("geemap.ee_initialize"):
+        with mock.patch("water_timeseries.utils.earthengine.initialize_earth_engine"):
             downloader = EarthEngineDownloader(ee_auth=True)
             assert downloader.ee_project == "env-project-id"
             assert downloader.ee_auth is True
