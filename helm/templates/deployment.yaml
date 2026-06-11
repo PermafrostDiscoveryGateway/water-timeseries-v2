@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "water-timeseries.fullname" . }}
+  labels:
+    {{- include "water-timeseries.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "water-timeseries.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "water-timeseries.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- if gt (len .Values.podAnnotations) 0 }}
+      annotations:
+        {{- toYaml .Values.podAnnotations | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+        - name: water-timeseries
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          command:
+            - streamlit
+          args:
+            - run
+            - src/water_timeseries/dashboard/app.py
+            - --server.port={{ .Values.dashboard.port }}
+            - --server.address=0.0.0.0
+            - --
+            - --vector-file
+            - {{ .Values.dashboard.vectorFile | quote }}
+            - --dw-dataset-file
+            - {{ .Values.dashboard.dwDatasetFile | quote }}
+            - --jrc-dataset-file
+            - {{ .Values.dashboard.jrcDatasetFile | quote }}
+            - --precomputed-nrt-dir
+            - {{ .Values.dashboard.precomputedNrtDir | quote }}
+            - --dw-start-year={{ .Values.dashboard.dwStartYear }}
+            - --dw-end-year={{ .Values.dashboard.dwEndYear }}
+            - --dw-start-month={{ .Values.dashboard.dwStartMonth }}
+            - --dw-end-month={{ .Values.dashboard.dwEndMonth }}
+            - --viz-configuration={{ .Values.dashboard.vizConfiguration }}
+            {{- if .Values.dashboard.offlineMode }}
+            - --offline-mode
+            {{- end }}
+            {{- if .Values.dashboard.eeProject }}
+            - --ee-project={{ .Values.dashboard.eeProject }}
+            {{- end }}
+          env:
+            - name: MPLBACKEND
+              value: Agg
+            {{- if .Values.dashboard.eeProject }}
+            - name: EE_PROJECT
+              value: {{ .Values.dashboard.eeProject | quote }}
+            {{- end }}
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath | quote }}
+              readOnly: true
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ default (include "water-timeseries.fullname" .) .Values.persistence.existingClaim | quote }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
