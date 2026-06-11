@@ -32,6 +32,8 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
     "--simplification=10",
     "--minimum-zoom=0",
     "--maximum-zoom=14",
+    "--no-clipping",
+    "--no-duplication",
     "-l",
     "lakes",
 )
