@@ -740,7 +740,7 @@ class NRTBreakpoint(BreakpointMethod):
             )
 
         # merge output into a single dataframe
-        df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(prediction_df).round(4)
+        df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(prediction_df, lsuffix='_water', rsuffix='_pred').round(4)
         # rename observed water column for clarity
         df_output.rename(columns={dataset.water_column: "water_observed"}, inplace=True)
 

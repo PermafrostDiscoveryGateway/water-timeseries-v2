@@ -24,6 +24,11 @@ on:
   push:
     branches:
       - main
+      - '151-error-on-running-historical-data'  # ADD THIS: Build on bug fix branch
+      # You can also add other branches:
+      # - develop
+      # - 'feature/*'
+      # - 'fix/*'
 
 jobs:
   # Only runs on manual workflow_dispatch
@@ -34,7 +39,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
-      packages: read   # Added for consistency
+      packages: read
 
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -67,19 +72,31 @@ jobs:
           git commit -m "Update version to $VERSION_NO_V"
           git push
 
-  # Get current version for main and add-dockerfile branch builds
+  # Get current version for main and other branches
   get-current-version:
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref_name == 'main')
+    if: |
+      github.event_name == 'push' && 
+      (github.ref_name == 'main' || github.ref_name == '151-error-on-running-historical-data')
     outputs:
       VERSION: ${{ steps.get_version.outputs.version }}
       VERSION_TAG: ${{ steps.get_version.outputs.version_tag }}
+      BRANCH_NAME: ${{ steps.get_branch.outputs.branch_name }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Get branch name
+        id: get_branch
+        run: |
+          BRANCH_NAME="${{ github.ref_name }}"
+          # Replace slashes with dashes for tag compatibility
+          SAFE_BRANCH=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
+          echo "branch_name=$BRANCH_NAME" >> $GITHUB_OUTPUT
+          echo "safe_branch=$SAFE_BRANCH" >> $GITHUB_OUTPUT
 
       - name: Get current version from pyproject.toml
         id: get_version
@@ -129,7 +146,7 @@ jobs:
           draft: false
           prerelease: false
 
-  # Runs on: manual dispatch with publish=true OR push to main
+  # Builds and pushes Docker images for main, bug fix branch, and manual dispatch
   build-and-push-docker:
     runs-on: ubuntu-latest
     permissions:
@@ -137,7 +154,7 @@ jobs:
       packages: write
     if: |
       (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') ||
-      (github.event_name == 'push' && (github.ref_name == 'main'))
+      (github.event_name == 'push' && (github.ref_name == 'main' || github.ref_name == '151-error-on-running-historical-data'))
 
     steps:
       - name: Checkout repository
@@ -155,27 +172,44 @@ jobs:
 
           REGISTRY="ghcr.io/${REPO_LOWER}"
           BRANCH_NAME="${{ github.ref_name }}"
+          
+          # Get version from pyproject.toml if needed
+          VERSION=$(grep -m1 'version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
 
-          # Start with just the branch name tag
+          # Start with branch name tag
           TAGS="${REGISTRY}:${BRANCH_NAME}"
+          
+          # Create a safe branch tag (replace slashes with dashes)
+          SAFE_BRANCH=$(echo "$BRANCH_NAME" | sed 's/\//-/g')
+          if [ "$SAFE_BRANCH" != "$BRANCH_NAME" ]; then
+            TAGS="${TAGS},${REGISTRY}:${SAFE_BRANCH}"
+          fi
+
+          # Add version tag if available
+          if [ -n "$VERSION" ]; then
+            TAGS="${TAGS},${REGISTRY}:${VERSION}"
+          fi
 
           # Add latest for main branch only
           if [ "$BRANCH_NAME" == "main" ]; then
             TAGS="${TAGS},${REGISTRY}:latest"
           fi
 
-          # For manual dispatch with version
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ needs.update-version.outputs.VERSION }}" ]; then
-            VERSION="${{ needs.update-version.outputs.VERSION }}"
-            TAGS="${TAGS},${REGISTRY}:${VERSION}"
+          # For bug fix branch, add a debug tag to indicate it's from the fix branch
+          if [ "$BRANCH_NAME" == "151-error-on-running-historical-data" ]; then
+            TAGS="${TAGS},${REGISTRY}:fix-historical-data"
+            TAGS="${TAGS},${REGISTRY}:${BRANCH_NAME}-${VERSION}"
           fi
 
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "registry=${REGISTRY}" >> $GITHUB_OUTPUT
+          echo "branch=${BRANCH_NAME}" >> $GITHUB_OUTPUT
 
           # Debug output
           echo "Repository original: ${{ github.repository }}"
           echo "Repository lowercase: ${REPO_LOWER}"
+          echo "Branch: ${BRANCH_NAME}"
+          echo "Version: ${VERSION}"
           echo "Will push to: ${TAGS}"
 
       - name: Set up Docker Buildx
@@ -198,6 +232,7 @@ jobs:
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
             org.opencontainers.image.created=$(date -Iseconds)
+            org.opencontainers.image.version=${{ steps.docker_tags.outputs.branch }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -205,6 +240,12 @@ jobs:
         run: |
           echo "✅ Successfully pushed:"
           echo "${{ steps.docker_tags.outputs.tags }}" | tr ',' '\n'
+          echo ""
+          echo "You can pull the bug fix image with:"
+          echo "docker pull ghcr.io/${{ github.repository }}:151-error-on-running-historical-data"
+          echo "or"
+          echo "docker pull ghcr.io/${{ github.repository }}:fix-historical-data"
+
   # Only runs on manual dispatch
   build-and-publish-docs:
     runs-on: ubuntu-latest
