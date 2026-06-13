@@ -321,9 +321,9 @@ class BeastBreakpoint(BreakpointMethod):
     """
 
     def __init__(
-        self,
-        kwargs_break: dict = dict(trendMaxOrder=0, trendMinSepDist=1),
-        break_threshold: float = 0.5,
+            self,
+            kwargs_break: dict = dict(trendMaxOrder=0, trendMinSepDist=1),
+            break_threshold: float = 0.5,
     ):
         super().__init__(method_name="rbeast")
         self.kwargs_break = kwargs_break
@@ -473,7 +473,7 @@ class NRTBreakpoint(BreakpointMethod):
         ]
 
     def predict_nrt_arima(
-        self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3, water_column: str = "water"
+            self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3, water_column: str = "water"
     ) -> pd.Series:
         """_summary_
 
@@ -635,10 +635,10 @@ class NRTBreakpoint(BreakpointMethod):
 
         cat1 = break_output_df["water_residual"] < -0.25  # observed water area min. 25 less than expected
         cat2 = (
-            break_output_df["water_observed"] < break_output_df["water_predicted_lower_90"]
+                break_output_df["water_observed"] < break_output_df["water_predicted_lower_90"]
         )  # water area less than lower 90% confidence
         cat3 = (
-            break_output_df["water_observed"] < break_output_df["water_historical_min"]
+                break_output_df["water_observed"] < break_output_df["water_historical_min"]
         )  # minimum observed water extent ever
 
         # sum all 3 criteria and output confidence (1:low, 2: medium, 3: high)
@@ -651,12 +651,12 @@ class NRTBreakpoint(BreakpointMethod):
         return break_output_df
 
     def calculate_break(
-        self,
-        dataset: LakeDataset,
-        analysis_date: str | pd.Timestamp,
-        data_aggregation_period: str = "all",
-        object_id: str | Optional[str] = None,
-        keep_nans: bool | Optional[bool] = False,
+            self,
+            dataset: LakeDataset,
+            analysis_date: str | pd.Timestamp,
+            data_aggregation_period: str = "all",
+            object_id: str | Optional[str] = None,
+            keep_nans: bool | Optional[bool] = False,
     ) -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 
@@ -739,10 +739,17 @@ class NRTBreakpoint(BreakpointMethod):
                 columns=self.output_columns,
             )
 
-        # merge output into a single dataframe
-        df_output = ds_analysis_filtered[dataset.water_column].to_dataframe().join(prediction_df, lsuffix='_water', rsuffix='_pred').round(4)
+        # FIXED: merge output into a single dataframe with duplicate handling
+        water_df = ds_analysis_filtered[dataset.water_column].to_dataframe()
+        df_output = water_df.join(prediction_df, lsuffix='_water', rsuffix='_pred').round(4)
+
         # rename observed water column for clarity
         df_output.rename(columns={dataset.water_column: "water_observed"}, inplace=True)
+
+        # Remove duplicate indices if they exist (can happen with certain data structures)
+        if df_output.index.duplicated().any():
+            logging.warning(f"Duplicate indices found in df_output, keeping first occurrence")
+            df_output = df_output[~df_output.index.duplicated(keep='first')]
 
         # calculate residuals
         df_output["water_residual"] = df_output["water_observed"] - df_output["water_predicted"]
