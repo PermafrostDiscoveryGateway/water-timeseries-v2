@@ -79,24 +79,183 @@ class BreakpointMethod:
         """
         return (None, None, None)
 
-    def calculate_break(self, dataset: LakeDataset) -> pd.DataFrame:
-        """Calculate breakpoints for a single object.
+    def calculate_break(
+            self,
+            dataset: LakeDataset,
+            analysis_date: str | pd.Timestamp,
+            data_aggregation_period: str = "all",
+            object_id: str | Optional[str] = None,
+            keep_nans: bool | Optional[bool] = False,
+    ) -> pd.DataFrame:
+        """Calculate breakpoints for a single lake object using NRT logic.
 
-        Sub‑classes must implement the actual detection algorithm and return a
-        ``pandas.DataFrame`` containing at least the columns defined in
-        ``self.breakpoint_columns``.
+        This method implements the NRT-specific breakpoint detection and returns
+        a DataFrame with breakpoint information following the same structure as
+        other breakpoint methods.
 
         Parameters
         ----------
         dataset : LakeDataset
             Dataset containing lake water‑area data.
-
+        object_id : str | Optional[str]
+            Unique identifier (geohash) for the lake object.
+        analysis_date : str or pd.Timestamp
+            The date for which to perform the NRT breakpoint analysis.
+        data_aggregation_period : str, optional
+            The period of data to consider for the analysis (e.g., "all", "monthly")
+        process_nans : bool, optional
+            Set True if you want to return historical water stats
         Returns
         -------
         pd.DataFrame
-            DataFrame containing breakpoint information.
+            DataFrame containing breakpoint information with columns defined in
+            ``self.breakpoint_columns`` plus calculated temporal statistics.
         """
-        pass
+
+        analysis_date = self._validate_analysis_date(analysis_date)
+        print(analysis_date)
+        print(analysis_date.strftime("%Y-%m"))
+
+        # Check if analysis_date in dataset.dates_ (convert to YYYY-MM format for comparison)
+        if analysis_date not in dataset.dates_:
+            raise ValueError(f"Analysis date {analysis_date.strftime('%Y-%m')} is not available in the dataset.")
+
+        # select dataset - default normalized data
+        data = dataset.ds_normalized
+
+        if object_id is not None:
+            if isinstance(object_id, str):
+                object_id = [object_id]
+            object_id = [obj for obj in object_id if obj in dataset.object_ids_]
+            data = data.sel(id_geohash=object_id)
+
+        # split data into historical and analysis datasets based on analysis_date
+        ds_analysis = data.sel(date=analysis_date)
+        ds_historical = data.where(data["date"] < analysis_date, drop=True)
+
+        if data_aggregation_period == "monthly":
+            print("Filtering to monthly data for analysis date month:", analysis_date.month)
+            ds_historical = ds_historical.where(ds_historical.date.dt.month == analysis_date.month, drop=True)
+
+        # filter to dates where analysis date has some data
+        ds_analysis_filtered, ds_historical_filtered, valid_ids, nan_ids = self._filter_valid_ids(
+            ds_analysis, ds_historical
+        )
+
+        if len(valid_ids) == 0:
+            if keep_nans:
+                return pd.DataFrame(index=nan_ids, columns=self.output_columns)
+            else:
+                return pd.DataFrame(columns=self.output_columns)
+
+        # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
+        cpu_count = os.cpu_count() or 1
+        n_jobs = max(1, min(cpu_count, len(valid_ids)))
+        predictions = Parallel(n_jobs=n_jobs, verbose=10)(
+            delayed(self.predict_nrt_arima)(
+                ds_in=ds_historical_filtered, id_geohash=idx, water_column=dataset.water_column
+            )
+            for idx in tqdm(valid_ids, desc="NRT breakpoints")
+        )
+        # remove None values
+        predictions = [prediction for prediction in predictions if prediction is not None]
+        prediction_df = pd.DataFrame(predictions)
+        if prediction_df.empty:
+            prediction_df = pd.DataFrame(
+                index=ds_analysis_filtered.id_geohash.values,
+                columns=self.output_columns,
+            )
+
+        # FIXED: More robust merge with duplicate handling
+        water_df = ds_analysis_filtered[dataset.water_column].to_dataframe()
+
+        # Reset index to handle duplicates, then clean up
+        water_df = water_df.reset_index()
+        prediction_df = prediction_df.reset_index()
+
+        # Rename the index column if it exists
+        if 'index' in water_df.columns:
+            water_df = water_df.rename(columns={'index': 'id_geohash'})
+        if 'index' in prediction_df.columns:
+            prediction_df = prediction_df.rename(columns={'index': 'id_geohash'})
+
+        # Merge on id_geohash
+        df_output = water_df.merge(prediction_df, on='id_geohash', how='left', suffixes=('_water', '_pred'))
+
+        # Round the results
+        df_output = df_output.round(4)
+
+        # rename observed water column for clarity
+        df_output.rename(columns={dataset.water_column + '_water': "water_observed"}, inplace=True)
+
+        # Ensure date is datetime
+        if 'date' in df_output.columns:
+            df_output['date'] = pd.to_datetime(df_output['date'])
+
+        # Remove any duplicate rows
+        df_output = df_output.drop_duplicates()
+
+        # Set index back to id_geohash and date if needed
+        if 'date' in df_output.columns and 'id_geohash' in df_output.columns:
+            df_output = df_output.set_index(['id_geohash', 'date'])
+
+        # calculate residuals - now indices should be unique
+        df_output["water_residual"] = df_output["water_observed"] - df_output["water_predicted"]
+
+        # Get historical stats - need to handle index properly
+        df_historical_stats = self._get_ds_stats(ds_historical_filtered, water_column=dataset.water_column).round(4)
+        df_historical_stats.columns = "water_historical_" + df_historical_stats.columns.astype(str)
+
+        # Reset index of df_output to merge with historical stats
+        df_output_reset = df_output.reset_index()
+
+        # Merge historical stats
+        if 'id_geohash' in df_output_reset.columns:
+            df_output = df_output_reset.merge(df_historical_stats, on='id_geohash', how='left')
+
+        # Round
+        df_output = df_output.round(4)
+
+        # Set index back if needed
+        if 'date' in df_output.columns and 'id_geohash' in df_output.columns:
+            # Check for duplicates before setting index
+            if df_output[['id_geohash', 'date']].duplicated().any():
+                logging.warning("Duplicate (id_geohash, date) pairs found, removing duplicates")
+                df_output = df_output.drop_duplicates(subset=['id_geohash', 'date'])
+            df_output = df_output.set_index(['id_geohash', 'date'])
+
+        # add confidence level to output
+        df_output = self._add_confidence_level(df_output)
+
+        # if keep_nans is selected: calculate historical stats for these and append to calculated data
+        if keep_nans:
+            prediction_df_nan = pd.DataFrame(
+                index=nan_ids,
+                columns=self.output_columns_base,
+            )
+            df_historical_stats_nans = self._get_ds_stats(
+                ds_historical.sel(id_geohash=nan_ids), water_column=dataset.water_column
+            ).round(4)
+            df_historical_stats_nans.columns = "water_historical_" + df_historical_stats_nans.columns.astype(str)
+
+            # Reset index for nan data
+            prediction_df_nan = prediction_df_nan.reset_index()
+            prediction_df_nan.rename(columns={'index': 'id_geohash'}, inplace=True)
+
+            df_historical_stats_nans = df_historical_stats_nans.reset_index()
+
+            df_output_nan = prediction_df_nan.merge(df_historical_stats_nans, on='id_geohash', how='left').round(4)
+
+            # Combine
+            df_output_combined = pd.concat([df_output.reset_index(), df_output_nan]).sort_index()
+
+            # Set index back
+            if 'date' in df_output_combined.columns and 'id_geohash' in df_output_combined.columns:
+                df_output_combined = df_output_combined.set_index(['id_geohash', 'date'])
+
+            return df_output_combined[self.output_columns]
+
+        return df_output[self.output_columns]
 
     def calculate_breaks_batch(self, dataset: LakeDataset, progress_bar: bool = False) -> pd.DataFrame:
         """Run ``calculate_break`` for every lake in *dataset*.
