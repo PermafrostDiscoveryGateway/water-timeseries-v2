@@ -217,6 +217,26 @@
       { id: "basemap-esriworld", type: "raster", source: "esriworld", layout: { visibility: defaultBasemap === "esriworld" ? "visible" : "none" } },
       { id: "basemap-tcvis", type: "raster", source: "tcvis", layout: { visibility: defaultBasemap === "tcvis" ? "visible" : "none" } },
       {
+        id: "lakes-points",
+        type: "circle",
+        source: "lakes",
+        "source-layer": "lakes_points",
+        paint: {
+          "circle-radius": [
+            "interpolate", ["linear"], ["zoom"],
+            0, 1.5,
+            5, 3
+          ],
+          "circle-color": lakePaint["fill-color"],
+          "circle-opacity": lakePaint["fill-opacity"],
+          "circle-stroke-color": lakeOutlineColor,
+          "circle-stroke-width": 1
+        },
+        layout: {
+          visibility: CONFIG.show_main_layer !== false ? "visible" : "none"
+        }
+      },
+      {
         id: "lakes-fill",
         type: "fill",
         source: "lakes",
@@ -287,6 +307,9 @@
       if (map.getLayer("lakes-fill")) {
         map.setPaintProperty("lakes-fill", "fill-outline-color", fillOutlineColor);
       }
+      if (map.getLayer("lakes-points")) {
+        map.setPaintProperty("lakes-points", "circle-stroke-color", outlineColor);
+      }
     }
 
     basemapSelect.addEventListener("change", (e) => {
@@ -298,10 +321,52 @@
       updateOutlineColor(selected);
     });
 
+    function decodeGeohash(geohash) {
+      const BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+      const BITS = [16, 8, 4, 2, 1];
+      let is_even = true;
+      let lat = [-90.0, 90.0];
+      let lon = [-180.0, 180.0];
+      for (let i = 0; i < geohash.length; i++) {
+        let cd = BASE32.indexOf(geohash[i]);
+        for (let j = 0; j < BITS.length; j++) {
+          let mask = BITS[j];
+          if (is_even) {
+            if (cd & mask) { lon[0] = (lon[0] + lon[1]) / 2; } else { lon[1] = (lon[0] + lon[1]) / 2; }
+          } else {
+            if (cd & mask) { lat[0] = (lat[0] + lat[1]) / 2; } else { lat[1] = (lat[0] + lat[1]) / 2; }
+          }
+          is_even = !is_even;
+        }
+      }
+      return [(lon[0] + lon[1]) / 2, (lat[0] + lat[1]) / 2];
+    }
+
     map.on("load", () => {
       updateOutlineColor(defaultBasemap);
       if (CONFIG.bounds) {
         map.fitBounds(CONFIG.bounds, { padding: 48, maxZoom: 11, duration: 0 });
+      }
+      
+      // Add point markers for drained lakes (limit to 1000 for performance)
+      if (CONFIG.drained_data && Object.keys(CONFIG.drained_data).length > 0) {
+        const drainedIds = Object.keys(CONFIG.drained_data).slice(0, 1000);
+        drainedIds.forEach(id => {
+          const coords = decodeGeohash(id);
+          const marker = new maplibregl.Marker({ color: "#d73027" })
+            .setLngLat(coords)
+            .addTo(map);
+            
+          const props = { [idField]: id, ...CONFIG.drained_data[id] };
+          
+          const html = formatProps(props) +
+            `<br/><button class="select-lake-btn" type="button" onclick="selectLake('${id}')">Select for time series</button>`;
+
+          const popup = new maplibregl.Popup({ closeOnClick: true, offset: 25 })
+            .setHTML(html);
+            
+          marker.setPopup(popup);
+        });
       }
       map.resize();
       setTimeout(() => map.resize(), 200);
@@ -367,7 +432,7 @@
 
     const interactiveLayers = [];
     if (CONFIG.show_main_layer !== false) {
-      interactiveLayers.push("lakes-fill");
+      interactiveLayers.push("lakes-fill", "lakes-points");
     }
     
     interactiveLayers.forEach(layer => {
