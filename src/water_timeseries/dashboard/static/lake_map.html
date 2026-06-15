@@ -282,15 +282,36 @@
 
     const basemapSelect = document.getElementById("basemap-select");
     basemapSelect.value = defaultBasemap;
+
+    function updateOutlineColor(basemap) {
+      const isDark = basemap === "darkmatter";
+      const outlineColor = isDark ? "#ffffff" : "#1a1a1a";
+      const fillOutlineColor = isDark ? "#ffffff" : "#222222";
+      if (map.getLayer("lakes-outline")) {
+        map.setPaintProperty("lakes-outline", "line-color", outlineColor);
+      }
+      if (map.getLayer("lakes-drained-outline")) {
+        map.setPaintProperty("lakes-drained-outline", "line-color", outlineColor);
+      }
+      if (map.getLayer("lakes-fill")) {
+        map.setPaintProperty("lakes-fill", "fill-outline-color", fillOutlineColor);
+      }
+      if (map.getLayer("lakes-drained-fill")) {
+        map.setPaintProperty("lakes-drained-fill", "fill-outline-color", fillOutlineColor);
+      }
+    }
+
     basemapSelect.addEventListener("change", (e) => {
       const selected = e.target.value;
       sessionStorage.setItem("preferred_basemap", selected);
       ["darkmatter", "esriworld", "tcvis"].forEach(id => {
         map.setLayoutProperty(`basemap-${id}`, "visibility", id === selected ? "visible" : "none");
       });
+      updateOutlineColor(selected);
     });
 
     map.on("load", () => {
+      updateOutlineColor(defaultBasemap);
       if (CONFIG.bounds) {
         map.fitBounds(CONFIG.bounds, { padding: 48, maxZoom: 11, duration: 0 });
       }
