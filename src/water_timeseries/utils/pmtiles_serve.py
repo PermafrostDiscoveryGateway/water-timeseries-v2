@@ -40,16 +40,20 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
         self._serve_file(route.lstrip("/"), head_only=head_only)
 
     def _serve_map_page(self, query: dict[str, list[str]], head_only: bool = False) -> None:
+        config_id = (query.get("config_id") or [None])[0]
         config_b64 = (query.get("config") or [None])[0]
-        if not config_b64:
-            self.send_error(400, "Missing config query parameter")
-            return
 
-        try:
-            padding = "=" * (-len(config_b64) % 4)
-            config = json.loads(base64.urlsafe_b64decode(config_b64 + padding).decode("utf-8"))
-        except (json.JSONDecodeError, ValueError) as exc:
-            self.send_error(400, f"Invalid config: {exc}")
+        if config_id and hasattr(self.server, "config_cache") and config_id in getattr(self.server, "config_cache"):
+            config = getattr(self.server, "config_cache")[config_id]
+        elif config_b64:
+            try:
+                padding = "=" * (-len(config_b64) % 4)
+                config = json.loads(base64.urlsafe_b64decode(config_b64 + padding).decode("utf-8"))
+            except (json.JSONDecodeError, ValueError) as exc:
+                self.send_error(400, f"Invalid config: {exc}")
+                return
+        else:
+            self.send_error(400, "Missing config or config_id query parameter")
             return
 
         pmtiles_name = self.server.pmtiles_filename  # type: ignore[attr-defined]
@@ -147,6 +151,7 @@ class PmtilesServer:
         self.port = port
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
+        self.config_cache: dict[str, Any] = {}
 
     @property
     def base_url(self) -> str:
@@ -158,6 +163,7 @@ class PmtilesServer:
         self._httpd = ThreadingHTTPServer((self.host, self.port), _PmtilesHTTPRequestHandler)
         self._httpd.directory = self.directory
         self._httpd.pmtiles_filename = self.pmtiles_filename
+        self._httpd.config_cache = self.config_cache
         self._httpd.base_url = ""  # set after bind
         self.port = self._httpd.server_port
         self._httpd.base_url = self.base_url
@@ -167,8 +173,17 @@ class PmtilesServer:
 
     def map_iframe_url(self, config: dict[str, Any]) -> str:
         """URL for ``st.iframe`` — map HTML and PMTiles share this origin."""
-        payload = base64.urlsafe_b64encode(json.dumps(config).encode("utf-8")).decode("ascii").rstrip("=")
-        return f"{self.base_url}/map?config={payload}"
+        import uuid
+        config_id = uuid.uuid4().hex
+        self.config_cache[config_id] = config
+        
+        # Clean up old configs to prevent memory leak (keep last 5)
+        if len(self.config_cache) > 5:
+            keys_to_remove = list(self.config_cache.keys())[:-5]
+            for k in keys_to_remove:
+                self.config_cache.pop(k, None)
+                
+        return f"{self.base_url}/map?config_id={config_id}"
 
     def stop(self) -> None:
         if self._httpd is not None:

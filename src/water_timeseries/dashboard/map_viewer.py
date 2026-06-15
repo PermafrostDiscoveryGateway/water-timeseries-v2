@@ -187,6 +187,28 @@ class MapViewer:
         self.gdf = self._load_parquet(self._parquet_path)
         return self.gdf
 
+    def load_drained_gdf(self, drained_ids: List[str]) -> gpd.GeoDataFrame:
+        """Load only the subset of geometries for drained_ids using parquet filters."""
+        if not drained_ids:
+            return gpd.GeoDataFrame(columns=[self.id_column], geometry=[])
+        
+        if self.gdf is not None:
+            return self.gdf[self.gdf[self.id_column].isin(drained_ids)].copy()
+            
+        if self._parquet_path is None:
+            raise ValueError("parquet_path is required to load lake attributes for overlays")
+            
+        import geopandas as gpd
+        gdf = gpd.read_parquet(self._parquet_path, filters=[(self.id_column, "in", list(drained_ids))])
+        
+        if self.geometry_column in gdf.columns:
+            gdf = gdf.set_geometry(self.geometry_column)
+        if gdf.crs is None:
+            gdf = gdf.set_crs(epsg=4326)
+            
+        gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
+        return gdf
+
     def render(self) -> Optional[str]:
         """Render the interactive map in Streamlit using the selected backend.
 
@@ -237,12 +259,30 @@ class MapViewer:
         )
         if self.pmtiles_file:
             st.caption(f"Tiles: `{self.pmtiles_file}`")
+        drained_geojson = None
+        drained_centroids_geojson = None
+        if getattr(self, "drained_gdf", None) is not None and len(self.drained_gdf) > 0:
+            import json
+            sanitized = _sanitize_geojson_properties(self.drained_gdf)
+            drained_geojson = json.loads(sanitized.to_json())
+
+            import warnings
+            centroids_gdf = self.drained_gdf.copy()
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore", category=UserWarning)
+                centroids_gdf.geometry = centroids_gdf.geometry.centroid
+            sanitized_centroids = _sanitize_geojson_properties(centroids_gdf)
+            drained_centroids_geojson = json.loads(sanitized_centroids.to_json())
+
         render_pmtiles_map(
             pmtiles_file=self.pmtiles_file,
             pmtiles_url=self.pmtiles_url,
             vector_file_for_bounds=None,
             id_column=self.id_column,
             viz_configuration=self.viz_configuration_name or "colored_historical",
+            drained_geojson=drained_geojson,
+            drained_centroids_geojson=drained_centroids_geojson,
+            show_main_layer=self.show_main_layer,
         )
         selected = sync_query_param_selection(self.id_column)
         if selected and selected != st.session_state.get("_pmtiles_last_rerun"):
@@ -643,6 +683,8 @@ def _load_precomputed_nrt(
     if precomputed_nrt_dir is None:
         return None, None
 
+    from loguru import logger
+
     nrt_dir = Path(precomputed_nrt_dir)
     counts_path = nrt_dir / "nrt_monthly_drain_counts.parquet"
     breaks_path = nrt_dir / "nrt_monthly_drain_breaks.parquet"
@@ -655,6 +697,29 @@ def _load_precomputed_nrt(
 
     if breaks_path.exists():
         breaks_df = pd.read_parquet(breaks_path)
+
+    if breaks_df is None:
+        monthly_files = sorted(list(nrt_dir.glob("nrt_*_drain_breaks.parquet")))
+        if monthly_files:
+            logger.info(f"Found {len(monthly_files)} individual NRT monthly files, aggregating...")
+            dfs = []
+            for file_path in monthly_files:
+                try:
+                    df = pd.read_parquet(file_path)
+                    if not df.empty:
+                        dfs.append(df)
+                except Exception as e:
+                    logger.warning(f"Failed to read {file_path}: {e}")
+            if dfs:
+                breaks_df = pd.concat(dfs, ignore_index=True)
+
+    if counts_df is None and breaks_df is not None and not breaks_df.empty:
+        if "analysis_month" in breaks_df.columns:
+            counts_df = (
+                breaks_df.groupby("analysis_month")
+                .size()
+                .reset_index(name="drained_lake_count")
+            )
 
     return counts_df, breaks_df
 
@@ -888,13 +953,9 @@ def create_app(
             pmtiles_file=pmtiles_file,
             pmtiles_url=pmtiles_url,
         )
-        if show_drained and map_backend == "pmtiles":
-            st.sidebar.info(
-                "NRT drained-lake map overlay is only available in Folium mode. "
-                "Disable PMTiles or build a separate PMTiles layer for the NRT month."
-            )
-        elif show_drained and drained_breaks is not None and not drained_breaks.empty:
-            drained_gdf = viewer._ensure_gdf().merge(
+        if show_drained and drained_breaks is not None and not drained_breaks.empty:
+            drained_ids = drained_breaks.index.unique().tolist()
+            drained_gdf = viewer.load_drained_gdf(drained_ids).merge(
                 drained_breaks.reset_index(),
                 on=id_column,
                 how="inner",

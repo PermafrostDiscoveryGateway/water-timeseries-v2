@@ -13,10 +13,12 @@ _TEST_NRT_DIR = _REPO_ROOT / "tests" / "data" / "nrt"
 
 def _resolve_default_nrt_dir() -> Path | None:
     """Return the first NRT fixture directory that contains dashboard parquet files."""
-    for candidate in (_DEFAULT_NRT_DIR, _TEST_NRT_DIR):
+    for candidate in (_DEFAULT_NRT_DIR, _TEST_NRT_DIR, Path("downloads")):
         counts_file = candidate / "nrt_monthly_drain_counts.parquet"
         breaks_file = candidate / "nrt_monthly_drain_breaks.parquet"
         if counts_file.exists() or breaks_file.exists():
+            return candidate
+        if candidate.exists() and list(candidate.glob("nrt_*_drain_breaks.parquet")):
             return candidate
     return None
 
@@ -166,7 +168,19 @@ def main(
 
     # Use provided paths or defaults
     if vector_file is None:
-        vector_file = default_vector_file
+        if pmtiles_file:
+            pm_path = Path(pmtiles_file)
+            possible_parquet = pm_path.parent / pm_path.name.replace("_dual.pmtiles", ".parquet").replace(".pmtiles", ".parquet")
+            if possible_parquet.exists():
+                vector_file = possible_parquet
+            else:
+                parquets = list(pm_path.parent.glob("*.parquet"))
+                if parquets:
+                    vector_file = parquets[0]
+                else:
+                    vector_file = default_vector_file
+        else:
+            vector_file = default_vector_file
     if dw_dataset_file is None:
         dw_dataset_file = default_dw_dataset_file
     if jrc_dataset_file is None:

@@ -62,10 +62,35 @@
       border: 1px solid #ccc;
       background: linear-gradient(to right, #d73027, #fee090, #4575b4);
     }
+    .basemap-control {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: white;
+      padding: 8px 10px;
+      border-radius: 5px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.2);
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      z-index: 2;
+    }
+    .basemap-control select {
+      margin-left: 5px;
+      padding: 2px 4px;
+      font-size: 12px;
+    }
   </style>
 </head>
 <body>
   <div id="status"></div>
+  <div class="basemap-control" id="basemap-control">
+    <label for="basemap-select"><b>Basemap:</b></label>
+    <select id="basemap-select">
+      <option value="darkmatter">Dark Matter (CartoDB)</option>
+      <option value="esriworld">ESRI World Imagery</option>
+      <option value="tcvis">TCVIS Landsat Trends (AWI)</option>
+    </select>
+  </div>
   <div id="map"></div>
   <div class="legend" id="legend"></div>
   <script>
@@ -122,50 +147,148 @@
 
     const lakePaint = viz === "nrt_drainage" ? nrtPaint : historicalPaint;
 
+    const sources = {
+      darkmatter: {
+        type: "raster",
+        tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
+        tileSize: 256,
+        attribution: "&copy; OpenStreetMap &copy; CARTO"
+      },
+      esriworld: {
+        type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256,
+        attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+      },
+      tcvis: {
+        type: "raster",
+        tiles: ["https://maps.awi.de/services/common/permafrost/ows?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=true&LAYERS=tcvis&STYLES=composite&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}"],
+        tileSize: 256,
+        attribution: "&copy; AWI Permafrost"
+      },
+      lakes: {
+        type: "vector",
+        url: pmtilesUrl,
+        attribution: "Lake polygons (PMTiles)"
+      }
+    };
+
+    const savedBasemap = sessionStorage.getItem("preferred_basemap");
+    const defaultBasemap = savedBasemap || (viz === "nrt_drainage" ? "tcvis" : "darkmatter");
+    
+    const layers = [
+      { id: "basemap-darkmatter", type: "raster", source: "darkmatter", layout: { visibility: defaultBasemap === "darkmatter" ? "visible" : "none" } },
+      { id: "basemap-esriworld", type: "raster", source: "esriworld", layout: { visibility: defaultBasemap === "esriworld" ? "visible" : "none" } },
+      { id: "basemap-tcvis", type: "raster", source: "tcvis", layout: { visibility: defaultBasemap === "tcvis" ? "visible" : "none" } },
+      {
+        id: "lakes-fill",
+        type: "fill",
+        source: "lakes",
+        "source-layer": sourceLayer,
+        paint: lakePaint,
+        layout: {
+          visibility: CONFIG.show_main_layer !== false ? "visible" : "none"
+        }
+      },
+      {
+        id: "lakes-outline",
+        type: "line",
+        source: "lakes",
+        "source-layer": sourceLayer,
+        paint: {
+          "line-color": "#1a1a1a",
+          "line-width": 1.5,
+          "line-opacity": 0.9
+        },
+        layout: {
+          visibility: CONFIG.show_main_layer !== false ? "visible" : "none"
+        }
+      }
+    ];
+
+    if (CONFIG.drained_geojson) {
+      sources.drained = {
+        type: "geojson",
+        data: CONFIG.drained_geojson
+      };
+      if (CONFIG.drained_centroids_geojson) {
+        sources.drained_centroids = {
+          type: "geojson",
+          data: CONFIG.drained_centroids_geojson
+        };
+      }
+      layers.push({
+        id: "lakes-drained-fill",
+        type: "fill",
+        source: "drained",
+        paint: nrtPaint
+      });
+      layers.push({
+        id: "lakes-drained-outline",
+        type: "line",
+        source: "drained",
+        paint: {
+          "line-color": "#1a1a1a",
+          "line-width": 1.5,
+          "line-opacity": 0.9
+        }
+      });
+      layers.push({
+        id: "lakes-drained-circle",
+        type: "circle",
+        source: CONFIG.drained_centroids_geojson ? "drained_centroids" : "drained",
+        paint: {
+          "circle-color": "#d73027",
+          "circle-radius": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            0, 3,
+            6, 6,
+            10, 4
+          ],
+          "circle-stroke-width": 1,
+          "circle-stroke-color": "#ffffff",
+          "circle-opacity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            6, 0.9,
+            9, 0.0
+          ],
+          "circle-stroke-opacity": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            6, 0.9,
+            9, 0.0
+          ]
+        }
+      });
+    }
+
     const map = new maplibregl.Map({
       container: "map",
       style: {
         version: 8,
-        sources: {
-          basemap: {
-            type: "raster",
-            tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}@2x.png"],
-            tileSize: 256,
-            attribution: "&copy; OpenStreetMap &copy; CARTO"
-          },
-          lakes: {
-            type: "vector",
-            url: pmtilesUrl,
-            attribution: "Lake polygons (PMTiles)"
-          }
-        },
-        layers: [
-          { id: "basemap", type: "raster", source: "basemap" },
-          {
-            id: "lakes-fill",
-            type: "fill",
-            source: "lakes",
-            "source-layer": sourceLayer,
-            paint: lakePaint
-          },
-          {
-            id: "lakes-outline",
-            type: "line",
-            source: "lakes",
-            "source-layer": sourceLayer,
-            paint: {
-              "line-color": "#1a1a1a",
-              "line-width": 1.5,
-              "line-opacity": 0.9
-            }
-          }
-        ]
+        sources: sources,
+        layers: layers
       },
       center: CONFIG.center || [-164.1, 66.5],
       zoom: CONFIG.zoom || 8
     });
 
     map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    const basemapSelect = document.getElementById("basemap-select");
+    basemapSelect.value = defaultBasemap;
+    basemapSelect.addEventListener("change", (e) => {
+      const selected = e.target.value;
+      sessionStorage.setItem("preferred_basemap", selected);
+      ["darkmatter", "esriworld", "tcvis"].forEach(id => {
+        map.setLayoutProperty(`basemap-${id}`, "visibility", id === selected ? "visible" : "none");
+      });
+    });
 
     map.on("load", () => {
       if (CONFIG.bounds) {
@@ -177,11 +300,13 @@
     });
 
     map.on("idle", () => {
-      const features = map.queryRenderedFeatures({ layers: ["lakes-fill"] });
-      if (!features.length) {
-        showError(
-          "No lake tiles in view. Check that PMTiles is reachable at " + pmtilesHttpUrl
-        );
+      if (CONFIG.show_main_layer !== false) {
+        const features = map.queryRenderedFeatures({ layers: ["lakes-fill"] });
+        if (!features.length) {
+          showError(
+            "No lake tiles in view. Check that PMTiles is reachable at " + pmtilesHttpUrl
+          );
+        }
       }
     });
 
@@ -222,24 +347,35 @@
       window.location.href = url.toString();
     }
 
-    map.on("click", "lakes-fill", (e) => {
-      if (!e.features || !e.features.length) return;
-      const props = e.features[0].properties || {};
-      const geohash = props[idField];
-      const html = formatProps(props) +
-        `<br/><button class="select-lake-btn" type="button">Select for time series</button>`;
+    const interactiveLayers = [];
+    if (CONFIG.drained_geojson) {
+      interactiveLayers.push("lakes-drained-fill");
+      interactiveLayers.push("lakes-drained-circle");
+    }
+    if (CONFIG.show_main_layer !== false) {
+      interactiveLayers.push("lakes-fill");
+    }
+    
+    interactiveLayers.forEach(layer => {
+      map.on("click", layer, (e) => {
+        if (!e.features || !e.features.length) return;
+        const props = e.features[0].properties || {};
+        const geohash = props[idField];
+        const html = formatProps(props) +
+          `<br/><button class="select-lake-btn" type="button">Select for time series</button>`;
 
-      new maplibregl.Popup({ closeOnClick: true })
-        .setLngLat(e.lngLat)
-        .setHTML(html)
-        .addTo(map)
-        .getElement()
-        .querySelector(".select-lake-btn")
-        ?.addEventListener("click", () => selectLake(geohash));
+        new maplibregl.Popup({ closeOnClick: true })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map)
+          .getElement()
+          .querySelector(".select-lake-btn")
+          ?.addEventListener("click", () => selectLake(geohash));
+      });
+
+      map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
     });
-
-    map.on("mouseenter", "lakes-fill", () => { map.getCanvas().style.cursor = "pointer"; });
-    map.on("mouseleave", "lakes-fill", () => { map.getCanvas().style.cursor = ""; });
 
     const legend = document.getElementById("legend");
     if (viz === "nrt_drainage") {
