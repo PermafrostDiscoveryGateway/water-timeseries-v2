@@ -906,6 +906,10 @@ def create_app(
 
                 month_labels = [_month_label(m) for m in selectable_months]
 
+                # Initialize session state for the selectbox so it defaults to the last month
+                if "nrt_month_selector" not in st.session_state:
+                    st.session_state["nrt_month_selector"] = month_labels[-1]
+
                 # Sync dropdown with heatmap click: consume the one-shot flag and write
                 # directly to the selectbox session-state key so Streamlit picks it up.
                 heatmap_pick = st.session_state.get("heatmap_selected_cell")
@@ -913,16 +917,9 @@ def create_app(
                     if heatmap_pick and heatmap_pick in selectable_months:
                         st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
 
-                default_idx = (
-                    selectable_months.index(heatmap_pick)
-                    if heatmap_pick and heatmap_pick in selectable_months
-                    else len(selectable_months) - 1
-                )
-
                 selected_label = st.sidebar.selectbox(
                     "NRT analysis month",
                     month_labels,
-                    index=default_idx,
                     key="nrt_month_selector",
                     help="Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
                 )
