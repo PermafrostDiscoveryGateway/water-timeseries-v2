@@ -612,6 +612,7 @@ def breakpoint_analysis_nrt(
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
     vector_file: Optional[Path] = None,
+    aggregate: bool = True,
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
@@ -665,6 +666,9 @@ def breakpoint_analysis_nrt(
     vector_file:
         Optional GeoParquet vector file.  When provided, only the
         ``id_geohash`` values present in that file are processed.
+    aggregate:
+        Automatically aggregate the monthly Parquet files in the output
+        directory into consolidated files for the dashboard (default True).
     logfile:
         Path to log file. Auto-generated if not provided.
     verbose:
@@ -726,10 +730,10 @@ def breakpoint_analysis_nrt(
 
         gdf = gpd.read_parquet(vector_file)
         if "id_geohash" not in gdf.columns:
-            logger.error("vector_file %s does not contain an 'id_geohash' column", vector_file)
+            logger.error(f"vector_file {vector_file} does not contain an 'id_geohash' column")
             raise SystemExit(1)
         lake_ids = gdf["id_geohash"].dropna().unique().tolist()
-        logger.info("Loaded %d lake IDs from vector file: %s", len(lake_ids), vector_file)
+        logger.info(f"Loaded {len(lake_ids)} lake IDs from vector file: {vector_file}")
 
     shared_kwargs = dict(
         dataset_file=dataset_file,
@@ -769,6 +773,8 @@ def breakpoint_analysis_nrt(
             f"  drained lakes  : {len(breaks_df)}\n"
             f"  output_file    : {resolved_output_file}"
         )
+        if aggregate:
+            aggregate_nrt_directory(Path(resolved_output_file).parent)
         return
 
     # --- Range mode ---------------------------------------------------------
@@ -781,9 +787,7 @@ def breakpoint_analysis_nrt(
 
     if end_ts < start_ts:
         logger.error(
-            "--analysis-date-end (%s) must be >= --analysis-date-start (%s)",
-            analysis_date_end,
-            analysis_date_start,
+            f"--analysis-date-end ({analysis_date_end}) must be >= --analysis-date-start ({analysis_date_start})"
         )
         raise SystemExit(1)
 
@@ -816,7 +820,7 @@ def breakpoint_analysis_nrt(
         month_file = resolved_output_dir / f"nrt_{month_str}_drain_breaks.parquet"
 
         if not no_resume and month_file.exists():
-            logger.info("Skipping %s — output already exists: %s", month_str, month_file)
+            logger.info(f"Skipping {month_str} — output already exists: {month_file}")
             skipped += 1
             continue
 
@@ -828,7 +832,7 @@ def breakpoint_analysis_nrt(
             )
             total_drained += len(breaks_df)
         except Exception as exc:
-            logger.warning("Failed for %s: %s", month_str, exc)
+            logger.warning(f"Failed for {month_str}: {exc}")
             failed += 1
 
     logger.info(
@@ -840,6 +844,81 @@ def breakpoint_analysis_nrt(
         f"  total drained rows: {total_drained}\n"
         f"  output_dir        : {resolved_output_dir}"
     )
+    if aggregate:
+        aggregate_nrt_directory(resolved_output_dir)
+
+
+def aggregate_nrt_directory(nrt_dir: Path, output_dir: Optional[Path] = None) -> None:
+    """Aggregate individual monthly NRT files in a directory into consolidated parquet files."""
+    if output_dir is None:
+        output_dir = nrt_dir
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    nrt_dir = Path(nrt_dir)
+    monthly_files = sorted([
+        f for f in nrt_dir.glob("nrt_*_drain_breaks.parquet")
+        if f.name != "nrt_monthly_drain_breaks.parquet"
+    ])
+    if not monthly_files:
+        logger.info(f"No individual monthly NRT files found in {nrt_dir} to aggregate.")
+        return
+
+    logger.info(f"Found {len(monthly_files)} individual NRT monthly files in {nrt_dir}, aggregating...")
+    dfs = []
+    for file_path in monthly_files:
+        try:
+            df = pd.read_parquet(file_path)
+            dfs.append(df)
+        except Exception as e:
+            logger.warning(f"Failed to read {file_path}: {e}")
+
+    if not dfs:
+        logger.warning("No monthly NRT files could be loaded.")
+        return
+
+    breaks_df = pd.concat(dfs, ignore_index=True)
+    breaks_path = output_dir / "nrt_monthly_drain_breaks.parquet"
+    breaks_df.to_parquet(breaks_path, index=False)
+    logger.info(f"Wrote consolidated breaks to {breaks_path}")
+
+    if "analysis_month" in breaks_df.columns:
+        counts_df = (
+            breaks_df.groupby("analysis_month")
+            .size()
+            .reset_index(name="drained_lake_count")
+        )
+        
+        # Ensure all processed months are included in the counts, even if they have 0 drained lakes
+        months_from_files = []
+        for f in monthly_files:
+            parts = f.stem.split("_")
+            if len(parts) >= 2:
+                months_from_files.append(parts[1])
+        all_months_df = pd.DataFrame({"analysis_month": months_from_files})
+        
+        counts_df = pd.merge(all_months_df, counts_df, on="analysis_month", how="left").fillna({"drained_lake_count": 0})
+        counts_df["drained_lake_count"] = counts_df["drained_lake_count"].astype(int)
+
+        counts_path = output_dir / "nrt_monthly_drain_counts.parquet"
+        counts_df.to_parquet(counts_path, index=False)
+        logger.info(f"Wrote consolidated counts to {counts_path}")
+
+
+@app.command(group="Analysis")
+def aggregate_nrt(
+    nrt_dir: Path,
+    output_dir: Optional[Path] = None,
+    logfile: Optional[str] = None,
+    verbose: int = 0,
+):
+    """Aggregate individual monthly NRT files in a directory into consolidated parquet files.
+
+    Creates ``nrt_monthly_drain_breaks.parquet`` and ``nrt_monthly_drain_counts.parquet``
+    in ``output_dir`` (defaulting to ``nrt_dir``).
+    """
+    setup_logging(logfile=logfile, verbose=verbose)
+    aggregate_nrt_directory(nrt_dir, output_dir)
 
 
 if __name__ == "__main__":
