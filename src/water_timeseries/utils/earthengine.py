@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import xarray as xr
 from shapely.geometry import box
+from xee import helpers
 
 
 def get_bbox(gdf, to_crs=4326, return_ee=True):
@@ -726,3 +727,149 @@ def create_timelapse(
         geemap.landsat_timelapse(**timelapse_kwargs)
 
     return outfile
+
+
+def fix_xee_grid_utm(grid: dict) -> dict:
+    """
+    Fix the UTM grid transformation parameters for xee compatibility.
+
+    This function corrects the Y-scale transformation value in the grid's
+    crs_transform tuple to ensure proper pixel alignment when working with
+    UTM-projected data in Earth Engine.
+
+    Args:
+        grid (dict): A grid dictionary containing 'crs_transform' tuple with
+            transformation parameters [origin_x, pixel_size_x, 0, origin_y,
+            pixel_size_y, 0].
+
+    Returns:
+        dict: The input grid dictionary with corrected crs_transform,
+              specifically the pixel Y-size set to -10.
+
+    Example:
+        >>> grid = {"crs_transform": (0, 10, 0, 0, 10, 0)}
+        >>> fixed_grid = fix_xee_grid_utm(grid)
+        >>> fixed_grid["crs_transform"]
+        (0, 10, 0, 0, -10, 0)
+    """
+    transform = list(grid["crs_transform"])
+    transform[4] = -10
+    grid["crs_transform"] = tuple(transform)
+    return grid
+
+
+def get_rioxarray_ds_from_lake(
+    lake_gdf: gpd.GeoDataFrame,
+    id_geohash: str,
+    start_date: str,
+    end_date: str,
+    max_cloud_cover: float = 20,
+    buffer: float = 200,
+) -> xr.Dataset:
+    """
+    Load Sentinel-2 satellite imagery for a specific lake as an xarray Dataset.
+
+    This function retrieves Sentinel-2 SR (Surface Reflectance) data from Google Earth Engine
+    for a single lake, automatically determining the appropriate UTM coordinate reference
+    system based on the lake's location. The data is returned as a rioxarray-enabled
+    xarray Dataset with proper georeferencing.
+
+    Args:
+        lake_gdf (gpd.GeoDataFrame): A GeoDataFrame containing lake polygons with
+            an 'id_geohash' column to identify individual lakes.
+        id_geohash (str): The geohash identifier for the specific lake to retrieve
+            satellite data for.
+        start_date (str): Start date for the imagery query in 'YYYY-MM-DD' format.
+        end_date (str): End date for the imagery query in 'YYYY-MM-DD' format.
+        max_cloud_cover (float, optional): Maximum cloud cover percentage to filter
+            images (0-100). Defaults to 20.
+        buffer (float, optional): Buffer distance in meters to expand the lake's
+            bounding box for image extraction. Defaults to 200.
+
+    Returns:
+        xr.Dataset: An xarray Dataset with Sentinel-2 bands as data variables,
+            dimensions (time, y, x), and proper georeferencing (CRS set via rioxarray).
+            The Dataset includes all available bands (B1-B12) from the
+            COPERNICUS/S2_SR_HARMONIZED collection.
+
+    Example:
+        >>> import geopandas as gpd
+        >>> gdf = gpd.read_file("lakes.parquet")
+        >>> ds = get_rioxarray_ds_from_lake(
+        ...     lake_gdf=gdf,
+        ...     id_geohash="c22iz2n",
+        ...     start_date="2026-05-01",
+        ...     end_date="2026-06-01",
+        ...     max_cloud_cover=20
+        ... )
+        >>> print(ds)
+    """
+
+    local_gdf = lake_gdf[lake_gdf["id_geohash"] == id_geohash]
+
+    # crs = 'EPSG:32604'
+    crs_object = local_gdf.estimate_utm_crs()
+    crs = f"EPSG:{crs_object.to_epsg()}"
+    aoi = local_gdf.to_crs(crs).buffer(buffer).to_crs(4326).iloc[0]
+    fc = geemap.gdf_to_ee(local_gdf)
+
+    grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(10, 10))
+    grid = fix_xee_grid_utm(grid)
+
+    ic = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterDate(start_date, end_date)
+        .filterBounds(fc)
+        .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", max_cloud_cover))
+    )
+    ds_rio = xr.open_dataset(ic, engine="ee", **grid).rio.write_crs(crs)
+
+    return ds_rio
+
+
+def visualize_s2_first_and_last(ds: xr.Dataset, style: str = "rgb") -> plt.Figure:
+    """
+    Visualize the first and last Sentinel-2 acquisition from an xarray Dataset.
+
+    This function creates a two-panel figure showing Sentinel-2 imagery for the
+    first and last time steps in the dataset, useful for comparing temporal
+    changes in lake appearance or extent.
+
+    Args:
+        ds (xr.Dataset): An xarray Dataset containing Sentinel-2 bands as data
+            variables with a 'time' dimension. Expected bands include B2, B3, B4,
+            and optionally B8 for vegetation analysis.
+        style (str, optional): Visualization style - either 'rgb' for true color
+            composite (B4, B3, B2) or any other value for vegetation false color
+            composite (B8, B4, B3). Defaults to 'rgb'.
+
+    Returns:
+        plt.Figure: A matplotlib Figure object containing two subplots with the
+            visualized satellite imagery. The figure should be displayed with
+            plt.show() or saved with fig.savefig().
+
+    Example:
+        >>> ds = get_rioxarray_ds_from_lake(gdf, "c22iz2n", "2026-05-01", "2026-06-01")
+        >>> fig = visualize_s2_first_and_last(ds, style="rgb")
+        >>> fig.savefig("comparison.png", dpi=150, bbox_inches="tight")
+
+    Notes:
+        - The RGB visualization scales values to 0-1 range by dividing by 1000
+        - Values outside 0-1 are clipped
+        - Y-axis aspect ratio is set to 'equal' for accurate spatial representation
+    """
+    fig, axes = plt.subplots(ncols=2)
+    for date in [0, -1]:
+        ax = axes[date]
+        ds_rio = ds.isel(time=date)  # .rio.write_crs("EPSG:32604")
+        if style == "rgb":
+            (ds_rio[["B4", "B3", "B2"]].to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
+        else:
+            (ds_rio[["B8", "B4", "B3"]].to_array() / 3000).clip(0, 1).plot.imshow(ax=ax)
+        ax.set_aspect("equal")
+        ax.set_title(str(ds_rio.time.dt.strftime("%Y-%m-%d").data))
+        ax.set_ylabel("")
+        ax.set_xlabel("")
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+    return fig
