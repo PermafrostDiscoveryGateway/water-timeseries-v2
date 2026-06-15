@@ -767,11 +767,15 @@ def create_app(
         st.sidebar.warning("⚠️ Offline mode: Data downloads and timelapse generation are disabled.")
 
     # Plotting mode selection (static vs dynamic/interactive) - defaults to interactive
+    # Persist the setting in query parameters so it survives iframe reloads/redirects when clicking features.
+    qp_interactive = st.query_params.get("interactive", "true").lower() == "true"
     is_interactive = st.sidebar.toggle(
         "Interactive Plotting",
-        value=True,
+        value=qp_interactive,
+        key="is_interactive_toggle",
         help="Enable interactive Plotly plots (hover for details, zoom, pan)",
     )
+    st.query_params["interactive"] = str(is_interactive).lower()
     if is_interactive:
         st.sidebar.caption("🖱️ Interactive mode - hover to see values, zoom & pan available")
     else:
@@ -780,23 +784,8 @@ def create_app(
     use_pmtiles = bool(pmtiles_file or pmtiles_url)
     map_backend = "pmtiles" if use_pmtiles else "folium"
 
-    # Performance settings for large datasets
-    st.sidebar.divider()
-    st.sidebar.subheader("Performance")
-    if use_pmtiles:
-        st.sidebar.success("PMTiles mode: viewport tile loading (millions of lakes)")
-        max_features = None
-    else:
-        max_features = st.sidebar.number_input(
-            "Max features to load",
-            min_value=10,
-            max_value=50000,
-            value=2000,
-            step=100,
-            help="Limit number of polygons for faster loading. Set to 0 for no limit.",
-        )
-        if max_features == 0:
-            max_features = None
+    # Performance settings for large datasets (defined programmatically, UI removed)
+    max_features = None if use_pmtiles else 2000
 
     # Use function parameters for data paths
     data_path_input = str(data_path)
