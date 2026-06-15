@@ -64,6 +64,9 @@ dependencies = [
     "geoparquet-io>=1.1.1",
     "tqdm-joblib>=0.0.5",
     "polars>=1.40.1",
+    "gcloud>=0.18.3",
+    "xee>=0.1.1",
+    "rioxarray>=0.19.0",
 ]
 
 [project.optional-dependencies]
