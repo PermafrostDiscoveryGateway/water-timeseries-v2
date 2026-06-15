@@ -81,39 +81,12 @@ def _build_map_config(
     height: int = 620,
     center: Optional[list[float]] = None,
     zoom: Optional[float] = None,
-    drained_geojson: Optional[dict] = None,
-    drained_centroids_geojson: Optional[dict] = None,
+    drained_data: Optional[dict[str, Any]] = None,
     show_main_layer: bool = True,
 ) -> dict[str, Any]:
     bounds = None
-    if not show_main_layer and drained_geojson and "features" in drained_geojson and drained_geojson["features"]:
-        xs = []
-        ys = []
-        for feat in drained_geojson["features"]:
-            geom = feat.get("geometry")
-            if not geom:
-                continue
-            coords = geom.get("coordinates")
-            if not coords:
-                continue
-            
-            def extract_coords(c):
-                if isinstance(c[0], (int, float)):
-                    xs.append(c[0])
-                    ys.append(c[1])
-                else:
-                    for sub in c:
-                        extract_coords(sub)
-            try:
-                extract_coords(coords)
-            except Exception:
-                pass
-        if xs and ys:
-            bounds = [[min(xs), min(ys)], [max(xs), max(ys)]]
-            if center is None:
-                center = [(min(xs) + max(xs)) / 2, (min(ys) + max(ys)) / 2]
-            if zoom is None:
-                zoom = 9
+    if not show_main_layer and drained_data:
+        pass # Without GeoJSON, we cannot easily calculate bounds. We will rely on default center/zoom or the PMTiles header.
 
     if bounds is None and pmtiles_file is not None:
         header = read_pmtiles_header(pmtiles_file)
@@ -144,8 +117,7 @@ def _build_map_config(
         "zoom": zoom if zoom is not None else 8,
         "bounds": bounds,
         "height": height,
-        "drained_geojson": drained_geojson,
-        "drained_centroids_geojson": drained_centroids_geojson,
+        "drained_data": drained_data,
         "show_main_layer": show_main_layer,
     }
     return config
@@ -161,8 +133,7 @@ def render_pmtiles_map(
     height: int = 620,
     center: Optional[list[float]] = None,
     zoom: Optional[float] = None,
-    drained_geojson: Optional[dict] = None,
-    drained_centroids_geojson: Optional[dict] = None,
+    drained_data: Optional[dict[str, Any]] = None,
     show_main_layer: bool = True,
 ) -> None:
     """Embed a MapLibre map that loads lake polygons from PMTiles on demand.
@@ -181,8 +152,7 @@ def render_pmtiles_map(
             height=height,
             center=center,
             zoom=zoom,
-            drained_geojson=drained_geojson,
-            drained_centroids_geojson=drained_centroids_geojson,
+            drained_data=drained_data,
             show_main_layer=show_main_layer,
         )
         st.warning(
@@ -208,8 +178,7 @@ def render_pmtiles_map(
         height=height,
         center=center,
         zoom=zoom,
-        drained_geojson=drained_geojson,
-        drained_centroids_geojson=drained_centroids_geojson,
+        drained_data=drained_data,
         show_main_layer=show_main_layer,
     )
     map_url = server.map_iframe_url(config)

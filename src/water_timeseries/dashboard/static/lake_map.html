@@ -145,7 +145,43 @@
       "fill-outline-color": "#7f0000"
     };
 
-    const lakePaint = viz === "nrt_drainage" ? nrtPaint : historicalPaint;
+    let lakePaint = viz === "nrt_drainage" ? nrtPaint : historicalPaint;
+    let lakeOutlineColor = "#1a1a1a";
+    let lakeOutlineOpacity = 0.9;
+    
+    // Highlight drained lakes if we have drained_data
+    if (CONFIG.drained_data && Object.keys(CONFIG.drained_data).length > 0) {
+      const drainedIds = Object.keys(CONFIG.drained_data);
+      lakePaint = { ...lakePaint };
+      lakePaint["fill-color"] = [
+        "match",
+        ["get", idField],
+        drainedIds,
+        "#d73027", // Highlight color for drained
+        lakePaint["fill-color"] // Default color for others
+      ];
+      lakeOutlineColor = [
+        "match",
+        ["get", idField],
+        drainedIds,
+        "#ffffff", // Highlight outline for drained
+        "#1a1a1a" // Default outline
+      ];
+      lakeOutlineOpacity = [
+        "match",
+        ["get", idField],
+        drainedIds,
+        1.0, 
+        0.5 // Dim non-drained lakes outlines
+      ];
+      lakePaint["fill-opacity"] = [
+        "match",
+        ["get", idField],
+        drainedIds,
+        1.0, 
+        0.5 // Dim non-drained lakes fill
+      ];
+    }
 
     const sources = {
       darkmatter: {
@@ -196,76 +232,15 @@
         source: "lakes",
         "source-layer": sourceLayer,
         paint: {
-          "line-color": "#1a1a1a",
+          "line-color": lakeOutlineColor,
           "line-width": 1.5,
-          "line-opacity": 0.9
+          "line-opacity": lakeOutlineOpacity
         },
         layout: {
           visibility: CONFIG.show_main_layer !== false ? "visible" : "none"
         }
       }
     ];
-
-    if (CONFIG.drained_geojson) {
-      sources.drained = {
-        type: "geojson",
-        data: CONFIG.drained_geojson
-      };
-      if (CONFIG.drained_centroids_geojson) {
-        sources.drained_centroids = {
-          type: "geojson",
-          data: CONFIG.drained_centroids_geojson
-        };
-      }
-      layers.push({
-        id: "lakes-drained-fill",
-        type: "fill",
-        source: "drained",
-        paint: nrtPaint
-      });
-      layers.push({
-        id: "lakes-drained-outline",
-        type: "line",
-        source: "drained",
-        paint: {
-          "line-color": "#1a1a1a",
-          "line-width": 1.5,
-          "line-opacity": 0.9
-        }
-      });
-      layers.push({
-        id: "lakes-drained-circle",
-        type: "circle",
-        source: CONFIG.drained_centroids_geojson ? "drained_centroids" : "drained",
-        paint: {
-          "circle-color": "#d73027",
-          "circle-radius": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            0, 3,
-            6, 6,
-            10, 4
-          ],
-          "circle-stroke-width": 1,
-          "circle-stroke-color": "#ffffff",
-          "circle-opacity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            6, 0.9,
-            9, 0.0
-          ],
-          "circle-stroke-opacity": [
-            "interpolate",
-            ["linear"],
-            ["zoom"],
-            6, 0.9,
-            9, 0.0
-          ]
-        }
-      });
-    }
 
     const map = new maplibregl.Map({
       container: "map",
@@ -285,19 +260,32 @@
 
     function updateOutlineColor(basemap) {
       const isDark = basemap === "darkmatter";
-      const outlineColor = isDark ? "#ffffff" : "#1a1a1a";
-      const fillOutlineColor = isDark ? "#ffffff" : "#222222";
+      let outlineColor = isDark ? "#ffffff" : "#1a1a1a";
+      let fillOutlineColor = isDark ? "#ffffff" : "#222222";
+
+      if (CONFIG.drained_data && Object.keys(CONFIG.drained_data).length > 0) {
+        const drainedIds = Object.keys(CONFIG.drained_data);
+        outlineColor = [
+          "match",
+          ["get", idField],
+          drainedIds,
+          "#ffffff", // Highlight outline for drained
+          outlineColor // Default outline
+        ];
+        fillOutlineColor = [
+          "match",
+          ["get", idField],
+          drainedIds,
+          "#ffffff", // Highlight outline for drained
+          fillOutlineColor // Default outline
+        ];
+      }
+
       if (map.getLayer("lakes-outline")) {
         map.setPaintProperty("lakes-outline", "line-color", outlineColor);
       }
-      if (map.getLayer("lakes-drained-outline")) {
-        map.setPaintProperty("lakes-drained-outline", "line-color", outlineColor);
-      }
       if (map.getLayer("lakes-fill")) {
         map.setPaintProperty("lakes-fill", "fill-outline-color", fillOutlineColor);
-      }
-      if (map.getLayer("lakes-drained-fill")) {
-        map.setPaintProperty("lakes-drained-fill", "fill-outline-color", fillOutlineColor);
       }
     }
 
@@ -338,22 +326,28 @@
     });
 
     function formatProps(props) {
+      // Augment props with drained_data if available
+      let displayProps = { ...props };
+      if (CONFIG.drained_data && CONFIG.drained_data[props[idField]]) {
+        displayProps = { ...displayProps, ...CONFIG.drained_data[props[idField]] };
+      }
+      
       const lines = [];
       const fmt = (v) => {
         if (v === null || v === undefined) return "N/A";
         return typeof v === "number" ? v.toFixed(2) : v;
       };
-      if (props.NetChange_perc !== undefined) {
-        lines.push(`<b>Net change:</b> ${fmt(props.NetChange_perc)}%`);
-        lines.push(`<b>Net change (ha):</b> ${fmt(props.NetChange_ha)}`);
-        lines.push(`<b>Area 2000 (ha):</b> ${fmt(props.Area_start_ha)}`);
-        lines.push(`<b>Area 2020 (ha):</b> ${fmt(props.Area_end_ha)}`);
+      if (displayProps.NetChange_perc !== undefined) {
+        lines.push(`<b>Net change:</b> ${fmt(displayProps.NetChange_perc)}%`);
+        lines.push(`<b>Net change (ha):</b> ${fmt(displayProps.NetChange_ha)}`);
+        lines.push(`<b>Area 2000 (ha):</b> ${fmt(displayProps.Area_start_ha)}`);
+        lines.push(`<b>Area 2020 (ha):</b> ${fmt(displayProps.Area_end_ha)}`);
       }
-      if (props.water_residual !== undefined) {
-        lines.push(`<b>Water residual:</b> ${fmt(props.water_residual)}`);
-        lines.push(`<b>Observed water:</b> ${fmt(props.water_observed)}`);
+      if (displayProps.water_residual !== undefined) {
+        lines.push(`<b>Water residual:</b> ${fmt(displayProps.water_residual)}`);
+        lines.push(`<b>Observed water:</b> ${fmt(displayProps.water_observed)}`);
       }
-      lines.push(`<b>ID:</b> ${fmt(props[idField])}`);
+      lines.push(`<b>ID:</b> ${fmt(displayProps[idField])}`);
       return lines.join("<br/>");
     }
 
@@ -372,10 +366,6 @@
     }
 
     const interactiveLayers = [];
-    if (CONFIG.drained_geojson) {
-      interactiveLayers.push("lakes-drained-fill");
-      interactiveLayers.push("lakes-drained-circle");
-    }
     if (CONFIG.show_main_layer !== false) {
       interactiveLayers.push("lakes-fill");
     }

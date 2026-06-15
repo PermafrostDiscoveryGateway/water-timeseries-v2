@@ -198,7 +198,6 @@ class MapViewer:
         if self._parquet_path is None:
             raise ValueError("parquet_path is required to load lake attributes for overlays")
             
-        import geopandas as gpd
         gdf = gpd.read_parquet(self._parquet_path, filters=[(self.id_column, "in", list(drained_ids))])
         
         if self.geometry_column in gdf.columns:
@@ -259,20 +258,9 @@ class MapViewer:
         )
         if self.pmtiles_file:
             st.caption(f"Tiles: `{self.pmtiles_file}`")
-        drained_geojson = None
-        drained_centroids_geojson = None
-        if getattr(self, "drained_gdf", None) is not None and len(self.drained_gdf) > 0:
-            import json
-            sanitized = _sanitize_geojson_properties(self.drained_gdf)
-            drained_geojson = json.loads(sanitized.to_json())
-
-            import warnings
-            centroids_gdf = self.drained_gdf.copy()
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore", category=UserWarning)
-                centroids_gdf.geometry = centroids_gdf.geometry.centroid
-            sanitized_centroids = _sanitize_geojson_properties(centroids_gdf)
-            drained_centroids_geojson = json.loads(sanitized_centroids.to_json())
+        drained_data = None
+        if getattr(self, "drained_data", None) is not None:
+            drained_data = self.drained_data
 
         render_pmtiles_map(
             pmtiles_file=self.pmtiles_file,
@@ -280,8 +268,7 @@ class MapViewer:
             vector_file_for_bounds=None,
             id_column=self.id_column,
             viz_configuration=self.viz_configuration_name or "colored_historical",
-            drained_geojson=drained_geojson,
-            drained_centroids_geojson=drained_centroids_geojson,
+            drained_data=drained_data,
             show_main_layer=self.show_main_layer,
         )
         selected = sync_query_param_selection(self.id_column)
@@ -952,16 +939,27 @@ def create_app(
         )
         if show_drained and drained_breaks is not None and not drained_breaks.empty:
             drained_ids = drained_breaks.index.unique().tolist()
-            drained_gdf = viewer.load_drained_gdf(drained_ids).merge(
-                drained_breaks.reset_index(),
-                on=id_column,
-                how="inner",
-            )
-            viewer.drained_gdf = drained_gdf
-            viewer.drained_label = drained_label
-            viewer.show_main_layer = False
+            if map_backend == "pmtiles":
+                # Convert the breaks dataframe directly to a dictionary of properties
+                # We format datetime to string to ensure JSON serialization
+                breaks_df = drained_breaks.copy()
+                if "date" in breaks_df.columns:
+                    breaks_df["date"] = breaks_df["date"].astype(str)
+                viewer.drained_data = breaks_df.to_dict(orient="index")
+                viewer.drained_label = drained_label
+                viewer.show_main_layer = True
+            else:
+                drained_gdf = viewer.load_drained_gdf(drained_ids).merge(
+                    drained_breaks.reset_index(),
+                    on=id_column,
+                    how="inner",
+                )
+                viewer.drained_gdf = drained_gdf
+                viewer.drained_label = drained_label
+                viewer.show_main_layer = False
         elif show_drained:
             viewer.drained_gdf = None
+            viewer.drained_data = None
             viewer.drained_label = drained_label
             viewer.show_main_layer = True
 

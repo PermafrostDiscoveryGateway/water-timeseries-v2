@@ -168,19 +168,7 @@ def main(
 
     # Use provided paths or defaults
     if vector_file is None:
-        if pmtiles_file:
-            pm_path = Path(pmtiles_file)
-            possible_parquet = pm_path.parent / pm_path.name.replace("_dual.pmtiles", ".parquet").replace(".pmtiles", ".parquet")
-            if possible_parquet.exists():
-                vector_file = possible_parquet
-            else:
-                parquets = list(pm_path.parent.glob("*.parquet"))
-                if parquets:
-                    vector_file = parquets[0]
-                else:
-                    vector_file = default_vector_file
-        else:
-            vector_file = default_vector_file
+        vector_file = default_vector_file
     if dw_dataset_file is None:
         dw_dataset_file = default_dw_dataset_file
     if jrc_dataset_file is None:
