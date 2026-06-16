@@ -13,7 +13,7 @@ _TEST_NRT_DIR = _REPO_ROOT / "tests" / "data" / "nrt"
 
 def _resolve_default_nrt_dir() -> Path | None:
     """Return the first NRT fixture directory that contains dashboard parquet files."""
-    for candidate in (_DEFAULT_NRT_DIR, _TEST_NRT_DIR, Path("downloads")):
+    for candidate in (_DEFAULT_NRT_DIR, _TEST_NRT_DIR, Path("downloads/nrt"), Path("downloads")):
         counts_file = candidate / "nrt_monthly_drain_counts.parquet"
         breaks_file = candidate / "nrt_monthly_drain_breaks.parquet"
         if counts_file.exists() or breaks_file.exists():

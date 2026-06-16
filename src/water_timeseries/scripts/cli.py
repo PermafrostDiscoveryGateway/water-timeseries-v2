@@ -462,12 +462,14 @@ def breakpoint_analysis_historical(
     # Get values from merged config
     water_dataset_file = config_dict.get("water_dataset_file")
     output_file = config_dict.get("output_file")
+    if not output_file:
+        output_file = "downloads/nrt/historical_drain_breaks.parquet"
     logfile_val = config_dict.get("logfile")
     verbose_val = config_dict.get("verbose", 0)
 
     # Validate required arguments
-    if not water_dataset_file or not output_file:
-        logger.error("water_dataset_file and output_file are required. Provide via CLI arguments or config file.")
+    if not water_dataset_file:
+        logger.error("water_dataset_file is required. Provide via CLI arguments or config file.")
         raise SystemExit(1)
 
     # Setup logging AFTER config is loaded
@@ -749,7 +751,7 @@ def breakpoint_analysis_nrt(
         resolved_output_file = (
             output_file
             if output_file is not None
-            else Path(dataset_file).parent / f"nrt_{analysis_date}_drain_breaks.parquet"
+            else Path("downloads/nrt") / f"nrt_{analysis_date}_drain_breaks.parquet"
         )
         logger.info(
             "Starting NRT pre-computation (single month):\n"
@@ -794,7 +796,7 @@ def breakpoint_analysis_nrt(
     months = pd.period_range(start=start_ts, end=end_ts, freq="M")
     month_strs = [str(m) for m in months]  # "YYYY-MM" format
 
-    resolved_output_dir = output_dir if output_dir is not None else Path(dataset_file).parent
+    resolved_output_dir = output_dir if output_dir is not None else Path("downloads/nrt")
     resolved_output_dir = Path(resolved_output_dir)
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
 

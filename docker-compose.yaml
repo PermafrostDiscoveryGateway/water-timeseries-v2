@@ -11,13 +11,15 @@ services:
       - --server.address=0.0.0.0
       - --
       - --vector-file
-      - ${VECTOR_FILE:-tests/data/lake_polygons.parquet}
+      - ${VECTOR_FILE:-downloads/lake_polygons.parquet}
       - --dw-dataset-file
       - ${DW_DATASET_FILE:-downloads/data.zarr}
       - --jrc-dataset-file
       - ${JRC_DATASET_FILE:-downloads/lakes_jrc_viz.zarr}
       - --precomputed-nrt-dir
-      - ${PRECOMPUTED_NRT_DIR:-downloads/nrt-demo}
+      - ${PRECOMPUTED_NRT_DIR:-downloads/nrt}
+      - --pmtiles-file
+      - ${PMTILES_FILE:-downloads/tiles/lake_polygons.pmtiles}
     volumes:
       - .:/app
       # Keep image .venv; a plain .:/app mount would hide it with an empty host dir
