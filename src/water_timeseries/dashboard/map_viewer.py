@@ -1,6 +1,7 @@
 """Map Viewer dashboard component using Streamlit and lonboard for high-performance mapping."""
 
 import os
+from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
@@ -25,7 +26,8 @@ from water_timeseries.utils.dashboard import (
     load_dataset,
     plot_time_series_data,
 )
-from water_timeseries.utils.earthengine import initialize_earth_engine
+
+from water_timeseries.utils.earthengine import get_rioxarray_ds_from_lake, visualize_s2_first_and_last, initialize_earth_engine
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.map_styling import (
     format_tooltip_columns,
@@ -357,6 +359,37 @@ class MapViewer:
                     color_column="water_residual",
                     vmin=-1,
                     vmax=0,
+                    colormap=plt.cm.Reds,
+                    edge_weight=2,
+                    fill_opacity=0.8,
+                    edge_color="#dddddd",
+                )
+
+                # Format tooltip columns using utility function
+                # Include Area columns for full tooltip display
+                tooltip_columns = [
+                    ("water_residual", "Water residual:", "{:.2f}", ""),
+                    ("water_observed", "Observed water:", "{:.2f}", ""),
+                    ("water_predicted", "Predicted water:", "{:.2f}", ""),
+                    ("water_historical_median", "Historical median water:", "{:.2f}", ""),
+                    ("water_historical_min", "Historical minimum:", "{:.2f}", ""),
+                    ("drainage_confidence", "Drainage Confidence:", "{:}", ""),
+                ]
+            else:
+                style_function = get_default_style_function()
+
+        elif viz_configuration_name == "nrt_drainage_confidence":
+            # Create style function based on whether NetChange_perc column exists
+            if "drainage_confidence" in valid_gdf.columns:
+                # add tile layers
+                tcvis_tile_layer.add_to(m)
+                tile_layer_esriworld.add_to(m)
+                tile_layer_darkmatter.add_to(m)
+
+                style_function = get_colored_style_function(
+                    color_column="drainage_confidence",
+                    vmin=0,
+                    vmax=3,
                     colormap=plt.cm.Reds_r,
                     edge_weight=2,
                     fill_opacity=0.8,
@@ -1315,6 +1348,27 @@ def create_app(
                                     mime="image/gif",
                                     key="download_existing_landsat",
                                 )
+        ###################### START Recent imagery plotter #############################
+        st.divider()
+        st.subheader("🛰️ Recent imagery")
+
+        # setup today's date and one year go
+        today = datetime.now()
+        one_year_ago = today - timedelta(days=366)
+
+        # pull ds via xee
+        ds = get_rioxarray_ds_from_lake(
+            lake_gdf=viewer.gdf,
+            id_geohash=current,
+            start_date=one_year_ago.strftime("%Y-%m-%d"),
+            end_date=today.strftime("%Y-%m-%d"),
+        )
+        fig = visualize_s2_first_and_last(ds)
+
+        # plot figure
+        st.pyplot(fig)
+
+        ###################### END Recent imagery plotter #############################
 
         # Popup dialog for time series
         if st.session_state.get("show_ts_popup", False) and current:
