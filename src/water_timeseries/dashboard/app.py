@@ -13,10 +13,12 @@ _TEST_NRT_DIR = _REPO_ROOT / "tests" / "data" / "nrt"
 
 def _resolve_default_nrt_dir() -> Path | None:
     """Return the first NRT fixture directory that contains dashboard parquet files."""
-    for candidate in (_DEFAULT_NRT_DIR, _TEST_NRT_DIR):
+    for candidate in (_DEFAULT_NRT_DIR, _TEST_NRT_DIR, Path("downloads/nrt"), Path("downloads")):
         counts_file = candidate / "nrt_monthly_drain_counts.parquet"
         breaks_file = candidate / "nrt_monthly_drain_breaks.parquet"
         if counts_file.exists() or breaks_file.exists():
+            return candidate
+        if candidate.exists() and list(candidate.glob("nrt_*_drain_breaks.parquet")):
             return candidate
     return None
 
@@ -98,6 +100,18 @@ def parse_args():
             "This controls the styling and color scheme of the map layers."
         ),
     )
+    parser.add_argument(
+        "--pmtiles-file",
+        type=str,
+        default=None,
+        help="Path to a .pmtiles archive for fast vector-tile map rendering (millions of lakes).",
+    )
+    parser.add_argument(
+        "--pmtiles-url",
+        type=str,
+        default=None,
+        help="HTTP(S) URL to a hosted .pmtiles file (e.g. on S3). Overrides local tile server.",
+    )
 
     return parser.parse_args()
 
@@ -110,6 +124,8 @@ def main(
     offline_mode: bool = False,
     ee_project: str = None,
     viz_configuration: str = None,
+    pmtiles_file: str | Path = None,
+    pmtiles_url: str = None,
     dw_start_year: int = None,
     dw_end_year: int = None,
     dw_start_month: int = None,
@@ -177,6 +193,8 @@ def main(
         dw_start_month=dw_start_month,
         dw_end_month=dw_end_month,
         viz_configuration_name=viz_configuration,
+        pmtiles_file=pmtiles_file,
+        pmtiles_url=pmtiles_url,
     )
 
 
@@ -194,4 +212,6 @@ if __name__ == "__main__":
         dw_start_month=args.dw_start_month,
         dw_end_month=args.dw_end_month,
         viz_configuration=args.viz_configuration,
+        pmtiles_file=args.pmtiles_file,
+        pmtiles_url=args.pmtiles_url,
     )

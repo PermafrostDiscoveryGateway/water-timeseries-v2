@@ -6,12 +6,26 @@ from typing import Optional, Tuple
 
 import matplotlib.pyplot as plt
 import streamlit as st
+import xarray as xr
 
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
-from water_timeseries.utils.io import load_xarray_dataset
+from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 
 
+@st.cache_data(ttl=3600, show_spinner="Loading GeoDataframe dataset from parquet...")
+def load_lake_polygons_cached(file_path: str):
+    gdf = load_vector_dataset(file_path)
+    return gdf
+
+
+@st.cache_data(ttl=3600, show_spinner="Loading xarray dataset")
+def load_xarray_dataset_cached(file_path: str):
+    return load_xarray_dataset(file_path)
+
+
+# loading slow for large datasets
+@st.cache_data(ttl=3600, show_spinner="Loading xarray dataset from zarr...")
 def load_dataset(
     dataset_type: str,
     zarr_path: str | Path,
@@ -59,6 +73,13 @@ def check_dataset_availability(dataset: Optional[DWDataset | JRCDataset], id_geo
     if dataset is None:
         return False
     return id_geohash in dataset.object_ids_
+
+
+def check_dataset_availability_ds_raw(dataset: xr.Dataset, id_geohash: str) -> bool:
+    """Check if the specific ID is available in the dataset."""
+    if dataset is None:
+        return False
+    return id_geohash in dataset.id_geohash
 
 
 def plot_time_series_data(

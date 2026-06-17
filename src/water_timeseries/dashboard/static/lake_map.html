@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet" />
+  <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+  <script src="https://unpkg.com/pmtiles@4.1.0/dist/pmtiles.js"></script>
+  <style>
+    html, body { margin: 0; padding: 0; width: 100%; }
+    #map {
+      width: 100%;
+      height: var(--map-height, 620px);
+    }
+    #status {
+      position: absolute;
+      top: 8px;
+      left: 8px;
+      z-index: 3;
+      background: rgba(255,255,255,0.92);
+      padding: 6px 10px;
+      border-radius: 4px;
+      font: 12px system-ui, sans-serif;
+      color: #333;
+      max-width: 90%;
+      display: none;
+    }
+    #status.error { color: #b00020; display: block; }
+    .maplibregl-popup-content {
+      font-family: system-ui, sans-serif;
+      font-size: 13px;
+      line-height: 1.4;
+      max-width: 280px;
+    }
+    .select-lake-btn {
+      margin-top: 8px;
+      padding: 6px 10px;
+      background: #0068c9;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .select-lake-btn:hover { background: #0050a0; }
+    .legend {
+      position: absolute;
+      bottom: 24px;
+      right: 10px;
+      background: white;
+      padding: 10px 12px;
+      border-radius: 5px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.2);
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      z-index: 2;
+      max-width: 200px;
+    }
+    .legend-bar {
+      height: 14px;
+      margin: 6px 0 4px;
+      border: 1px solid #ccc;
+      background: linear-gradient(to right, #d73027, #fee090, #4575b4);
+    }
+    .basemap-control {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: white;
+      padding: 8px 10px;
+      border-radius: 5px;
+      box-shadow: 0 0 12px rgba(0,0,0,0.2);
+      font-family: system-ui, sans-serif;
+      font-size: 12px;
+      z-index: 2;
+    }
+    .basemap-control select {
+      margin-left: 5px;
+      padding: 2px 4px;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div id="status"></div>
+  <div class="basemap-control" id="basemap-control">
+    <label for="basemap-select"><b>Basemap:</b></label>
+    <select id="basemap-select">
+      <option value="darkmatter">Dark Matter (CartoDB)</option>
+      <option value="esriworld">ESRI World Imagery</option>
+      <option value="tcvis">TCVIS Landsat Trends (AWI)</option>
+    </select>
+  </div>
+  <div id="map"></div>
+  <div class="legend" id="legend"></div>
+  <script>
+    const CONFIG = __CONFIG_JSON__;
+    document.documentElement.style.setProperty(
+      "--map-height",
+      (CONFIG.height || 620) + "px"
+    );
+
+    const statusEl = document.getElementById("status");
+    function showError(msg) {
+      statusEl.textContent = msg;
+      statusEl.className = "error";
+      console.error(msg);
+    }
+
+    const pmtilesHttpUrl = CONFIG.pmtiles_url;
+    const protocol = new pmtiles.Protocol();
+    protocol.add(new pmtiles.PMTiles(pmtilesHttpUrl));
+    maplibregl.addProtocol("pmtiles", protocol.tile);
+
+    const pmtilesUrl = "pmtiles://" + pmtilesHttpUrl;
+    const idField = CONFIG.id_column || "id_geohash";
+    // viz_configuration from config — used as a hint only, not as the sole
+    // source of truth.  The paint expression below is FULLY DATA-DRIVEN:
+    // it inspects each feature's tile properties and chooses the right color
+    // regardless of what the server-side config says.  This prevents the
+    // black/gray polygon issue when the config does not match the tile data.
+    const viz = CONFIG.viz_configuration || "colored_historical";
+    const sourceLayer = CONFIG.source_layer || "lakes";
+
+    // DATA-DRIVEN fill-color:
+    //  1. If NetChange_perc is a number  → historical colour ramp (red→blue)
+    //  2. Else if water_residual is a number → NRT colour ramp (dark-red→peach)
+    //  3. Otherwise                           → neutral grey
+    const dataDrivenFillColor = [
+      "case",
+      ["==", ["typeof", ["get", "NetChange_perc"]], "number"],
+      [
+        "interpolate", ["linear"], ["get", "NetChange_perc"],
+        -40, "#d73027",
+        -20, "#f46d43",
+          0, "#fee090",
+         20, "#74add1",
+         40, "#4575b4"
+      ],
+      ["==", ["typeof", ["get", "water_residual"]], "number"],
+      [
+        "interpolate", ["linear"], ["get", "water_residual"],
+        -1.0, "#7f0000",
+        -0.5, "#d73027",
+         0.0, "#fcae91"
+      ],
+      "#888888"
+    ];
+
+    let lakePaint = {
+      "fill-color": dataDrivenFillColor,
+      "fill-opacity": 0.85,
+      "fill-outline-color": "#222222"
+    };
+    let lakeOutlineColor = "#1a1a1a";
+    let lakeOutlineOpacity = 0.9;
+    
+    // Highlight drained lakes if we have drained_data
+    if (CONFIG.drained_data && Object.keys(CONFIG.drained_data).length > 0) {
+      const drainedIds = Object.keys(CONFIG.drained_data);
+      lakePaint = { ...lakePaint };
+      lakePaint["fill-color"] = [
+        "match",
+        ["get", idField],
+        drainedIds,
+        "#d73027", // Highlight color for drained
+        lakePaint["fill-color"] // Default color for others
+      ];
+      lakeOutlineColor = [
+        "match",
+        ["get", idField],
+        drainedIds,
+        "#ffffff", // Highlight outline for drained
+        "#1a1a1a" // Default outline
+      ];
+      lakeOutlineOpacity = [
+        "match",
+        ["get", idField],
+        drainedIds,
+        1.0, 
+        0.5 // Dim non-drained lakes outlines
+      ];
+      lakePaint["fill-opacity"] = [
+        "match",
+        ["get", idField],
+        drainedIds,
+        1.0, 
+        0.5 // Dim non-drained lakes fill
+      ];
+    }
+
+    const sources = {
+      darkmatter: {
+        type: "raster",
+        tiles: ["https://basemaps.cartocdn.com/dark_all/{z}/{x}/{y}@2x.png"],
+        tileSize: 256,
+        attribution: "&copy; OpenStreetMap &copy; CARTO"
+      },
+      esriworld: {
+        type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256,
+        attribution: "Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community"
+      },
+      tcvis: {
+        type: "raster",
+        tiles: ["https://maps.awi.de/services/common/permafrost/ows?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&FORMAT=image/png&TRANSPARENT=true&LAYERS=tcvis&STYLES=composite&CRS=EPSG:3857&WIDTH=256&HEIGHT=256&BBOX={bbox-epsg-3857}"],
+        tileSize: 256,
+        attribution: "&copy; AWI Permafrost"
+      },
+      lakes: {
+        type: "vector",
+        url: pmtilesUrl,
+        attribution: "Lake polygons (PMTiles)"
+      }
+    };
+
+    const savedBasemap = sessionStorage.getItem("preferred_basemap");
+    const defaultBasemap = savedBasemap || (viz === "nrt_drainage" ? "tcvis" : "darkmatter");
+    
+    const layers = [
+      { id: "basemap-darkmatter", type: "raster", source: "darkmatter", layout: { visibility: defaultBasemap === "darkmatter" ? "visible" : "none" } },
+      { id: "basemap-esriworld", type: "raster", source: "esriworld", layout: { visibility: defaultBasemap === "esriworld" ? "visible" : "none" } },
+      { id: "basemap-tcvis", type: "raster", source: "tcvis", layout: { visibility: defaultBasemap === "tcvis" ? "visible" : "none" } },
+      {
+        id: "lakes-points",
+        type: "circle",
+        source: "lakes",
+        "source-layer": "lakes_points",
+        paint: {
+          "circle-radius": [
+            "interpolate", ["linear"], ["zoom"],
+            0, 1.5,
+            5, 3
+          ],
+          "circle-color": lakePaint["fill-color"],
+          "circle-opacity": lakePaint["fill-opacity"],
+          "circle-stroke-color": lakeOutlineColor,
+          "circle-stroke-width": 1
+        },
+        layout: {
+          visibility: CONFIG.show_main_layer !== false ? "visible" : "none"
+        }
+      },
+      {
+        id: "lakes-fill",
+        type: "fill",
+        source: "lakes",
+        "source-layer": sourceLayer,
+        paint: lakePaint,
+        layout: {
+          visibility: CONFIG.show_main_layer !== false ? "visible" : "none"
+        }
+      },
+      {
+        id: "lakes-outline",
+        type: "line",
+        source: "lakes",
+        "source-layer": sourceLayer,
+        paint: {
+          "line-color": lakeOutlineColor,
+          "line-width": 1.5,
+          "line-opacity": lakeOutlineOpacity
+        },
+        layout: {
+          visibility: CONFIG.show_main_layer !== false ? "visible" : "none"
+        }
+      }
+    ];
+
+    const map = new maplibregl.Map({
+      container: "map",
+      style: {
+        version: 8,
+        sources: sources,
+        layers: layers
+      },
+      center: CONFIG.center || [-164.1, 66.5],
+      zoom: CONFIG.zoom || 8
+    });
+
+    map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+    const basemapSelect = document.getElementById("basemap-select");
+    basemapSelect.value = defaultBasemap;
+
+    function updateOutlineColor(basemap) {
+      const isDark = basemap === "darkmatter";
+      let outlineColor = isDark ? "#ffffff" : "#1a1a1a";
+      let fillOutlineColor = isDark ? "#ffffff" : "#222222";
+
+      if (CONFIG.drained_data && Object.keys(CONFIG.drained_data).length > 0) {
+        const drainedIds = Object.keys(CONFIG.drained_data);
+        outlineColor = [
+          "match",
+          ["get", idField],
+          drainedIds,
+          "#ffffff", // Highlight outline for drained
+          outlineColor // Default outline
+        ];
+        fillOutlineColor = [
+          "match",
+          ["get", idField],
+          drainedIds,
+          "#ffffff", // Highlight outline for drained
+          fillOutlineColor // Default outline
+        ];
+      }
+
+      if (map.getLayer("lakes-outline")) {
+        map.setPaintProperty("lakes-outline", "line-color", outlineColor);
+      }
+      if (map.getLayer("lakes-fill")) {
+        map.setPaintProperty("lakes-fill", "fill-outline-color", fillOutlineColor);
+      }
+      if (map.getLayer("lakes-points")) {
+        map.setPaintProperty("lakes-points", "circle-stroke-color", outlineColor);
+      }
+    }
+
+    basemapSelect.addEventListener("change", (e) => {
+      const selected = e.target.value;
+      sessionStorage.setItem("preferred_basemap", selected);
+      ["darkmatter", "esriworld", "tcvis"].forEach(id => {
+        map.setLayoutProperty(`basemap-${id}`, "visibility", id === selected ? "visible" : "none");
+      });
+      updateOutlineColor(selected);
+    });
+
+    function decodeGeohash(geohash) {
+      const BASE32 = "0123456789bcdefghjkmnpqrstuvwxyz";
+      const BITS = [16, 8, 4, 2, 1];
+      let is_even = true;
+      let lat = [-90.0, 90.0];
+      let lon = [-180.0, 180.0];
+      for (let i = 0; i < geohash.length; i++) {
+        let cd = BASE32.indexOf(geohash[i]);
+        for (let j = 0; j < BITS.length; j++) {
+          let mask = BITS[j];
+          if (is_even) {
+            if (cd & mask) { lon[0] = (lon[0] + lon[1]) / 2; } else { lon[1] = (lon[0] + lon[1]) / 2; }
+          } else {
+            if (cd & mask) { lat[0] = (lat[0] + lat[1]) / 2; } else { lat[1] = (lat[0] + lat[1]) / 2; }
+          }
+          is_even = !is_even;
+        }
+      }
+      return [(lon[0] + lon[1]) / 2, (lat[0] + lat[1]) / 2];
+    }
+
+    map.on("load", () => {
+      updateOutlineColor(defaultBasemap);
+      if (CONFIG.bounds) {
+        map.fitBounds(CONFIG.bounds, { padding: 48, maxZoom: 11, duration: 0 });
+      }
+      
+      // Add point markers for drained lakes (limit to 1000 for performance)
+      if (CONFIG.drained_data && Object.keys(CONFIG.drained_data).length > 0) {
+        const drainedIds = Object.keys(CONFIG.drained_data).slice(0, 1000);
+        drainedIds.forEach(id => {
+          const coords = decodeGeohash(id);
+          const marker = new maplibregl.Marker({ color: "#d73027" })
+            .setLngLat(coords)
+            .addTo(map);
+            
+          const props = { [idField]: id, ...CONFIG.drained_data[id] };
+          
+          const html = formatProps(props) +
+            `<br/><button class="select-lake-btn" type="button" onclick="selectLake('${id}')">Select for time series</button>`;
+
+          const popup = new maplibregl.Popup({ closeOnClick: true, offset: 25 })
+            .setHTML(html);
+            
+          marker.setPopup(popup);
+        });
+      }
+      map.resize();
+      setTimeout(() => map.resize(), 200);
+      setTimeout(() => map.resize(), 800);
+    });
+
+    map.on("idle", () => {
+      if (CONFIG.show_main_layer !== false) {
+        const features = map.queryRenderedFeatures({ layers: ["lakes-fill"] });
+        if (!features.length) {
+          showError(
+            "No lake tiles in view. Check that PMTiles is reachable at " + pmtilesHttpUrl
+          );
+        }
+      }
+    });
+
+    map.on("error", (e) => {
+      if (e.error && e.error.message) {
+        showError(e.error.message);
+      }
+    });
+
+    function formatProps(props) {
+      // Augment props with drained_data if available
+      let displayProps = { ...props };
+      if (CONFIG.drained_data && CONFIG.drained_data[props[idField]]) {
+        displayProps = { ...displayProps, ...CONFIG.drained_data[props[idField]] };
+      }
+      
+      const lines = [];
+      const fmt = (v) => {
+        if (v === null || v === undefined) return "N/A";
+        return typeof v === "number" ? v.toFixed(2) : v;
+      };
+      if (displayProps.NetChange_perc !== undefined) {
+        lines.push(`<b>Net change:</b> ${fmt(displayProps.NetChange_perc)}%`);
+        lines.push(`<b>Net change (ha):</b> ${fmt(displayProps.NetChange_ha)}`);
+        lines.push(`<b>Area 2000 (ha):</b> ${fmt(displayProps.Area_start_ha)}`);
+        lines.push(`<b>Area 2020 (ha):</b> ${fmt(displayProps.Area_end_ha)}`);
+      }
+      if (displayProps.water_residual !== undefined) {
+        lines.push(`<b>Water residual:</b> ${fmt(displayProps.water_residual)}`);
+        lines.push(`<b>Observed water:</b> ${fmt(displayProps.water_observed)}`);
+      }
+      lines.push(`<b>ID:</b> ${fmt(displayProps[idField])}`);
+      return lines.join("<br/>");
+    }
+
+    function selectLake(geohash) {
+      if (geohash == null || geohash === "") return;
+      const id = String(geohash);
+      // Embedded in Streamlit st.iframe (cross-origin): postMessage to parent.
+      if (window.parent && window.parent !== window) {
+        window.parent.postMessage({ type: "water_timeseries_select_lake", id }, "*");
+        return;
+      }
+      // Standalone map tab: update URL directly.
+      const url = new URL(window.location.href);
+      url.searchParams.set("selected_lake", id);
+      window.location.href = url.toString();
+    }
+
+    const interactiveLayers = [];
+    if (CONFIG.show_main_layer !== false) {
+      interactiveLayers.push("lakes-fill", "lakes-points");
+    }
+    
+    interactiveLayers.forEach(layer => {
+      map.on("click", layer, (e) => {
+        if (!e.features || !e.features.length) return;
+        const props = e.features[0].properties || {};
+        const geohash = props[idField];
+        const html = formatProps(props) +
+          `<br/><button class="select-lake-btn" type="button">Select for time series</button>`;
+
+        new maplibregl.Popup({ closeOnClick: true })
+          .setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map)
+          .getElement()
+          .querySelector(".select-lake-btn")
+          ?.addEventListener("click", () => selectLake(geohash));
+      });
+
+      map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
+      map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
+    });
+
+    const legend = document.getElementById("legend");
+
+    // Set legend initially based on config hint, then refine once tiles load.
+    function setLegendForData(hasNetChange, hasWaterResidual) {
+      if (hasNetChange) {
+        legend.innerHTML = "<b>Net change (%)</b><div class='legend-bar'></div><div style='display:flex;justify-content:space-between'><span>-40%</span><span>0</span><span>+40%</span></div>";
+      } else if (hasWaterResidual) {
+        legend.innerHTML = "<b>Water residual</b><div class='legend-bar' style='background:linear-gradient(to right,#7f0000,#fcae91)'></div>";
+      }
+    }
+
+    // Initial legend based on config hint (replaced once tiles are inspected).
+    setLegendForData(viz !== "nrt_drainage", viz === "nrt_drainage");
+
+    // After tiles load, inspect actual rendered features and correct the legend.
+    map.on("idle", function detectDataType() {
+      const features = map.queryRenderedFeatures({ layers: ["lakes-fill", "lakes-points"] });
+      if (!features.length) return;
+      const props = features[0].properties || {};
+      const hasNetChange = typeof props["NetChange_perc"] === "number";
+      const hasWaterResidual = typeof props["water_residual"] === "number";
+      setLegendForData(hasNetChange, hasWaterResidual);
+      // Only run once — remove listener after first successful detection.
+      map.off("idle", detectDataType);
+    });
+  </script>
+</body>
+</html>
