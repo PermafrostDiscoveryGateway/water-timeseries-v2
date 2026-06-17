@@ -5,7 +5,6 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
-import tempfile
 import warnings
 from pathlib import Path
 from typing import Optional, Sequence
@@ -13,8 +12,6 @@ from typing import Optional, Sequence
 import geopandas as gpd
 import pandas as pd
 import pyarrow.parquet as pq
-
-from water_timeseries.utils.io import load_vector_dataset
 
 # Attributes kept in vector tiles (hover, styling, selection).
 DEFAULT_TILE_PROPERTIES: tuple[str, ...] = (
@@ -187,20 +184,15 @@ def build_pmtiles(
 
     tippecanoe_bin = tippecanoe_bin or find_tippecanoe()
     if not tippecanoe_bin:
-        raise RuntimeError(
-            "tippecanoe is not installed or not on PATH. "
-            "Install it with: brew install tippecanoe"
-        )
+        raise RuntimeError("tippecanoe is not installed or not on PATH. Install it with: brew install tippecanoe")
 
     geojsonl_path = output_path.with_suffix(".geojsonl")
     print(f"Generating GeoJSON sequences for {parquet_path}...")
-    poly_path, point_path = parquet_to_geojsonseq(
-        parquet_path, geojsonl_path, property_columns=property_columns
-    )
+    poly_path, point_path = parquet_to_geojsonseq(parquet_path, geojsonl_path, property_columns=property_columns)
 
     print(f"Running tippecanoe to build PMTiles at {output_path}...")
     args: list[str] = [tippecanoe_bin, "-o", str(output_path)]
-    
+
     base_flags = []
     if tippecanoe_args:
         base_flags = list(tippecanoe_args)
@@ -209,24 +201,14 @@ def build_pmtiles(
             if f.startswith("--minimum-zoom") or f.startswith("--maximum-zoom") or f == "-l" or f == "lakes":
                 continue
             base_flags.append(f)
-            
+
     args.extend(base_flags)
 
-    poly_layer = {
-        "file": str(poly_path),
-        "layer": "lakes",
-        "minzoom": 6,
-        "maxzoom": 14
-    }
+    poly_layer = {"file": str(poly_path), "layer": "lakes", "minzoom": 6, "maxzoom": 14}
     args.extend(["-L", json.dumps(poly_layer)])
 
     if point_path:
-        point_layer = {
-            "file": str(point_path),
-            "layer": "lakes_points",
-            "minzoom": 0,
-            "maxzoom": 5
-        }
+        point_layer = {"file": str(point_path), "layer": "lakes_points", "minzoom": 0, "maxzoom": 5}
         args.extend(["-L", json.dumps(point_layer)])
 
     print("Executing command: " + " ".join(args))
@@ -240,7 +222,7 @@ def build_pmtiles(
     # cleanup and del tmp dir
     if delete_tempdir:
         shutil.rmtree(TIPPECANOE_TEMP_DIR)
-    
+
     return output_path
 
 

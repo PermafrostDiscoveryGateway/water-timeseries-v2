@@ -299,12 +299,20 @@ def precompute_nrt_monthly(
     else:
         # Create empty DataFrame with matching schema/columns
         schema_cols = [
-            "analysis_month", "id_geohash", "date", "water_observed",
-            "water_predicted", "water_residual", "water_predicted_lower_90",
-            "water_predicted_upper_90", "water_historical_mean",
-            "water_historical_median", "water_historical_std",
-            "water_historical_min", "water_historical_max",
-            "drainage_confidence"
+            "analysis_month",
+            "id_geohash",
+            "date",
+            "water_observed",
+            "water_predicted",
+            "water_residual",
+            "water_predicted_lower_90",
+            "water_predicted_upper_90",
+            "water_historical_mean",
+            "water_historical_median",
+            "water_historical_std",
+            "water_historical_min",
+            "water_historical_max",
+            "drainage_confidence",
         ]
         drained_df = pd.DataFrame(columns=schema_cols)
         logger.info("%s: no drained lakes found (threshold %.3f)", month_str, drain_threshold)

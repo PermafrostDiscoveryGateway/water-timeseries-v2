@@ -858,10 +858,9 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Optional[Path] = None) ->
     output_dir.mkdir(parents=True, exist_ok=True)
 
     nrt_dir = Path(nrt_dir)
-    monthly_files = sorted([
-        f for f in nrt_dir.glob("nrt_*_drain_breaks.parquet")
-        if f.name != "nrt_monthly_drain_breaks.parquet"
-    ])
+    monthly_files = sorted(
+        [f for f in nrt_dir.glob("nrt_*_drain_breaks.parquet") if f.name != "nrt_monthly_drain_breaks.parquet"]
+    )
     if not monthly_files:
         logger.info(f"No individual monthly NRT files found in {nrt_dir} to aggregate.")
         return
@@ -885,12 +884,8 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Optional[Path] = None) ->
     logger.info(f"Wrote consolidated breaks to {breaks_path}")
 
     if "analysis_month" in breaks_df.columns:
-        counts_df = (
-            breaks_df.groupby("analysis_month")
-            .size()
-            .reset_index(name="drained_lake_count")
-        )
-        
+        counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
+
         # Ensure all processed months are included in the counts, even if they have 0 drained lakes
         months_from_files = []
         for f in monthly_files:
@@ -898,8 +893,10 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Optional[Path] = None) ->
             if len(parts) >= 2:
                 months_from_files.append(parts[1])
         all_months_df = pd.DataFrame({"analysis_month": months_from_files})
-        
-        counts_df = pd.merge(all_months_df, counts_df, on="analysis_month", how="left").fillna({"drained_lake_count": 0})
+
+        counts_df = pd.merge(all_months_df, counts_df, on="analysis_month", how="left").fillna(
+            {"drained_lake_count": 0}
+        )
         counts_df["drained_lake_count"] = counts_df["drained_lake_count"].astype(int)
 
         counts_path = output_dir / "nrt_monthly_drain_counts.parquet"

@@ -185,15 +185,16 @@ class PmtilesServer:
     def map_iframe_url(self, config: dict[str, Any]) -> str:
         """URL for ``st.iframe`` — map HTML and PMTiles share this origin."""
         import uuid
+
         config_id = uuid.uuid4().hex
         self.config_cache[config_id] = config
-        
+
         # Clean up old configs to prevent memory leak (keep last 5)
         if len(self.config_cache) > 5:
             keys_to_remove = list(self.config_cache.keys())[:-5]
             for k in keys_to_remove:
                 self.config_cache.pop(k, None)
-                
+
         return f"{self.base_url}/map?config_id={config_id}"
 
     def stop(self) -> None:

@@ -11,7 +11,7 @@ import streamlit as st
 
 from water_timeseries.utils.io import load_vector_dataset
 from water_timeseries.utils.pmtiles_reader import read_pmtiles_header
-from water_timeseries.utils.pmtiles_serve import PmtilesServer, _MAP_HTML
+from water_timeseries.utils.pmtiles_serve import _MAP_HTML, PmtilesServer
 
 _SESSION_SERVER_KEY = "_pmtiles_map_server"
 
@@ -86,7 +86,7 @@ def _build_map_config(
 ) -> dict[str, Any]:
     bounds = None
     if not show_main_layer and drained_data:
-        pass # Without GeoJSON, we cannot easily calculate bounds. We will rely on default center/zoom or the PMTiles header.
+        pass  # Without GeoJSON, we cannot easily calculate bounds. We will rely on default center/zoom or the PMTiles header.
 
     if bounds is None and pmtiles_file is not None:
         header = read_pmtiles_header(pmtiles_file)

@@ -14,6 +14,10 @@ import plotly.graph_objects as go
 import streamlit as st
 from streamlit_folium import st_folium
 
+from water_timeseries.dashboard.pmtiles_viewer import (
+    render_pmtiles_map,
+    sync_query_param_selection,
+)
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
@@ -27,10 +31,6 @@ from water_timeseries.utils.map_styling import (
     format_tooltip_columns,
     get_colored_style_function,
     get_default_style_function,
-)
-from water_timeseries.dashboard.pmtiles_viewer import (
-    render_pmtiles_map,
-    sync_query_param_selection,
 )
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
@@ -191,20 +191,20 @@ class MapViewer:
         """Load only the subset of geometries for drained_ids using parquet filters."""
         if not drained_ids:
             return gpd.GeoDataFrame(columns=[self.id_column], geometry=[])
-        
+
         if self.gdf is not None:
             return self.gdf[self.gdf[self.id_column].isin(drained_ids)].copy()
-            
+
         if self._parquet_path is None:
             raise ValueError("parquet_path is required to load lake attributes for overlays")
-            
+
         gdf = gpd.read_parquet(self._parquet_path, filters=[(self.id_column, "in", list(drained_ids))])
-        
+
         if self.geometry_column in gdf.columns:
             gdf = gdf.set_geometry(self.geometry_column)
         if gdf.crs is None:
             gdf = gdf.set_crs(epsg=4326)
-            
+
         gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
         return gdf
 
@@ -702,11 +702,7 @@ def _load_precomputed_nrt(
 
     if counts_df is None and breaks_df is not None and not breaks_df.empty:
         if "analysis_month" in breaks_df.columns:
-            counts_df = (
-                breaks_df.groupby("analysis_month")
-                .size()
-                .reset_index(name="drained_lake_count")
-            )
+            counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
 
     return counts_df, breaks_df
 
