@@ -141,14 +141,23 @@ class PmtilesServer:
     def __init__(
         self,
         pmtiles_file: Path | str,
-        host: str = "localhost",
+        host: str = "0.0.0.0",
         port: int = 0,
+        public_host: Optional[str] = None,
     ):
         self.pmtiles_path = Path(pmtiles_file).resolve()
         self.directory = self.pmtiles_path.parent
         self.pmtiles_filename = self.pmtiles_path.name
         self.host = host
-        self.port = port
+        # Allow fixed port via env var (required for Docker port publishing).
+        # Default 0 = OS picks a random free port (works for local uv runs).
+        env_port = os.environ.get("PMTILES_PORT")
+        self.port = int(env_port) if env_port else port
+        # public_host is the hostname the *browser* should use to reach this
+        # server.  When running in Docker the container binds to 0.0.0.0 but
+        # the browser must use "localhost" (or the host IP) via the published
+        # port.  Override with the PMTILES_HOST env var or pass explicitly.
+        self.public_host: str = public_host or os.environ.get("PMTILES_HOST", "localhost")
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self.config_cache: dict[str, Any] = {}
@@ -157,7 +166,9 @@ class PmtilesServer:
     def base_url(self) -> str:
         if self._httpd is None:
             raise RuntimeError("Server is not running")
-        return f"http://{self.host}:{self._httpd.server_port}"
+        # Use public_host so the URL is reachable from the browser, even when
+        # the server socket is bound to 0.0.0.0 inside a Docker container.
+        return f"http://{self.public_host}:{self._httpd.server_port}"
 
     def start(self) -> "PmtilesServer":
         self._httpd = ThreadingHTTPServer((self.host, self.port), _PmtilesHTTPRequestHandler)

@@ -114,38 +114,44 @@
 
     const pmtilesUrl = "pmtiles://" + pmtilesHttpUrl;
     const idField = CONFIG.id_column || "id_geohash";
+    // viz_configuration from config — used as a hint only, not as the sole
+    // source of truth.  The paint expression below is FULLY DATA-DRIVEN:
+    // it inspects each feature's tile properties and chooses the right color
+    // regardless of what the server-side config says.  This prevents the
+    // black/gray polygon issue when the config does not match the tile data.
     const viz = CONFIG.viz_configuration || "colored_historical";
     const sourceLayer = CONFIG.source_layer || "lakes";
 
-    const historicalPaint = {
-      "fill-color": [
-        "interpolate",
-        ["linear"],
-        ["get", "NetChange_perc"],
+    // DATA-DRIVEN fill-color:
+    //  1. If NetChange_perc is a number  → historical colour ramp (red→blue)
+    //  2. Else if water_residual is a number → NRT colour ramp (dark-red→peach)
+    //  3. Otherwise                           → neutral grey
+    const dataDrivenFillColor = [
+      "case",
+      ["==", ["typeof", ["get", "NetChange_perc"]], "number"],
+      [
+        "interpolate", ["linear"], ["get", "NetChange_perc"],
         -40, "#d73027",
         -20, "#f46d43",
-        0, "#fee090",
-        20, "#74add1",
-        40, "#4575b4"
+          0, "#fee090",
+         20, "#74add1",
+         40, "#4575b4"
       ],
+      ["==", ["typeof", ["get", "water_residual"]], "number"],
+      [
+        "interpolate", ["linear"], ["get", "water_residual"],
+        -1.0, "#7f0000",
+        -0.5, "#d73027",
+         0.0, "#fcae91"
+      ],
+      "#888888"
+    ];
+
+    let lakePaint = {
+      "fill-color": dataDrivenFillColor,
       "fill-opacity": 0.85,
       "fill-outline-color": "#222222"
     };
-
-    const nrtPaint = {
-      "fill-color": [
-        "interpolate",
-        ["linear"],
-        ["get", "water_residual"],
-        -1, "#7f0000",
-        -0.5, "#d73027",
-        0, "#fcae91"
-      ],
-      "fill-opacity": 0.85,
-      "fill-outline-color": "#7f0000"
-    };
-
-    let lakePaint = viz === "nrt_drainage" ? nrtPaint : historicalPaint;
     let lakeOutlineColor = "#1a1a1a";
     let lakeOutlineOpacity = 0.9;
     
@@ -457,11 +463,30 @@
     });
 
     const legend = document.getElementById("legend");
-    if (viz === "nrt_drainage") {
-      legend.innerHTML = "<b>Water residual</b><div class='legend-bar' style='background:linear-gradient(to right,#7f0000,#fcae91)'></div>";
-    } else {
-      legend.innerHTML = "<b>Net change (%)</b><div class='legend-bar'></div><div style='display:flex;justify-content:space-between'><span>-40%</span><span>0</span><span>+40%</span></div>";
+
+    // Set legend initially based on config hint, then refine once tiles load.
+    function setLegendForData(hasNetChange, hasWaterResidual) {
+      if (hasNetChange) {
+        legend.innerHTML = "<b>Net change (%)</b><div class='legend-bar'></div><div style='display:flex;justify-content:space-between'><span>-40%</span><span>0</span><span>+40%</span></div>";
+      } else if (hasWaterResidual) {
+        legend.innerHTML = "<b>Water residual</b><div class='legend-bar' style='background:linear-gradient(to right,#7f0000,#fcae91)'></div>";
+      }
     }
+
+    // Initial legend based on config hint (replaced once tiles are inspected).
+    setLegendForData(viz !== "nrt_drainage", viz === "nrt_drainage");
+
+    // After tiles load, inspect actual rendered features and correct the legend.
+    map.on("idle", function detectDataType() {
+      const features = map.queryRenderedFeatures({ layers: ["lakes-fill", "lakes-points"] });
+      if (!features.length) return;
+      const props = features[0].properties || {};
+      const hasNetChange = typeof props["NetChange_perc"] === "number";
+      const hasWaterResidual = typeof props["water_residual"] === "number";
+      setLegendForData(hasNetChange, hasWaterResidual);
+      // Only run once — remove listener after first successful detection.
+      map.off("idle", detectDataType);
+    });
   </script>
 </body>
 </html>

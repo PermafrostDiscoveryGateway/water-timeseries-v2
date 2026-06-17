@@ -20,6 +20,8 @@ services:
       - ${PRECOMPUTED_NRT_DIR:-downloads/nrt}
       - --pmtiles-file
       - ${PMTILES_FILE:-downloads/tiles/lake_polygons.pmtiles}
+      - --viz-configuration
+      - ${VIZ_CONFIGURATION:-colored_historical}
     volumes:
       - .:/app
       # Keep image .venv; a plain .:/app mount would hide it with an empty host dir
@@ -30,6 +32,9 @@ services:
       - ${EARTHENGINE_CREDENTIALS_DIR:-${HOME}/.config/earthengine}:/root/.config/earthengine:ro
     ports:
       - "8501:8501"
+      # PMTiles tile server - the browser fetches tiles directly from this port.
+      # Port 0 (random) doesn't work in Docker because it can't be pre-published.
+      - "8502:8502"
     env_file:
       - path: .env
         required: false
@@ -37,3 +42,7 @@ services:
       MPLBACKEND: Agg
       EE_PROJECT: ${EE_PROJECT:-}
       EARTHENGINE_TOKEN: ${EARTHENGINE_TOKEN:-}
+      # PMTiles tile server: bind on a fixed port so Docker can publish it,
+      # and tell the browser to reach it via localhost (the published port).
+      PMTILES_PORT: "8502"
+      PMTILES_HOST: "localhost"
