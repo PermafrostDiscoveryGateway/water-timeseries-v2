@@ -799,7 +799,9 @@ def create_app(
 
     # Show offline mode indicator
     if offline_mode:
-        st.sidebar.warning("⚠️ Offline mode: Data downloads and timelapse generation are disabled.")
+        st.sidebar.warning(
+            "⚠️ Offline mode: Data downloads, timelapse generation, and recent satellite data views are disabled."
+        )
 
     # Plotting mode selection (static vs dynamic/interactive) - defaults to interactive
     # Persist the setting in query parameters so it survives iframe reloads/redirects when clicking features.
@@ -1226,24 +1228,31 @@ def create_app(
 
             ###################### START Recent imagery plotter #############################
             st.divider()
-            st.subheader("🛰️ Recent imagery")
-
-            # setup today's date and one year go
-            today = datetime.now()
-            one_year_ago = today - timedelta(days=366)
-
-            with st.spinner("Pulling most recent satellite image + one year ago... This may take a few seconds."):
-                # pull ds via xee
-                ds = get_rioxarray_ds_from_lake(
-                    lake_gdf=st.session_state.lake_polygons,
-                    id_geohash=current,
-                    start_date=one_year_ago.strftime("%Y-%m-%d"),
-                    end_date=today.strftime("%Y-%m-%d"),
+            if st.session_state.get("offline_mode", False):
+                st.warning(
+                    "⚠️ Offline mode enabled: Data download is disabled. "
+                    "Please provide data files via --dw-dataset-file and --jrc-dataset-file, "
+                    "or run without --offline-mode to enable downloads."
                 )
-                fig = visualize_s2_first_and_last(ds)
+            else:
+                st.subheader("🛰️ Recent imagery")
 
-                # plot figure
-                st.pyplot(fig, width="content")
+                # setup today's date and one year go
+                today = datetime.now()
+                one_year_ago = today - timedelta(days=366)
+
+                with st.spinner("Pulling most recent satellite image + one year ago... This may take a few seconds."):
+                    # pull ds via xee
+                    ds = get_rioxarray_ds_from_lake(
+                        lake_gdf=st.session_state.lake_polygons,
+                        id_geohash=current,
+                        start_date=one_year_ago.strftime("%Y-%m-%d"),
+                        end_date=today.strftime("%Y-%m-%d"),
+                    )
+                    fig = visualize_s2_first_and_last(ds)
+
+                    # plot figure
+                    st.pyplot(fig, width="content")
 
             ###################### END Recent imagery plotter #############################
 
