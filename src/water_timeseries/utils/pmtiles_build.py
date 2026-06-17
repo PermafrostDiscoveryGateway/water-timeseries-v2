@@ -25,6 +25,8 @@ DEFAULT_TILE_PROPERTIES: tuple[str, ...] = (
     "NetChange_perc",
 )
 
+TIPPECANOE_TEMP_DIR = Path("downloads/data").absolute()
+TIPPECANOE_TEMP_DIR.mkdir(exist_ok=True, parents=True)
 # Tippecanoe defaults tuned for global lake polygons (millions of features).
 DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
     "--force",
@@ -34,7 +36,7 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
     "--simplification=10",
     "--minimum-zoom=0",
     "--maximum-zoom=14",
-    "--temporary-directory=downloads/data",
+    f"--temporary-directory={TIPPECANOE_TEMP_DIR}",
     "-l",
     "lakes",
 )
@@ -161,6 +163,7 @@ def build_pmtiles(
     tippecanoe_args: Optional[Sequence[str]] = None,
     tippecanoe_bin: Optional[str] = None,
     keep_geojsonl: bool = False,
+    delete_tempdir: bool = True,
 ) -> Path:
     """Convert a lake GeoParquet file to a single ``.pmtiles`` archive.
 
@@ -234,6 +237,10 @@ def build_pmtiles(
         if point_path:
             point_path.unlink(missing_ok=True)
 
+    # cleanup and del tmp dir
+    if delete_tempdir:
+        shutil.rmtree(TIPPECANOE_TEMP_DIR)
+    
     return output_path
 
 
