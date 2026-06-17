@@ -23,8 +23,10 @@ from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
+    check_dataset_availability_ds_raw,
     load_dataset,
     load_lake_polygons_cached,
+    load_xarray_dataset_cached,
     plot_time_series_data,
 )
 from water_timeseries.utils.earthengine import (
@@ -830,8 +832,18 @@ def create_app(
     # Initialize dataset in session state if not already
     if "dw_dataset" not in st.session_state:
         st.session_state.dw_dataset = None
+    if "dw_dataset_raw" not in st.session_state:
+        if zarr_path:
+            st.session_state.dw_dataset_raw = load_xarray_dataset_cached(zarr_path)
+        else:
+            st.session_state.dw_dataset_raw = None
     if "jrc_dataset" not in st.session_state:
         st.session_state.jrc_dataset = None
+    if "jrc_dataset_raw" not in st.session_state:
+        if zarr_path_jrc:
+            st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc)
+        else:
+            st.session_state.jrc_dataset_raw = None
     if "lake_polygons" not in st.session_state:
         st.session_state.lake_polygons = load_lake_polygons_cached(data_path_input)
         # st.session_state.lake_polygons = None
@@ -1050,17 +1062,32 @@ def create_app(
             dw_dataset = st.session_state.get("dw_dataset")
             jrc_dataset = st.session_state.get("jrc_dataset")
 
+            id_available_dw_raw = check_dataset_availability_ds_raw(st.session_state.dw_dataset_raw, current)
+            id_available_jrc_raw = check_dataset_availability_ds_raw(st.session_state.jrc_dataset_raw, current)
+            print("DWDATASET:", dw_dataset is None, id_available_dw_raw)
             # Load DW dataset if needed
-            if dw_dataset is None:
+            if id_available_dw_raw:
+                dw_dataset = DWDataset(st.session_state.dw_dataset_raw.sel(id_geohash=[current]))
+                success = True
+                st.session_state.dw_dataset = dw_dataset
+            else:
+                # elif dw_dataset is None and st.session_state.dw_dataset_raw is None:
                 dw_dataset, success = load_dataset("dw", zarr_path_input, st.session_state.downloaded_dsdw)
-                if success and dw_dataset is not None:
-                    st.session_state.dw_dataset = dw_dataset
+
+            if success and dw_dataset is not None:
+                st.session_state.dw_dataset = dw_dataset
 
             # Load JRC dataset if needed
-            if jrc_dataset is None:
+            if id_available_jrc_raw:
+                jrc_dataset = JRCDataset(st.session_state.jrc_dataset_raw.sel(id_geohash=[current]))
+                success = True
+
+            else:
+                # elif jrc_dataset is None and st.session_state.jrc_dataset_raw is None:
                 jrc_dataset, success = load_dataset("jrc", zarr_path_jrc_input, st.session_state.downloaded_dsjrc)
-                if success and jrc_dataset is not None:
-                    st.session_state.jrc_dataset = jrc_dataset
+
+            if success and jrc_dataset is not None:
+                st.session_state.jrc_dataset = jrc_dataset
 
             # Re-check availability after loading
             id_available_dw = check_dataset_availability(st.session_state.dw_dataset, current)
@@ -1205,17 +1232,18 @@ def create_app(
             today = datetime.now()
             one_year_ago = today - timedelta(days=366)
 
-            # pull ds via xee
-            ds = get_rioxarray_ds_from_lake(
-                lake_gdf=st.session_state.lake_polygons,
-                id_geohash=current,
-                start_date=one_year_ago.strftime("%Y-%m-%d"),
-                end_date=today.strftime("%Y-%m-%d"),
-            )
-            fig = visualize_s2_first_and_last(ds)
+            with st.spinner("Pulling most recent satellite image + one year ago... This may take a few seconds."):
+                # pull ds via xee
+                ds = get_rioxarray_ds_from_lake(
+                    lake_gdf=st.session_state.lake_polygons,
+                    id_geohash=current,
+                    start_date=one_year_ago.strftime("%Y-%m-%d"),
+                    end_date=today.strftime("%Y-%m-%d"),
+                )
+                fig = visualize_s2_first_and_last(ds)
 
-            # plot figure
-            st.pyplot(fig, width="content")
+                # plot figure
+                st.pyplot(fig, width="content")
 
             ###################### END Recent imagery plotter #############################
 
