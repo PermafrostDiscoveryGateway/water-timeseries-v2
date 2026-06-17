@@ -27,7 +27,16 @@ Documentation is automatically built and deployed on every push to `main` using 
 
 ## Dashboard
 
-Interactive Streamlit dashboard for visualizing lake polygons and time series data:
+Interactive Streamlit dashboard for visualizing lake polygons and time series data.
+For millions of lakes, use **PMTiles** vector tiles (MapLibre GL) instead of loading all polygons into Folium:
+
+```bash
+brew install tippecanoe
+uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
+uv run water-timeseries dashboard --vector-file lakes.parquet --pmtiles-file tiles/lakes.pmtiles
+```
+
+Interactive Streamlit dashboard (Folium mode for smaller datasets):
 
 ```bash
 export EE_PROJECT=<YOUR GEE PROJECT>

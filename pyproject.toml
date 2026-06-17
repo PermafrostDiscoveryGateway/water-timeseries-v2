@@ -44,7 +44,7 @@ dependencies = [
     "rich>=14.3.3",
     "nbconvert>=7.17.0",
     "tk>=0.1.0",
-    "geemap>=0.37.2",
+    "geemap>=0.37.3",
     "eemont>=2025.7.1",
     "streamlit>=1.40.0",
     "plotly>=6.0.0",
@@ -67,7 +67,8 @@ dependencies = [
     "gcloud>=0.18.3",
     "xee>=0.1.1",
     "rioxarray>=0.19.0",
-]
+    "tippecanoe>=2.72.0",
+
 
 [project.optional-dependencies]
 dev = [

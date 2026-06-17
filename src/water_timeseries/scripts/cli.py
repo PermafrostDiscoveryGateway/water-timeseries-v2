@@ -30,6 +30,9 @@ from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
 
 # Import NRT pre-computation
 from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
+from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_archive
+from water_timeseries.utils.pmtiles_build import build_pmtiles_for_nrt, find_tippecanoe
+from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
 # Create the main app
 app = cyclopts.App(name="water-timeseries", help="Water timeseries analysis tools")
@@ -88,6 +91,8 @@ def dashboard(
     dw_start_month: Optional[int] = None,
     dw_end_month: Optional[int] = None,
     viz_configuration: Optional[str] = None,
+    pmtiles_file: Optional[str] = None,
+    pmtiles_url: Optional[str] = None,
     port: Optional[int] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
@@ -109,6 +114,8 @@ def dashboard(
         dw_start_month: Start month for Dynamic World dataset
         dw_end_month: End month for Dynamic World dataset
         viz_configuration: The visualization configuration name for the map viewer.
+        pmtiles_file: Path to a .pmtiles archive for fast vector-tile rendering.
+        pmtiles_url: HTTP(S) URL to a hosted .pmtiles file (e.g. on S3).
         port: Port to run the dashboard on (default: 8501)
         logfile: Path to log file
         verbose: Verbosity level (-v for DEBUG)
@@ -149,6 +156,8 @@ def dashboard(
         dw_start_month=dw_start_month,
         dw_end_month=dw_end_month,
         viz_configuration=viz_configuration,
+        pmtiles_file=pmtiles_file,
+        pmtiles_url=pmtiles_url,
         port=port,
         logfile=logfile,
         verbose=verbose,
@@ -167,6 +176,8 @@ def dashboard(
     dw_start_month = config_dict.get("dw_start_month", 6)
     dw_end_month = config_dict.get("dw_end_month", 9)
     viz_configuration = config_dict.get("viz_configuration", "colored_historical")
+    pmtiles_file = config_dict.get("pmtiles_file")
+    pmtiles_url = config_dict.get("pmtiles_url")
     port = config_dict.get("port", 8501)
     logfile = config_dict.get("logfile")
     verbose = config_dict.get("verbose", 0)
@@ -210,6 +221,10 @@ def dashboard(
         script_args.extend(["--dw-end-month", str(dw_end_month)])
     if viz_configuration:
         script_args.extend(["--viz-configuration", viz_configuration])
+    if pmtiles_file:
+        script_args.extend(["--pmtiles-file", pmtiles_file])
+    if pmtiles_url:
+        script_args.extend(["--pmtiles-url", pmtiles_url])
     if script_args:
         cmd.extend(["--"] + script_args)
 
@@ -223,6 +238,74 @@ def dashboard(
         f"dw_start_month={dw_start_month}, dw_end_month={dw_end_month}"
     )
     subprocess.run(cmd)
+
+
+@app.command(group="Visualization")
+def build_pmtiles(
+    vector_file: Path,
+    output_file: Path,
+    viz_configuration: str = "colored_historical",
+    keep_geojsonl: bool = False,
+    logfile: Optional[str] = None,
+    verbose: int = 0,
+):
+    """Convert a lake GeoParquet file to a single .pmtiles archive for fast map rendering.
+
+    Requires tippecanoe on PATH (``brew install tippecanoe``). Upload the resulting
+    ``.pmtiles`` file to object storage (S3, GCS, etc.) and pass ``--pmtiles-url`` to
+    the dashboard, or use ``--pmtiles-file`` for local development.
+
+    Example:
+        water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
+        water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
+    """
+    if logfile:
+        setup_logging(logfile=logfile, verbose=verbose)
+
+    if not find_tippecanoe():
+        raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
+
+    print(f"Building PMTiles from {vector_file} -> {output_file}")
+    if viz_configuration == "nrt_drainage":
+        build_pmtiles_for_nrt(vector_file, output_file, keep_geojsonl=keep_geojsonl)
+    else:
+        build_pmtiles_archive(vector_file, output_file, keep_geojsonl=keep_geojsonl)
+    print(f"Wrote PMTiles archive: {output_file}")
+
+
+@app.command(group="Visualization")
+def serve_tiles(
+    pmtiles_file: Path,
+    host: str = "localhost",
+    port: int = 8080,
+    logfile: Optional[str] = None,
+    verbose: int = 0,
+):
+    """Serve a .pmtiles file over HTTP with Range request support.
+
+    Use the printed URL with MapLibre (``pmtiles://<url>``) or pass it to the
+    dashboard via ``--pmtiles-url``.
+
+    Example:
+        water-timeseries serve-tiles tiles/lakes.pmtiles --port 8080
+    """
+    if logfile:
+        setup_logging(logfile=logfile, verbose=verbose)
+    pmtiles_path = Path(pmtiles_file).resolve()
+    if not pmtiles_path.is_file():
+        raise FileNotFoundError(pmtiles_path)
+
+    with PmtilesServer(pmtiles_path.parent, host=host, port=port) as server:
+        url = server.url_for(pmtiles_path.name)
+        logger.info("Serving %s at %s (Ctrl+C to stop)", pmtiles_path.name, url)
+        logger.info("Dashboard: water-timeseries dashboard --pmtiles-url %s", url)
+        try:
+            import time
+
+            while True:
+                time.sleep(3600)
+        except KeyboardInterrupt:
+            logger.info("Stopped tile server")
 
 
 # Subcommand: breakpoint analysis
@@ -379,12 +462,14 @@ def breakpoint_analysis_historical(
     # Get values from merged config
     water_dataset_file = config_dict.get("water_dataset_file")
     output_file = config_dict.get("output_file")
+    if not output_file:
+        output_file = "downloads/nrt/historical_drain_breaks.parquet"
     logfile_val = config_dict.get("logfile")
     verbose_val = config_dict.get("verbose", 0)
 
     # Validate required arguments
-    if not water_dataset_file or not output_file:
-        logger.error("water_dataset_file and output_file are required. Provide via CLI arguments or config file.")
+    if not water_dataset_file:
+        logger.error("water_dataset_file is required. Provide via CLI arguments or config file.")
         raise SystemExit(1)
 
     # Setup logging AFTER config is loaded
@@ -529,6 +614,7 @@ def breakpoint_analysis_nrt(
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
     vector_file: Optional[Path] = None,
+    aggregate: bool = True,
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
@@ -582,6 +668,9 @@ def breakpoint_analysis_nrt(
     vector_file:
         Optional GeoParquet vector file.  When provided, only the
         ``id_geohash`` values present in that file are processed.
+    aggregate:
+        Automatically aggregate the monthly Parquet files in the output
+        directory into consolidated files for the dashboard (default True).
     logfile:
         Path to log file. Auto-generated if not provided.
     verbose:
@@ -643,10 +732,10 @@ def breakpoint_analysis_nrt(
 
         gdf = gpd.read_parquet(vector_file)
         if "id_geohash" not in gdf.columns:
-            logger.error("vector_file %s does not contain an 'id_geohash' column", vector_file)
+            logger.error(f"vector_file {vector_file} does not contain an 'id_geohash' column")
             raise SystemExit(1)
         lake_ids = gdf["id_geohash"].dropna().unique().tolist()
-        logger.info("Loaded %d lake IDs from vector file: %s", len(lake_ids), vector_file)
+        logger.info(f"Loaded {len(lake_ids)} lake IDs from vector file: {vector_file}")
 
     shared_kwargs = dict(
         dataset_file=dataset_file,
@@ -662,7 +751,7 @@ def breakpoint_analysis_nrt(
         resolved_output_file = (
             output_file
             if output_file is not None
-            else Path(dataset_file).parent / f"nrt_{analysis_date}_drain_breaks.parquet"
+            else Path("downloads/nrt") / f"nrt_{analysis_date}_drain_breaks.parquet"
         )
         logger.info(
             "Starting NRT pre-computation (single month):\n"
@@ -686,6 +775,8 @@ def breakpoint_analysis_nrt(
             f"  drained lakes  : {len(breaks_df)}\n"
             f"  output_file    : {resolved_output_file}"
         )
+        if aggregate:
+            aggregate_nrt_directory(Path(resolved_output_file).parent)
         return
 
     # --- Range mode ---------------------------------------------------------
@@ -698,16 +789,14 @@ def breakpoint_analysis_nrt(
 
     if end_ts < start_ts:
         logger.error(
-            "--analysis-date-end (%s) must be >= --analysis-date-start (%s)",
-            analysis_date_end,
-            analysis_date_start,
+            f"--analysis-date-end ({analysis_date_end}) must be >= --analysis-date-start ({analysis_date_start})"
         )
         raise SystemExit(1)
 
     months = pd.period_range(start=start_ts, end=end_ts, freq="M")
     month_strs = [str(m) for m in months]  # "YYYY-MM" format
 
-    resolved_output_dir = output_dir if output_dir is not None else Path(dataset_file).parent
+    resolved_output_dir = output_dir if output_dir is not None else Path("downloads/nrt")
     resolved_output_dir = Path(resolved_output_dir)
     resolved_output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -733,7 +822,7 @@ def breakpoint_analysis_nrt(
         month_file = resolved_output_dir / f"nrt_{month_str}_drain_breaks.parquet"
 
         if not no_resume and month_file.exists():
-            logger.info("Skipping %s — output already exists: %s", month_str, month_file)
+            logger.info(f"Skipping {month_str} — output already exists: {month_file}")
             skipped += 1
             continue
 
@@ -745,7 +834,7 @@ def breakpoint_analysis_nrt(
             )
             total_drained += len(breaks_df)
         except Exception as exc:
-            logger.warning("Failed for %s: %s", month_str, exc)
+            logger.warning(f"Failed for {month_str}: {exc}")
             failed += 1
 
     logger.info(
@@ -757,6 +846,78 @@ def breakpoint_analysis_nrt(
         f"  total drained rows: {total_drained}\n"
         f"  output_dir        : {resolved_output_dir}"
     )
+    if aggregate:
+        aggregate_nrt_directory(resolved_output_dir)
+
+
+def aggregate_nrt_directory(nrt_dir: Path, output_dir: Optional[Path] = None) -> None:
+    """Aggregate individual monthly NRT files in a directory into consolidated parquet files."""
+    if output_dir is None:
+        output_dir = nrt_dir
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    nrt_dir = Path(nrt_dir)
+    monthly_files = sorted(
+        [f for f in nrt_dir.glob("nrt_*_drain_breaks.parquet") if f.name != "nrt_monthly_drain_breaks.parquet"]
+    )
+    if not monthly_files:
+        logger.info(f"No individual monthly NRT files found in {nrt_dir} to aggregate.")
+        return
+
+    logger.info(f"Found {len(monthly_files)} individual NRT monthly files in {nrt_dir}, aggregating...")
+    dfs = []
+    for file_path in monthly_files:
+        try:
+            df = pd.read_parquet(file_path)
+            dfs.append(df)
+        except Exception as e:
+            logger.warning(f"Failed to read {file_path}: {e}")
+
+    if not dfs:
+        logger.warning("No monthly NRT files could be loaded.")
+        return
+
+    breaks_df = pd.concat(dfs, ignore_index=True)
+    breaks_path = output_dir / "nrt_monthly_drain_breaks.parquet"
+    breaks_df.to_parquet(breaks_path, index=False)
+    logger.info(f"Wrote consolidated breaks to {breaks_path}")
+
+    if "analysis_month" in breaks_df.columns:
+        counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
+
+        # Ensure all processed months are included in the counts, even if they have 0 drained lakes
+        months_from_files = []
+        for f in monthly_files:
+            parts = f.stem.split("_")
+            if len(parts) >= 2:
+                months_from_files.append(parts[1])
+        all_months_df = pd.DataFrame({"analysis_month": months_from_files})
+
+        counts_df = pd.merge(all_months_df, counts_df, on="analysis_month", how="left").fillna(
+            {"drained_lake_count": 0}
+        )
+        counts_df["drained_lake_count"] = counts_df["drained_lake_count"].astype(int)
+
+        counts_path = output_dir / "nrt_monthly_drain_counts.parquet"
+        counts_df.to_parquet(counts_path, index=False)
+        logger.info(f"Wrote consolidated counts to {counts_path}")
+
+
+@app.command(group="Analysis")
+def aggregate_nrt(
+    nrt_dir: Path,
+    output_dir: Optional[Path] = None,
+    logfile: Optional[str] = None,
+    verbose: int = 0,
+):
+    """Aggregate individual monthly NRT files in a directory into consolidated parquet files.
+
+    Creates ``nrt_monthly_drain_breaks.parquet`` and ``nrt_monthly_drain_counts.parquet``
+    in ``output_dir`` (defaulting to ``nrt_dir``).
+    """
+    setup_logging(logfile=logfile, verbose=verbose)
+    aggregate_nrt_directory(nrt_dir, output_dir)
 
 
 if __name__ == "__main__":

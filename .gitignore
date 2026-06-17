@@ -209,8 +209,16 @@ __marimo__/
 # Pre-computed data artifacts (generated locally, not committed)
 precomputed/
 
+# Vector tile build artifacts
+*.pmtiles
+*.geojsonl
+tiles/
+
 # Sphinx documentation
 docs/_build/
 docs/_static/
 docs/_templates/
 
+.DS_Store
+data/
+preprocessed/
