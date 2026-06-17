@@ -9,9 +9,17 @@ import streamlit as st
 
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
-from water_timeseries.utils.io import load_xarray_dataset
+from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 
 
+@st.cache_data(ttl=3600, show_spinner="Loading GeoDataframe dataset from parquet...")
+def load_lake_polygons_cached(file_path: str):
+    gdf = load_vector_dataset(file_path)
+    return gdf
+
+
+# loading slow for large datasets
+@st.cache_data(ttl=3600, show_spinner="Loading xarray dataset from zarr...")
 def load_dataset(
     dataset_type: str,
     zarr_path: str | Path,

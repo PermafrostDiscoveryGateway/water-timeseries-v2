@@ -24,10 +24,14 @@ from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
     load_dataset,
+    load_lake_polygons_cached,
     plot_time_series_data,
 )
-
-from water_timeseries.utils.earthengine import get_rioxarray_ds_from_lake, visualize_s2_first_and_last, initialize_earth_engine
+from water_timeseries.utils.earthengine import (
+    get_rioxarray_ds_from_lake,
+    initialize_earth_engine,
+    visualize_s2_first_and_last,
+)
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.map_styling import (
     format_tooltip_columns,
@@ -828,6 +832,9 @@ def create_app(
         st.session_state.dw_dataset = None
     if "jrc_dataset" not in st.session_state:
         st.session_state.jrc_dataset = None
+    if "lake_polygons" not in st.session_state:
+        st.session_state.lake_polygons = load_lake_polygons_cached(data_path_input)
+        # st.session_state.lake_polygons = None
     if "show_ts_popup" not in st.session_state:
         st.session_state.show_ts_popup = False
     if "downloaded_dsdw" not in st.session_state:
@@ -1190,7 +1197,29 @@ def create_app(
                 except Exception as e:
                     st.error(f"Error plotting time series: {e}")
 
-                    # ============================================
+            ###################### START Recent imagery plotter #############################
+            st.divider()
+            st.subheader("🛰️ Recent imagery")
+
+            # setup today's date and one year go
+            today = datetime.now()
+            one_year_ago = today - timedelta(days=366)
+
+            # pull ds via xee
+            ds = get_rioxarray_ds_from_lake(
+                lake_gdf=st.session_state.lake_polygons,
+                id_geohash=current,
+                start_date=one_year_ago.strftime("%Y-%m-%d"),
+                end_date=today.strftime("%Y-%m-%d"),
+            )
+            fig = visualize_s2_first_and_last(ds)
+
+            # plot figure
+            st.pyplot(fig, width="content")
+
+            ###################### END Recent imagery plotter #############################
+
+            # ============================================
             # Timelapse Section
             # ============================================
             st.divider()
@@ -1228,7 +1257,7 @@ def create_app(
 
                             if create_sentinel2:
                                 gif_path_s2 = st.session_state.dw_dataset.create_timelapse(
-                                    lake_gdf=viewer.gdf,
+                                    lake_gdf=st.session_state.lake_polygons,
                                     id_geohash=current,
                                     timelapse_source="sentinel2",
                                     gif_outdir="gifs",
@@ -1245,7 +1274,7 @@ def create_app(
                             # Create Landsat timelapse if checked
                             if create_landsat:
                                 gif_path_landsat = st.session_state.dw_dataset.create_timelapse(
-                                    lake_gdf=viewer.gdf,
+                                    lake_gdf=st.session_state.lake_polygons,
                                     id_geohash=current,
                                     timelapse_source="landsat",
                                     gif_outdir="gifs",
@@ -1348,27 +1377,6 @@ def create_app(
                                     mime="image/gif",
                                     key="download_existing_landsat",
                                 )
-        ###################### START Recent imagery plotter #############################
-        st.divider()
-        st.subheader("🛰️ Recent imagery")
-
-        # setup today's date and one year go
-        today = datetime.now()
-        one_year_ago = today - timedelta(days=366)
-
-        # pull ds via xee
-        ds = get_rioxarray_ds_from_lake(
-            lake_gdf=viewer.gdf,
-            id_geohash=current,
-            start_date=one_year_ago.strftime("%Y-%m-%d"),
-            end_date=today.strftime("%Y-%m-%d"),
-        )
-        fig = visualize_s2_first_and_last(ds)
-
-        # plot figure
-        st.pyplot(fig)
-
-        ###################### END Recent imagery plotter #############################
 
         # Popup dialog for time series
         if st.session_state.get("show_ts_popup", False) and current:
