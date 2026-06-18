@@ -14,11 +14,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from streamlit_folium import st_folium
-
-from water_timeseries.dashboard.pmtiles_viewer import (
-    render_pmtiles_map,
-    sync_query_param_selection,
-)
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
@@ -259,31 +254,74 @@ class MapViewer:
 
     def _render_pmtiles(self) -> Optional[str]:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
+        from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
+
         st.caption(
             "Vector tiles (PMTiles): only visible map tiles are loaded. "
-            "Click a lake, then **Select for time series** to load plots below. "
+            "Click a lake to load plots below. "
             "Lakes are colored by net change (red = shrink, blue = grow)."
         )
+
+        pmtiles_source = self.pmtiles_url or (str(self.pmtiles_file) if self.pmtiles_file else None)
+        if not pmtiles_source:
+            st.error("No pmtiles_file or pmtiles_url provided.")
+            return None
+
         if self.pmtiles_file:
             st.caption(f"Tiles: `{self.pmtiles_file}`")
-        drained_data = None
-        if getattr(self, "drained_data", None) is not None:
-            drained_data = self.drained_data
 
-        render_pmtiles_map(
-            pmtiles_file=self.pmtiles_file,
-            pmtiles_url=self.pmtiles_url,
-            vector_file_for_bounds=None,
-            id_column=self.id_column,
-            viz_configuration=self.viz_configuration_name or "colored_historical",
-            drained_data=drained_data,
-            show_main_layer=self.show_main_layer,
+        pmtiles_url = resolve_pmtiles_url(pmtiles_source)
+
+        # Determine center of map
+        if self.map_center is None:
+            center = [66.5, -164.1]  # Default fallback center
+        else:
+            center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
+
+        m = build_pmtiles_map(pmtiles_url, center=tuple(center), zoom_start=self.zoom)
+
+        # Render the map and get click data
+        map_data = st_folium(
+            m,
+            width="100%",
+            height=600,
+            key="map_viewer_pmtiles",
+            returned_objects=["last_active_drawing", "last_object_clicked", "last_object_clicked_tooltip"],
         )
-        selected = sync_query_param_selection(self.id_column)
-        if selected and selected != st.session_state.get("_pmtiles_last_rerun"):
-            st.session_state._pmtiles_last_rerun = selected
+
+        # Extract clicked feature's id_geohash for time-series lookup
+        clicked_id = None
+        clicked_data = map_data.get("last_object_clicked")
+        if clicked_data and "properties" in clicked_data:
+            clicked_id = clicked_data["properties"].get(self.id_column)
+
+        if not clicked_id:
+            clicked_active = map_data.get("last_active_drawing")
+            if clicked_active and "properties" in clicked_active:
+                clicked_id = clicked_active["properties"].get(self.id_column)
+
+        if not clicked_id:
+            clicked_tooltip = map_data.get("last_object_clicked_tooltip")
+            if clicked_tooltip:
+                import re
+                match = re.search(r"id_geohash.*?(?:>|:|\s|^)([a-zA-Z0-9]{12})", clicked_tooltip, re.DOTALL)
+                if match:
+                    clicked_id = match.group(1)
+                else:
+                    match = re.search(r"\b([a-z0-9]{12})\b", clicked_tooltip)
+                    if match:
+                        clicked_id = match.group(1)
+
+        # Update session state only if a NEW feature was clicked
+        if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
+            st.session_state.selected_geohash = clicked_id
+            if clicked_id not in st.session_state.get("clicked_features", []):
+                if "clicked_features" not in st.session_state:
+                    st.session_state.clicked_features = []
+                st.session_state.clicked_features.append(clicked_id)
             st.rerun()
-        return selected
+
+        return st.session_state.get("selected_geohash")
 
     # TODO: create configuration option
     def _render_folium(
