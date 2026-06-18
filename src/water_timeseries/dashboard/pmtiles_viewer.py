@@ -10,7 +10,7 @@ import geopandas as gpd
 import streamlit as st
 
 from water_timeseries.utils.io import load_vector_dataset
-from water_timeseries.utils.pmtiles_reader import read_pmtiles_header
+from water_timeseries.utils.pmtiles_reader import read_pmtiles_header, read_pmtiles_header_remote
 from water_timeseries.utils.pmtiles_serve import _MAP_HTML, PmtilesServer
 
 _SESSION_SERVER_KEY = "_pmtiles_map_server"
@@ -55,11 +55,14 @@ def _bounds_center_zoom(gdf: gpd.GeoDataFrame) -> tuple[list[float], float]:
     return center, zoom
 
 
-def _get_or_start_server(pmtiles_file: Path | str) -> PmtilesServer:
-    """Start (or reuse) a local server that hosts both the map page and .pmtiles file."""
-    pmtiles_path = Path(pmtiles_file).resolve()
-    if not pmtiles_path.is_file():
-        raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
+def _get_or_start_server(pmtiles_file: Optional[Path | str] = None) -> PmtilesServer:
+    """Start (or reuse) a local server that hosts the map page (and optionally the .pmtiles file)."""
+    if pmtiles_file is not None:
+        pmtiles_path = Path(pmtiles_file).resolve()
+        if not pmtiles_path.is_file():
+            raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
+    else:
+        pmtiles_path = None
 
     server: Optional[PmtilesServer] = st.session_state.get(_SESSION_SERVER_KEY)
     if server is None or server.pmtiles_path != pmtiles_path:
@@ -95,6 +98,17 @@ def _build_map_config(
             center = header["center"]
         if zoom is None:
             zoom = float(header["zoom"])
+    elif bounds is None and pmtiles_url:
+        try:
+            header = read_pmtiles_header_remote(pmtiles_url)
+            bounds = header["bounds"]
+            if center is None:
+                center = header["center"]
+            if zoom is None:
+                zoom = float(header["zoom"])
+        except Exception as e:
+            print(f"Could not fetch remote PMTiles header: {e}")
+            # Fall back to hardcoded Alaska defaults
     elif bounds is None and vector_file_for_bounds is not None:
         gdf = load_vector_dataset(vector_file_for_bounds)
         if gdf.crs is None:
@@ -143,10 +157,10 @@ def render_pmtiles_map(
     fetches to a separate tile port (basemap loads, vector lakes do not).
     """
     if pmtiles_url and not pmtiles_file:
+        server = _get_or_start_server(None)  # Server running in HTML-only remote mode
         config = _build_map_config(
             pmtiles_url=pmtiles_url,
             vector_file_for_bounds=vector_file_for_bounds,
-            pmtiles_file=None,
             id_column=id_column,
             viz_configuration=viz_configuration,
             height=height,
@@ -155,15 +169,14 @@ def render_pmtiles_map(
             drained_data=drained_data,
             show_main_layer=show_main_layer,
         )
-        st.warning(
-            "Remote PMTiles URL without a local file: embed mode may still hit browser "
-            "restrictions. Prefer --pmtiles-file for local development."
-        )
+        map_url = server.map_iframe_url(config)
         _inject_selection_bridge()
-        import streamlit.components.v1 as components
-
-        html = _MAP_HTML.read_text(encoding="utf-8").replace("__CONFIG_JSON__", json.dumps(config))
-        components.html(html, height=height)
+        
+        if hasattr(st, "iframe"):
+            st.iframe(map_url, height=height)
+        else:
+            import streamlit.components.v1 as components
+            components.iframe(map_url, height=height)
         return
 
     if pmtiles_file is None:
