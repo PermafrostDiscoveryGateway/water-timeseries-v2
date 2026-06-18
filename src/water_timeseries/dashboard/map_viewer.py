@@ -272,7 +272,7 @@ class MapViewer:
 
         pmtiles_url = resolve_pmtiles_url(pmtiles_source)
 
-        # Determine center of map
+        # Determine center of map (lat, lon)
         if self.map_center is None:
             center = [66.5, -164.1]  # Default fallback center
         else:
@@ -286,7 +286,7 @@ class MapViewer:
             width="100%",
             height=600,
             key="map_viewer_pmtiles",
-            returned_objects=["last_active_drawing", "last_object_clicked", "last_object_clicked_tooltip"],
+            returned_objects=["last_active_drawing", "last_object_clicked", "last_object_clicked_tooltip", "last_clicked"],
         )
 
         # Extract clicked feature's id_geohash for time-series lookup
@@ -312,9 +312,28 @@ class MapViewer:
                     if match:
                         clicked_id = match.group(1)
 
+        # Fallback spatial search: check map click coordinates
+        if not clicked_id and map_data:
+            clicked_map = map_data.get("last_clicked")
+            if clicked_map:
+                lat = clicked_map.get("lat")
+                lng = clicked_map.get("lng")
+                if lat is not None and lng is not None:
+                    from shapely.geometry import Point
+                    click_point = Point(lng, lat)
+                    lakes_gdf = st.session_state.get("lake_polygons")
+                    if lakes_gdf is not None and not lakes_gdf.empty:
+                        sindex = lakes_gdf.sindex
+                        possible_matches_idx = list(sindex.intersection((lng, lat, lng, lat)))
+                        possible_matches = lakes_gdf.iloc[possible_matches_idx]
+                        matching = possible_matches[possible_matches.geometry.contains(click_point)]
+                        if not matching.empty:
+                            clicked_id = matching.iloc[0][self.id_column]
+
         # Update session state only if a NEW feature was clicked
         if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
             st.session_state.selected_geohash = clicked_id
+            st.query_params["selected_lake"] = clicked_id
             if clicked_id not in st.session_state.get("clicked_features", []):
                 if "clicked_features" not in st.session_state:
                     st.session_state.clicked_features = []
@@ -525,6 +544,7 @@ class MapViewer:
         # Update session state only if a NEW feature was clicked (not the same one)
         if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
             st.session_state.selected_geohash = clicked_id
+            st.query_params["selected_lake"] = clicked_id
             if clicked_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(clicked_id)
             st.rerun()
@@ -869,6 +889,20 @@ def create_app(
     id_column = "id_geohash"
     zoom_level = 10
 
+    # Sync selection from URL query parameters
+    if "selected_geohash" not in st.session_state:
+        st.session_state.selected_geohash = None
+    if "clicked_features" not in st.session_state:
+        st.session_state.clicked_features = []
+    
+    qp_selected = st.query_params.get("selected_lake")
+    if qp_selected:
+        selected_id = str(qp_selected)
+        if selected_id != st.session_state.selected_geohash:
+            st.session_state.selected_geohash = selected_id
+            if selected_id not in st.session_state.clicked_features:
+                st.session_state.clicked_features.append(selected_id)
+
     # Initialize dataset in session state if not already
     if "dw_dataset" not in st.session_state:
         st.session_state.dw_dataset = None
@@ -1072,6 +1106,7 @@ def create_app(
             # Update selection based on dropdown choice
             if selected_option != st.session_state.selected_geohash:
                 st.session_state.selected_geohash = selected_option
+                st.query_params["selected_lake"] = selected_option
                 st.rerun()
         else:
             st.sidebar.info("No features clicked yet. Click on a feature to select it.")

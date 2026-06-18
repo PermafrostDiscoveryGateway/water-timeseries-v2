@@ -175,6 +175,8 @@ def build_pmtiles_map(
     )
     m.add_child(lake_layer)
     folium.LayerControl().add_to(m)
+    from water_timeseries.utils.visualization import get_legend_html_net_change
+    m.get_root().html.add_child(folium.Element(get_legend_html_net_change()))
     return m
 
 
