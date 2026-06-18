@@ -56,8 +56,10 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_error(400, "Missing config or config_id query parameter")
             return
 
-        pmtiles_name = self.server.pmtiles_filename  # type: ignore[attr-defined]
-        config["pmtiles_url"] = f"{self.server.base_url}/{pmtiles_name}"  # type: ignore[attr-defined]
+        # Only modify the pmtiles_url if we're actually serving a local file
+        pmtiles_name = getattr(self.server, "pmtiles_filename", None)
+        if pmtiles_name:
+            config["pmtiles_url"] = f"{self.server.base_url}/{pmtiles_name}"  # type: ignore[attr-defined]
 
         template = _MAP_HTML.read_text(encoding="utf-8")
         html = template.replace("__CONFIG_JSON__", json.dumps(config))
@@ -89,6 +91,11 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
 
     def _serve_file(self, rel_path: str, head_only: bool = False) -> None:
         if not rel_path:
+            self.send_error(404, "Not found")
+            return
+
+        # In HTML-only remote URL mode, the server won't have a static file directory mapped.
+        if not getattr(self.server, "directory", None):
             self.send_error(404, "Not found")
             return
 
@@ -140,14 +147,20 @@ class PmtilesServer:
 
     def __init__(
         self,
-        pmtiles_file: Path | str,
+        pmtiles_file: Optional[Path | str] = None,
         host: str = "0.0.0.0",
         port: int = 0,
         public_host: Optional[str] = None,
     ):
-        self.pmtiles_path = Path(pmtiles_file).resolve()
-        self.directory = self.pmtiles_path.parent
-        self.pmtiles_filename = self.pmtiles_path.name
+        if pmtiles_file is not None:
+            self.pmtiles_path = Path(pmtiles_file).resolve()
+            self.directory = self.pmtiles_path.parent
+            self.pmtiles_filename = self.pmtiles_path.name
+        else:
+            self.pmtiles_path = None
+            self.directory = _MAP_HTML.parent # Fallback map location
+            self.pmtiles_filename = None
+
         self.host = host
         # Allow fixed port via env var (required for Docker port publishing).
         # Default 0 = OS picks a random free port (works for local uv runs).
