@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import Any, Optional
 
@@ -11,7 +10,7 @@ import streamlit as st
 
 from water_timeseries.utils.io import load_vector_dataset
 from water_timeseries.utils.pmtiles_reader import read_pmtiles_header, read_pmtiles_header_remote
-from water_timeseries.utils.pmtiles_serve import _MAP_HTML, PmtilesServer
+from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
 _SESSION_SERVER_KEY = "_pmtiles_map_server"
 
