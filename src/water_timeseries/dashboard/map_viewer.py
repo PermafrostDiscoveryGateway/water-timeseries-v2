@@ -531,6 +531,23 @@ class MapViewer:
                     ),
                 ).add_to(m)
 
+                # --- ADD THIS BLOCK FOR DRAINED LAKE MARKERS ---
+                drained_markers = folium.FeatureGroup(name="Drained Lake Markers", show=True)
+                for idx, row in drained_gdf.iterrows():
+                    # Calculate centroid for standard geometries (Polygons/MultiPolygons)
+                    centroid = row.geometry.centroid
+                    
+                    # Optional: Grab the lake ID for the tooltip
+                    lake_id = row.get(self.id_column, "Unknown")
+                    
+                    folium.Marker(
+                        location=[centroid.y, centroid.x],
+                        icon=folium.Icon(color="red", icon="info-sign"),
+                        tooltip=f"Drained Lake: {lake_id}",
+                    ).add_to(drained_markers)
+                drained_markers.add_to(m)
+                # -----------------------------------------------
+
         folium.LayerControl().add_to(m)
 
         m.get_root().html.add_child(folium.Element(get_legend_html_net_change()))

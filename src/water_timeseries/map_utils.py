@@ -137,7 +137,7 @@ def build_pmtiles_map(
         tiles="CartoDB positron",  # lightweight basemap
     )
 
-    # Add background map types present in commit a901b78fcd71dd9c8669621daab1f974a8920919
+    # Add background map types 
     wms_url = "https://maps.awi.de/services/common/permafrost/ows"
     tcvis_tile_layer = folium.WmsTileLayer(
         url=wms_url,
@@ -150,6 +150,7 @@ def build_pmtiles_map(
     tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
     tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
 
+    # Add background tiles
     tile_layer_darkmatter.add_to(m)
     tile_layer_esriworld.add_to(m)
     tcvis_tile_layer.add_to(m)
@@ -248,6 +249,7 @@ def build_pmtiles_map(
     if drained_ids:
         drained_markers = folium.FeatureGroup(name="Drained Lake Markers")
         for gid in drained_ids:
+            # Decode the geohash into latitude and longitude coordinates
             lat, lon = decode_geohash(gid)
             folium.Marker(
                 location=[lat, lon],
@@ -255,12 +257,12 @@ def build_pmtiles_map(
                 tooltip=f"Drained Lake: {gid}",
             ).add_to(drained_markers)
         drained_markers.add_to(m)
+    # -----------------------------------------------
 
     folium.LayerControl().add_to(m)
     from water_timeseries.utils.visualization import get_legend_html_net_change
     m.get_root().html.add_child(folium.Element(get_legend_html_net_change()))
     return m
-
 
 def resolve_pmtiles_url(pmtiles_file: str) -> str:
     """Given a local path or existing URL, return a URL the browser can fetch.
