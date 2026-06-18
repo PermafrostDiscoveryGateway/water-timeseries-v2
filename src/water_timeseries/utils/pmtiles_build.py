@@ -63,7 +63,8 @@ def _sanitize_properties(gdf: gpd.GeoDataFrame, columns: Sequence[str]) -> gpd.G
 
     for col in keep:
         if pd.api.types.is_numeric_dtype(out[col]):
-            out[col] = pd.to_numeric(out[col], errors="coerce")
+            # Round numeric float/double properties to 2 decimal places
+            out[col] = pd.to_numeric(out[col], errors="coerce").round(2)
 
     return out
 

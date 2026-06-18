@@ -1,8 +1,95 @@
 import os
 from pathlib import Path
 
+import branca.element
 import folium
-from folium_pmtiles.vector import PMTilesMapLibreLayer, PMTilesMapLibreTooltip
+import folium.elements
+from folium_pmtiles.vector import PMTilesMapLibreLayer
+
+
+class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.element.MacroElement):
+    _template = branca.element.Template(
+        """
+            {% macro header(this, kwargs) %}
+            <style>
+            .maplibregl-popup {
+                font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+                z-index: 651;
+            }
+            .feature-row{
+                margin-bottom: 0.5em;
+                &:not(:last-of-type) {
+                    border-bottom: 1px solid black;
+                }
+            }
+            </style>
+            {% endmacro %}
+            {% macro script(this, kwargs) -%}
+                var {{ this.get_name() }} = {{ this._parent.get_name() }}.getMaplibreMap();
+                const popup_{{ this.get_name() }} = new maplibregl.Popup({
+                    closeButton: false,
+                    closeOnClick: false
+                });
+
+                function setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}(maplibreLayer) {
+                    var mlMap = maplibreLayer.getMaplibreMap();
+                    var popup = popup_{{ this.get_name() }};
+
+                    mlMap.on('mousemove', (e) => {
+                        mlMap.getCanvas().style.cursor = 'pointer';
+                        const { x, y } = e.point;
+                        const r = 2; // radius around the point
+                        const features = mlMap.queryRenderedFeatures([
+                            [x - r, y - r],
+                            [x + r, y + r],
+                        ]);
+
+                        const {lng, lat}  = e.lngLat;
+                        const coordinates = [lng, lat]
+                        const html = features.map(f=>`
+                        <div class="feature-row">
+                            <span>
+                                <strong>${f.layer['source-layer']}</strong>
+                                <span style="fontSize: 0.8em" }> (${f.geometry.type})</span>
+                            </span>
+                            <table>
+                                ${Object.entries(f.properties).map(([key, value]) => {
+                                    let displayVal = value;
+                                    if (typeof value === 'number') {
+                                        displayVal = value.toFixed(2);
+                                    } else if (typeof value === 'string' && !isNaN(value) && value.includes('.')) {
+                                        displayVal = parseFloat(value).toFixed(2);
+                                    }
+                                    return `<tr><td>${key}</td><td style="text-align: right">${displayVal}</td></tr>`;
+                                }).join("")}
+                            </table>
+                        </div>
+                        `).join("")
+                        if(features.length){
+                            popup.setLngLat(e.lngLat).setHTML(html).addTo(mlMap);
+                        } else {
+                            popup.remove();
+                        }
+                    });
+                    mlMap.on('mouseleave', () => {popup.remove();});
+                }
+
+                // maplibre map object
+                {{ this.get_name() }}.on("load", (e) => {
+                    setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}({{ this._parent.get_name() }});
+                })
+
+                // leaflet map object
+                {{ this._parent._parent.get_name() }}.on("layeradd", (e) => {
+                    setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}({{ this._parent.get_name() }});
+                });
+            {%- endmacro %}
+            """
+    )
+
+    def __init__(self, name=None, **kwargs):
+        super().__init__(**kwargs)
+        self._name = name if name else "PMTilesTooltip"
 
 
 def build_pmtiles_map(
@@ -18,7 +105,24 @@ def build_pmtiles_map(
         tiles="CartoDB positron",  # lightweight basemap
     )
 
-    tooltip = PMTilesMapLibreTooltip()
+    # Add background map types present in commit a901b78fcd71dd9c8669621daab1f974a8920919
+    wms_url = "https://maps.awi.de/services/common/permafrost/ows"
+    tcvis_tile_layer = folium.WmsTileLayer(
+        url=wms_url,
+        name="TCVIS Landsat Trends 2005-2024 (AWI)",
+        styles="composite",
+        transparent=True,
+        overlay=False,
+        layers="tcvis",
+    )
+    tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
+    tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
+
+    tile_layer_darkmatter.add_to(m)
+    tile_layer_esriworld.add_to(m)
+    tcvis_tile_layer.add_to(m)
+
+    tooltip = PMTilesMapLibreTooltipWithRounding()
     lake_layer = PMTilesMapLibreLayer(
         pmtiles_url,
         layer_name="lakes_pmtiles",
@@ -40,13 +144,17 @@ def build_pmtiles_map(
                         "fill-color": [
                             "interpolate",
                             ["linear"],
-                            ["get", "net_change"],
-                            -1.0,
+                            ["get", "NetChange_perc"],
+                            -40.0,
                             "#d73027",
+                            -20.0,
+                            "#f46d43",
                             0.0,
-                            "#ffffbf",
-                            1.0,
-                            "#1a9850",
+                            "#fee090",
+                            20.0,
+                            "#74add1",
+                            40.0,
+                            "#4575b4",
                         ],
                         "fill-opacity": 0.7,
                     },
@@ -66,6 +174,7 @@ def build_pmtiles_map(
         tooltip=tooltip,
     )
     m.add_child(lake_layer)
+    folium.LayerControl().add_to(m)
     return m
 
 
