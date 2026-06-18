@@ -97,6 +97,7 @@ def build_pmtiles_map(
     center: tuple[float, float] = (70.0, -140.0),
     zoom_start: int = 4,
     source_layer: str = "lakes",
+    drained_ids: list[str] | None = None,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
     m = folium.Map(
@@ -123,6 +124,58 @@ def build_pmtiles_map(
     tcvis_tile_layer.add_to(m)
 
     tooltip = PMTilesMapLibreTooltipWithRounding()
+
+    # Define default paint values
+    fill_color = [
+        "interpolate",
+        ["linear"],
+        ["get", "NetChange_perc"],
+        -40.0,
+        "#d73027",
+        -20.0,
+        "#f46d43",
+        0.0,
+        "#fee090",
+        20.0,
+        "#74add1",
+        40.0,
+        "#4575b4",
+    ]
+    fill_opacity = 0.7
+    line_color = "#333333"
+    line_width = 0.5
+
+    if drained_ids:
+        # Highlight drained lakes in red, dim others
+        fill_color = [
+            "match",
+            ["get", "id_geohash"],
+            drained_ids,
+            "#d73027",  # Red fill for drained
+            fill_color,  # Default color ramp for non-drained
+        ]
+        fill_opacity = [
+            "match",
+            ["get", "id_geohash"],
+            drained_ids,
+            0.9,  # High opacity for drained
+            0.3,  # Dimmer opacity for non-drained
+        ]
+        line_color = [
+            "match",
+            ["get", "id_geohash"],
+            drained_ids,
+            "#7f0000",  # Dark red border for drained
+            "#333333",  # Default border color
+        ]
+        line_width = [
+            "match",
+            ["get", "id_geohash"],
+            drained_ids,
+            2.0,  # Thicker border for drained
+            0.5,  # Default border width
+        ]
+
     lake_layer = PMTilesMapLibreLayer(
         pmtiles_url,
         layer_name="lakes_pmtiles",
@@ -141,22 +194,8 @@ def build_pmtiles_map(
                     "source-layer": source_layer,
                     "type": "fill",
                     "paint": {
-                        "fill-color": [
-                            "interpolate",
-                            ["linear"],
-                            ["get", "NetChange_perc"],
-                            -40.0,
-                            "#d73027",
-                            -20.0,
-                            "#f46d43",
-                            0.0,
-                            "#fee090",
-                            20.0,
-                            "#74add1",
-                            40.0,
-                            "#4575b4",
-                        ],
-                        "fill-opacity": 0.7,
+                        "fill-color": fill_color,
+                        "fill-opacity": fill_opacity,
                     },
                 },
                 {
@@ -165,8 +204,8 @@ def build_pmtiles_map(
                     "source-layer": source_layer,
                     "type": "line",
                     "paint": {
-                        "line-color": "#333333",
-                        "line-width": 0.5,
+                        "line-color": line_color,
+                        "line-width": line_width,
                     },
                 },
             ],

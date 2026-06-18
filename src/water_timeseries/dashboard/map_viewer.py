@@ -131,6 +131,7 @@ class MapViewer:
         self.drained_gdf = drained_gdf
         self.drained_label = drained_label
         self.show_main_layer = show_main_layer
+        self.drained_data = None
         self.viz_configuration_name = viz_configuration_name
 
         use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
@@ -278,7 +279,11 @@ class MapViewer:
         else:
             center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
 
-        m = build_pmtiles_map(pmtiles_url, center=tuple(center), zoom_start=self.zoom)
+        drained_ids = None
+        if getattr(self, "drained_data", None) is not None:
+            drained_ids = list(self.drained_data.keys())
+
+        m = build_pmtiles_map(pmtiles_url, center=tuple(center), zoom_start=self.zoom, drained_ids=drained_ids)
 
         # Render the map and get click data
         map_data = st_folium(
@@ -1067,7 +1072,7 @@ def create_app(
                 )
                 viewer.drained_gdf = drained_gdf
                 viewer.drained_label = drained_label
-                viewer.show_main_layer = False
+                viewer.show_main_layer = True
         elif show_drained:
             viewer.drained_gdf = None
             viewer.drained_data = None
