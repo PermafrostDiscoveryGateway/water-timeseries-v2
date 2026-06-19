@@ -1,41 +1,10 @@
 import os
 from pathlib import Path
-
+import pygeohash
 import branca.element
 import folium
 import folium.elements
 from folium_pmtiles.vector import PMTilesMapLibreLayer
-
-
-def decode_geohash(geohash: str) -> tuple[float, float]:
-    """Decode geohash to (lat, lon)."""
-    base32 = "0123456789bcdefghjkmnpqrstuvwxyz"
-    bits = [16, 8, 4, 2, 1]
-    is_even = True
-    lat_range = [-90.0, 90.0]
-    lon_range = [-180.0, 180.0]
-    for char in geohash:
-        try:
-            cd = base32.index(char)
-        except ValueError:
-            continue
-        for mask in bits:
-            if is_even:
-                mid = (lon_range[0] + lon_range[1]) / 2
-                if cd & mask:
-                    lon_range[0] = mid
-                else:
-                    lon_range[1] = mid
-            else:
-                mid = (lat_range[0] + lat_range[1]) / 2
-                if cd & mask:
-                    lat_range[0] = mid
-                else:
-                    lat_range[1] = mid
-            is_even = not is_even
-    lat = (lat_range[0] + lat_range[1]) / 2
-    lon = (lon_range[0] + lon_range[1]) / 2
-    return lat, lon
 
 
 class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.element.MacroElement):
@@ -251,7 +220,7 @@ def build_pmtiles_map(
         drained_markers = folium.FeatureGroup(name="Drained Lake Markers")
         for gid in drained_ids:
             # Decode the geohash into latitude and longitude coordinates
-            lat, lon = decode_geohash(gid)
+            lat, lon = pygeohash.decode_geohash(gid)
             folium.Marker(
                 location=[lat, lon],
                 icon=folium.Icon(color="red", icon="info-sign"),
