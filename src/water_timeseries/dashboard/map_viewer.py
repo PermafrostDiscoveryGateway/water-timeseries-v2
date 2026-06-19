@@ -393,7 +393,8 @@ class MapViewer:
             # Create style function based on whether NetChange_perc column exists
             if "NetChange_perc" in valid_gdf.columns:
                 # add tile layers
-                tile_layer_darkmatter.add_to(m)
+                m.add_basemap("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
+                # tile_layer_darkmatter.add_to(m)
                 tile_layer_esriworld.add_to(m)
                 tcvis_tile_layer.add_to(m)
 
