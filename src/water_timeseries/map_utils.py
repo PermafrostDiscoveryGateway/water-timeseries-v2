@@ -122,6 +122,7 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
         super().__init__(**kwargs)
         self._name = name if name else "PMTilesTooltip"
 
+import leafmap.foliumap as leafmap
 
 def build_pmtiles_map(
     pmtiles_url: str,
@@ -131,12 +132,11 @@ def build_pmtiles_map(
     drained_ids: list[str] | None = None,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
-    m = folium.Map(
+    m = leafmap.Map(
         location=center,
-        zoom_start=zoom_start,
-        tiles="CartoDB positron",  # lightweight basemap
+        zoom_start=zoom_start,  # lightweight basemap
     )
-
+    print("running render pmtiles")
     # Add background map types 
     wms_url = "https://maps.awi.de/services/common/permafrost/ows"
     tcvis_tile_layer = folium.WmsTileLayer(
@@ -210,7 +210,8 @@ def build_pmtiles_map(
 
     lake_layer = PMTilesMapLibreLayer(
         pmtiles_url,
-        layer_name="lakes_pmtiles",
+        "Lakes",
+        overlay=True,
         style={
             "version": 8,
             "sources": {
