@@ -383,8 +383,8 @@ load only the tiles visible in the viewport (MapLibre GL + PMTiles).
 # 1a. Build a single .pmtiles archive from your lake parquet
 uv run water-timeseries --vector-file build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles
 
-# 1b. Build a single .pmtiles archive from your lake parquet - set visualization style for non-generic layer info
-uv run water-timeseries --vector-file build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles --visualization-style drainage_year
+# 1b. Build a single .pmtiles archive from your lake parquet - set visualization style for non-generic layer info e.g. drainage year from dynamic world data
+uv run water-timeseries --vector-file build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles --viz-configuration drainage_year
 
 # 2a. Local dashboard (starts a small HTTP server with Range support)
 uv run water-timeseries dashboard \
