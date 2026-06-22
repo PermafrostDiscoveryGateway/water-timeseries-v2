@@ -302,7 +302,7 @@ class MapViewer:
         #         fields=fields_to_show,
         #         aliases=aliases_to_show,
         #     )
-        
+
         tooltip = None
         m = build_pmtiles_map(pmtiles_url, center=tuple(center), zoom_start=self.zoom, drained_ids=drained_ids, viz_configuration_name=viz_configuration_name, tooltip = tooltip)
 
@@ -1384,6 +1384,12 @@ def create_app(
                 st.subheader("🛰️ Recent imagery")
 
                 # setup today's date and one year go
+                # if viz_configuration_name == 'drainage_year':
+                #     local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons['id_geohash'] == current]
+                #     today = datetime(local_gdf.iloc[0]['date_break']).to_pydatetime()
+                #     print(today.strftime("%Y-%m-%d"))
+                # else:
+                #     today = datetime.now()
                 today = datetime.now()
                 one_year_ago = today - timedelta(days=366)
 

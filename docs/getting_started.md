@@ -380,8 +380,11 @@ load only the tiles visible in the viewport (MapLibre GL + PMTiles).
 **Prerequisites:** [tippecanoe](https://github.com/felt/tippecanoe) on your PATH (`brew install tippecanoe`).
 
 ```bash
-# 1. Build a single .pmtiles archive from your lake parquet
-uv run water-timeseries build-pmtiles /path/to/lakes.parquet tiles/lakes.pmtiles
+# 1a. Build a single .pmtiles archive from your lake parquet
+uv run water-timeseries --vector-file build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles
+
+# 1b. Build a single .pmtiles archive from your lake parquet - set visualization style for non-generic layer info
+uv run water-timeseries --vector-file build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles --visualization-style drainage_year
 
 # 2a. Local dashboard (starts a small HTTP server with Range support)
 uv run water-timeseries dashboard \
