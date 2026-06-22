@@ -247,3 +247,38 @@ def build_pmtiles_for_nrt(
         property_columns=nrt_columns,
         **kwargs,
     )
+
+
+def build_pmtiles_drainage_year(
+    parquet_path: Path | str,
+    output_path: Path | str,
+    **kwargs,
+) -> Path:
+    """Build PMTiles with NRT drainage styling properties."""
+    columns = (
+        "id_geohash",
+        "date_break",
+        "date_before_break",
+        "date_after_break",
+        "break_method",
+        "pre_break_mean",
+        "pre_break_median",
+        "pre_break_std",
+        "pre_break_min",
+        "pre_break_max",
+        "post_break_mean",
+        "post_break_median",
+        "post_break_std",
+        "post_break_min",
+        "post_break_max",
+        "date_break_year",
+        "date_break_month",
+        "water_change_ha",
+        "water_change_perc",
+    )
+    return build_pmtiles(
+        parquet_path,
+        output_path,
+        property_columns=columns,
+        **kwargs,
+    )
