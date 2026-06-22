@@ -22,7 +22,7 @@ DEFAULT_TILE_PROPERTIES: tuple[str, ...] = (
     "NetChange_perc",
 )
 
-TIPPECANOE_TEMP_DIR = Path("downloads/data").absolute()
+TIPPECANOE_TEMP_DIR = Path("downloads/tippecanoe_tmp").absolute()
 TIPPECANOE_TEMP_DIR.mkdir(exist_ok=True, parents=True)
 # Tippecanoe defaults tuned for global lake polygons (millions of features).
 DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
