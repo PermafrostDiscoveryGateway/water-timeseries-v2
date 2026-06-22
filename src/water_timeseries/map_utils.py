@@ -288,7 +288,7 @@ def build_pmtiles_map(
         drained_markers = folium.FeatureGroup(name="Drained Lake Markers")
         for gid in drained_ids:
             # Decode the geohash into latitude and longitude coordinates
-            lat, lon = pygeohash.decode_geohash(gid)
+            lat, lon = pygeohash.decode(gid)
             folium.Marker(
                 location=[lat, lon],
                 icon=folium.Icon(color="red", icon="info-sign"),
