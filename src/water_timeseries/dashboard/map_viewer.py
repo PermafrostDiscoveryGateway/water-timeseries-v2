@@ -254,7 +254,9 @@ class MapViewer:
         )
 
     def _render_pmtiles(self,
-                        viz_configuration_name: Optional[str] = "colored_historical",) -> Optional[str]:
+                        # valid_gdf: gpd.GeoDataFrame,
+                        viz_configuration_name: Optional[str] = "colored_historical",
+                        ) -> Optional[str]:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
 
@@ -284,7 +286,25 @@ class MapViewer:
         if getattr(self, "drained_data", None) is not None:
             drained_ids = list(self.drained_data.keys())
 
-        m = build_pmtiles_map(pmtiles_url, center=tuple(center), zoom_start=self.zoom, drained_ids=drained_ids, viz_configuration_name=viz_configuration_name)
+        # valid_gdf = _sanitize_geojson_properties(valid_gdf)
+        # tooltip_columns = [
+        #     ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
+        #     ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
+        #     ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
+        #     ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
+        # ]
+        # valid_gdf, fields_to_show, aliases_to_show = format_tooltip_columns(
+        #     valid_gdf,
+        #     id_column=self.id_column,
+        #     tooltip_columns=tooltip_columns,
+        # )
+        # tooltip=folium.GeoJsonTooltip(
+        #         fields=fields_to_show,
+        #         aliases=aliases_to_show,
+        #     )
+        
+        tooltip = None
+        m = build_pmtiles_map(pmtiles_url, center=tuple(center), zoom_start=self.zoom, drained_ids=drained_ids, viz_configuration_name=viz_configuration_name, tooltip = tooltip)
 
         # Render the map and get click data
         map_data = st_folium(

@@ -94,6 +94,51 @@ def get_legend_html_net_change() -> str:
     return LEGEND_HTML_NET_CHANGE
 
 
+# Add legend for NetChange_perc color scale
+def get_legend_html_date_drainage_year() -> str:
+    """Generate HTML legend for net change percentage visualization.
+
+    Returns:
+        HTML string containing a styled legend for the NetChange_perc color scale.
+        The legend displays a gradient from red (decrease) to blue (increase)
+        with labels ranging from -40% to +40%.
+
+    Example:
+        >>> legend_html = get_legend_html_net_change()
+        >>> # Use in folium map
+        >>> m.get_root().html.add_child(folium.Element(legend_html))
+    """
+    LEGEND_HTML_NET_CHANGE = """
+        <div style="
+            position: fixed;
+            bottom: 40px;
+            right: 10px;
+            width: 180px;
+            height: auto;
+            border: 2px solid grey;
+            z-index: 9999;
+            font-size: 12px;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        ">
+        <p style="margin: 0 0 5px 0; font-weight: bold;">Net Change (%)</p>
+        <div style="
+            background: linear-gradient(to right, #fff5f0, #f46d43, #67000d);
+            width: 100%;
+            height: 20px;
+            border: 1px solid #ccc;
+        "></div>
+        <div style="display: flex; justify-content: space-between; width: 100%; margin-top: 3px;">
+            <span>2017</span>
+            <span>2025</span>
+        </div>
+        </div>
+    """
+    return LEGEND_HTML_NET_CHANGE
+
+
 def build_hover_template(
     id_column: str,
     hover_fields: List[str],

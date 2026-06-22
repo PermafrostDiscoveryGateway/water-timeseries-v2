@@ -7,7 +7,7 @@ import folium.elements
 from folium_pmtiles.vector import PMTilesMapLibreLayer
 import leafmap.foliumap as leafmap
 
-from water_timeseries.utils.visualization import get_legend_html_net_change
+from water_timeseries.utils.visualization import get_legend_html_net_change, get_legend_html_date_drainage_year
 
 class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.element.MacroElement):
     _template = branca.element.Template(
@@ -102,6 +102,7 @@ def build_pmtiles_map(
     source_layer: str = "lakes",
     drained_ids: list[str] | None = None,
     viz_configuration_name: str="colored_historical",
+    tooltip=None,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
     m = leafmap.Map(
@@ -122,13 +123,12 @@ def build_pmtiles_map(
     tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
     tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
 
-    # Add background tiles
-    tile_layer_darkmatter.add_to(m)
-    tile_layer_esriworld.add_to(m)
-    tcvis_tile_layer.add_to(m)
+    # # Add background tiles
+    # tile_layer_darkmatter.add_to(m)
+    # tile_layer_esriworld.add_to(m)
+    # tcvis_tile_layer.add_to(m)
 
     tooltip = PMTilesMapLibreTooltipWithRounding()
-
     if viz_configuration_name == 'colored_historical':
         # Define default paint values
         fill_color = [
@@ -149,33 +149,43 @@ def build_pmtiles_map(
         fill_opacity = 0.7
         line_color = "#333333"
         line_width = 0.5
+        line_opacity=1
         legend = get_legend_html_net_change()
-
-        # Add background tiles
+        # Use only one basemap to avoid overlap
         tile_layer_darkmatter.add_to(m)
         tile_layer_esriworld.add_to(m)
         tcvis_tile_layer.add_to(m)
 
-    
     if viz_configuration_name == 'drainage_year':
+        # Convert to number to handle string values in PMTiles
         fill_color = [
             "interpolate",
             ["linear"],
-            ["get", "drainage_date_year"],
-            2017,
+            ["to-number", ["get", "date_break_year"]],
+            2017.0,
             "#fff5f0",
-            2025,
+            2025.0,
             "#67000d",
         ]
-        fill_opacity = 0.8
-        line_color = "#dddddd"
-        line_width = 2
-        legend = get_legend_html_net_change()
+        fill_opacity = 0.4
+        line_color = [
+            "interpolate",
+            ["linear"],
+            ["to-number", ["get", "date_break_year"]],
+            2017.0,
+            "#fff5f0",
+            2025.0,
+            "#67000d",
+        ]
+        # line_color = "#dddddd"
+        line_width = 3
+        line_opacity = 1
+        legend = get_legend_html_date_drainage_year()
 
-        # Add background tiles
-        tile_layer_esriworld.add_to(m)
-        tcvis_tile_layer.add_to(m)
+        # Use only one basemap to avoid overlap
         tile_layer_darkmatter.add_to(m)
+        tcvis_tile_layer.add_to(m)
+        tile_layer_esriworld.add_to(m)
 
     else:
         # Define default paint values
@@ -200,8 +210,8 @@ def build_pmtiles_map(
         get_legend_html_net_change()
         # Add background tiles
         tile_layer_darkmatter.add_to(m)
-        tile_layer_esriworld.add_to(m)
         tcvis_tile_layer.add_to(m)
+        tile_layer_esriworld.add_to(m)
 
     if drained_ids:
         # Highlight drained lakes in red, dim others
@@ -265,6 +275,7 @@ def build_pmtiles_map(
                     "paint": {
                         "line-color": line_color,
                         "line-width": line_width,
+                        "line-opacity": line_opacity,
                     },
                 },
             ],
