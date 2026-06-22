@@ -221,7 +221,7 @@ class MapViewer:
         st.subheader("Interactive Map Viewer")
 
         if self.map_backend == "pmtiles":
-            return self._render_pmtiles()
+            return self._render_pmtiles(viz_configuration_name=self.viz_configuration_name)
 
         gdf = self._ensure_gdf()
 
@@ -253,7 +253,8 @@ class MapViewer:
             viz_configuration_name=self.viz_configuration_name,
         )
 
-    def _render_pmtiles(self) -> Optional[str]:
+    def _render_pmtiles(self,
+                        viz_configuration_name: Optional[str] = "colored_historical",) -> Optional[str]:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
 
@@ -283,7 +284,7 @@ class MapViewer:
         if getattr(self, "drained_data", None) is not None:
             drained_ids = list(self.drained_data.keys())
 
-        m = build_pmtiles_map(pmtiles_url, center=tuple(center), zoom_start=self.zoom, drained_ids=drained_ids)
+        m = build_pmtiles_map(pmtiles_url, center=tuple(center), zoom_start=self.zoom, drained_ids=drained_ids, viz_configuration_name=viz_configuration_name)
 
         # Render the map and get click data
         map_data = st_folium(
@@ -415,6 +416,35 @@ class MapViewer:
                 ]
             else:
                 style_function = get_default_style_function()
+                
+            
+        elif viz_configuration_name == "drainage_year":
+            # Create style function based on whether NetChange_perc column exists
+            if "water_residual" in valid_gdf.columns:
+                # add tile layers
+                tcvis_tile_layer.add_to(m)
+                tile_layer_esriworld.add_to(m)
+                tile_layer_darkmatter.add_to(m)
+
+                style_function = get_colored_style_function(
+                    color_column="date_break_year",
+                    vmin=2017,
+                    vmax=2025,
+                    colormap=plt.cm.Reds,
+                    edge_weight=2,
+                    fill_opacity=0.8,
+                    edge_color="#dddddd",
+                )
+
+                # Format tooltip columns using utility function
+                # Include Area columns for full tooltip display
+                tooltip_columns = [
+                    ("pre_break_median", "Water area before break [ha]:", "{:.2f}", ""),
+                    ("post_break_median", "Water area before break [ha]:", "{:.2f}", ""),   
+                ]
+            else:
+                style_function = get_default_style_function()
+
 
         elif viz_configuration_name == "nrt_drainage":
             # Create style function based on whether NetChange_perc column exists

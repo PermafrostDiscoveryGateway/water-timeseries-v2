@@ -5,7 +5,9 @@ import branca.element
 import folium
 import folium.elements
 from folium_pmtiles.vector import PMTilesMapLibreLayer
+import leafmap.foliumap as leafmap
 
+from water_timeseries.utils.visualization import get_legend_html_net_change
 
 class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.element.MacroElement):
     _template = branca.element.Template(
@@ -91,7 +93,7 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
         super().__init__(**kwargs)
         self._name = name if name else "PMTilesTooltip"
 
-import leafmap.foliumap as leafmap
+
 
 def build_pmtiles_map(
     pmtiles_url: str,
@@ -99,6 +101,7 @@ def build_pmtiles_map(
     zoom_start: int = 4,
     source_layer: str = "lakes",
     drained_ids: list[str] | None = None,
+    viz_configuration_name: str="colored_historical",
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
     m = leafmap.Map(
@@ -126,25 +129,79 @@ def build_pmtiles_map(
 
     tooltip = PMTilesMapLibreTooltipWithRounding()
 
-    # Define default paint values
-    fill_color = [
-        "interpolate",
-        ["linear"],
-        ["get", "NetChange_perc"],
-        -40.0,
-        "#d73027",
-        -20.0,
-        "#f46d43",
-        0.0,
-        "#fee090",
-        20.0,
-        "#74add1",
-        40.0,
-        "#4575b4",
-    ]
-    fill_opacity = 0.7
-    line_color = "#333333"
-    line_width = 0.5
+    if viz_configuration_name == 'colored_historical':
+        # Define default paint values
+        fill_color = [
+            "interpolate",
+            ["linear"],
+            ["get", "NetChange_perc"],
+            -40.0,
+            "#d73027",
+            -20.0,
+            "#f46d43",
+            0.0,
+            "#fee090",
+            20.0,
+            "#74add1",
+            40.0,
+            "#4575b4",
+        ]
+        fill_opacity = 0.7
+        line_color = "#333333"
+        line_width = 0.5
+        legend = get_legend_html_net_change()
+
+        # Add background tiles
+        tile_layer_darkmatter.add_to(m)
+        tile_layer_esriworld.add_to(m)
+        tcvis_tile_layer.add_to(m)
+
+    
+    if viz_configuration_name == 'drainage_year':
+        fill_color = [
+            "interpolate",
+            ["linear"],
+            ["get", "drainage_date_year"],
+            2017,
+            "#fff5f0",
+            2025,
+            "#67000d",
+        ]
+        fill_opacity = 0.8
+        line_color = "#dddddd"
+        line_width = 2
+        legend = get_legend_html_net_change()
+
+        # Add background tiles
+        tile_layer_esriworld.add_to(m)
+        tcvis_tile_layer.add_to(m)
+        tile_layer_darkmatter.add_to(m)
+
+    else:
+        # Define default paint values
+        fill_color = [
+            "interpolate",
+            ["linear"],
+            ["get", "NetChange_perc"],
+            -40.0,
+            "#d73027",
+            -20.0,
+            "#f46d43",
+            0.0,
+            "#fee090",
+            20.0,
+            "#74add1",
+            40.0,
+            "#4575b4",
+        ]
+        fill_opacity = 0.7
+        line_color = "#333333"
+        line_width = 0.5
+        get_legend_html_net_change()
+        # Add background tiles
+        tile_layer_darkmatter.add_to(m)
+        tile_layer_esriworld.add_to(m)
+        tcvis_tile_layer.add_to(m)
 
     if drained_ids:
         # Highlight drained lakes in red, dim others
@@ -230,8 +287,8 @@ def build_pmtiles_map(
     # -----------------------------------------------
 
     folium.LayerControl().add_to(m)
-    from water_timeseries.utils.visualization import get_legend_html_net_change
-    m.get_root().html.add_child(folium.Element(get_legend_html_net_change()))
+    
+    m.get_root().html.add_child(folium.Element(legend))
     return m
 
 def resolve_pmtiles_url(pmtiles_file: str) -> str:
