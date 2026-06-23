@@ -29,7 +29,7 @@ from water_timeseries.utils.dashboard import (
 from water_timeseries.utils.earthengine import (
     get_rioxarray_ds_from_lake,
     initialize_earth_engine,
-    visualize_s2_first_and_last,
+    visualize_s2_xee_cube,
 )
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.map_styling import (
@@ -1404,30 +1404,32 @@ def create_app(
                 st.subheader("🛰️ Recent imagery")
 
                 # setup today's date and one year go
+                today = datetime.now()
                 if viz_configuration_name == "drainage_year":
                     local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons["id_geohash"] == current]
-                    today = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(
-                        days=30
-                    )  # break date (start of month after break)
-                    one_year_ago = today - timedelta(days=366)  # one year before
+                    post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
+                    # break date (start of month after break)
+                    pre_break = post_break - timedelta(days=366)  # one year before
                     print(today.strftime("%Y-%m-%d"))
                     spinner_text = (
                         "Pulling satellite image closest to the break + one year before... This may take a few seconds."
                     )
+                    viz_dates = [pre_break, post_break, today]
                 else:
                     today = datetime.now()
                     one_year_ago = today - timedelta(days=366)
                     spinner_text = "Pulling most recent satellite image + one year ago... This may take a few seconds."
+                    viz_dates = [one_year_ago, today]
 
                 with st.spinner(spinner_text):
                     # pull ds via xee
                     ds = get_rioxarray_ds_from_lake(
                         lake_gdf=st.session_state.lake_polygons,
                         id_geohash=current,
-                        start_date=one_year_ago.strftime("%Y-%m-%d"),
+                        start_date="2016-06-01",
                         end_date=today.strftime("%Y-%m-%d"),
                     )
-                    fig = visualize_s2_first_and_last(ds)
+                    fig = visualize_s2_xee_cube(ds, dates=viz_dates)
 
                     # plot figure
                     st.pyplot(fig, width="content")
