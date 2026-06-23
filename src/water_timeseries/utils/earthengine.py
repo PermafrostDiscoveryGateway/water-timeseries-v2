@@ -111,17 +111,21 @@ def calc_monthly_dw(
     scale: float = 10,
 ) -> ee.Image | None:
     """
-    Generates a monthly dynamic world composite and then returns a binary mask where
-    the value is 1 for each pixel if water, snow or ice was the top probability
-    class according to dynamic world. The pixel in the mask is 0 otherwise.
+    Generate a monthly Dynamic World composite.
 
-    start_date: ee.Date, the mask will be calculated for start_date to start_date + 1 month.
-    dw: ee.ImageCollection, the dynamic world image collection.
-    crs: str, optional. The coordinate reference system.
+    Generates a monthly Dynamic World composite and returns the mode of the
+    land cover classification for each pixel.
+
+    Args:
+        start_date (str): Start date in 'YYYY-MM-DD' format. The mask will be
+            calculated for start_date to start_date + 1 month.
+        polygons (ee.FeatureCollection): The region of interest to filter images.
+        crs (str, optional): The coordinate reference system. Defaults to 'EPSG:3572'.
+        scale (float, optional): The pixel scale in meters. Defaults to 10.
 
     Returns:
-        ee.Image: The dynamic world composite image, or None if no data is available
-        for the given time period and location.
+        ee.Image | None: The Dynamic World composite image, or None if no data
+            is available for the given time period and location.
     """
     import warnings
 
@@ -169,13 +173,29 @@ def calc_dw_aggregate(
     timestamp_date: str = None,
 ) -> ee.Image:
     """
-    Generates a monthly dynamic world composite and then returns a binary mask where
-    the value is 1 for each pixel if water, snow or ice was the top probability
-    class according to dynamic world. The pixel in the mask is 0 otherwise.
+    Generate a Dynamic World composite for a date range or year/month.
 
-    start_date: ee.Date, the mask will be calculated for start_date to start_date + 1 month.
-    dw: ee.ImageCollection, the dynamic world image collection.
-    crs: str, optional. The coordinate reference system.
+    Generates a Dynamic World composite and returns the mode of the
+    land cover classification. Accepts either a date range (start_date/end_date)
+    or a specific year/month.
+
+    Args:
+        polygons (ee.FeatureCollection): The region of interest to filter images.
+        start_date (str, optional): Start date in 'YYYY-MM-DD' format.
+        end_date (str, optional): End date in 'YYYY-MM-DD' format.
+        year (int, optional): Specific year to filter.
+        month (int, optional): Specific month to filter.
+        crs (str, optional): The coordinate reference system. Defaults to 'EPSG:3572'.
+        scale (float, optional): The pixel scale in meters. Defaults to 10.
+        timestamp_date (str, optional): Date string for the image timestamp.
+
+    Returns:
+        ee.Image: The Dynamic World composite image, or a no-data image if
+            no images are available for the specified period.
+
+    Raises:
+        ValueError: If neither (start_date and end_date) nor (year and month)
+            are provided.
     """
     # Cast startDate back to an ee.Date, type erasure happens when mapping on a list.
     if (start_date and end_date) is not None:
@@ -219,8 +239,23 @@ def calc_dw_aggregate_v2(
     timestamp_date: str = None,
 ) -> ee.Image | None:
     """
-    Generates a Dynamic World composite reduced by mode.
-    Returns an ee.Image, or None if no images are available for the period.
+    Generate a Dynamic World composite for a date range.
+
+    Generates a Dynamic World composite reduced by mode and returns an ee.Image,
+    or None if no images are available for the period.
+
+    Args:
+        start_date (str): Start date in 'YYYY-MM-DD' format.
+        end_date (str): End date in 'YYYY-MM-DD' format.
+        polygons (ee.FeatureCollection): The region of interest to filter images.
+        crs (str, optional): The coordinate reference system. Defaults to 'EPSG:3572'.
+        scale (float, optional): The pixel scale in meters. Defaults to 10.
+        timestamp_date (str, optional): Date string for the image timestamp.
+            Defaults to start_date if not provided.
+
+    Returns:
+        ee.Image | None: The Dynamic World composite image, or None if no
+            images are available for the given time period and location.
     """
     # Cast startDate back to an ee.Date, type erasure happens when mapping on a list.
     start_date = ee.Date(start_date)
@@ -425,7 +460,7 @@ def weekly_dates(start="2025-06-04", step=7, count=None, end_date=None, fmt="%Y-
 
 def monthly(start="2025-06-04", step=7, count=None, end_date=None, fmt="%Y-%m-%d"):
     """
-    Return list of dates (strings) starting at `start`, every `step` days.
+    Return list of dates (strings) starting at `start`, every `step` months.
     Provide either `count` (number of items) or `end_date` (inclusive).
     """
     from datetime import datetime, timedelta
@@ -786,6 +821,54 @@ def fix_xee_grid_utm(grid: dict) -> dict:
     return grid
 
 
+def visualize_s2_first_and_last(ds: xr.Dataset, style: str = "rgb") -> plt.Figure:
+    """
+    Visualize the first and last Sentinel-2 acquisition from an xarray Dataset.
+
+    This function creates a two-panel figure showing Sentinel-2 imagery for the
+    first and last time steps in the dataset, useful for comparing temporal
+    changes in lake appearance or extent.
+
+    Args:
+        ds (xr.Dataset): An xarray Dataset containing Sentinel-2 bands as data
+            variables with a 'time' dimension. Expected bands include B2, B3, B4,
+            and optionally B8 for vegetation analysis.
+        style (str, optional): Visualization style - either 'rgb' for true color
+            composite (B4, B3, B2) or any other value for vegetation false color
+            composite (B8, B4, B3). Defaults to 'rgb'.
+
+    Returns:
+        plt.Figure: A matplotlib Figure object containing two subplots with the
+            visualized satellite imagery. The figure should be displayed with
+            plt.show() or saved with fig.savefig().
+
+    Example:
+        >>> ds = get_rioxarray_ds_from_lake(gdf, "c22iz2n", "2026-05-01", "2026-06-01")
+        >>> fig = visualize_s2_first_and_last(ds, style="rgb")
+        >>> fig.savefig("comparison.png", dpi=150, bbox_inches="tight")
+
+    Notes:
+        - The RGB visualization scales values to 0-1 range by dividing by 1000
+        - Values outside 0-1 are clipped
+        - Y-axis aspect ratio is set to 'equal' for accurate spatial representation
+    """
+    fig, axes = plt.subplots(ncols=2)
+    for date in [0, -1]:
+        ax = axes[date]
+        ds_rio = ds.isel(time=date)  # .rio.write_crs("EPSG:32604")
+        if style == "rgb":
+            (ds_rio[["B4", "B3", "B2"]].to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
+        else:
+            (ds_rio[["B8", "B4", "B3"]].to_array() / 3000).clip(0, 1).plot.imshow(ax=ax)
+        ax.set_aspect("equal")
+        ax.set_title(str(ds_rio.time.dt.strftime("%Y-%m-%d").data))
+        ax.set_ylabel("")
+        ax.set_xlabel("")
+        ax.set_xticklabels([])
+        ax.set_yticklabels([])
+    return fig
+
+
 def get_rioxarray_ds_from_lake(
     lake_gdf: gpd.GeoDataFrame,
     id_geohash: str,
@@ -849,36 +932,39 @@ def get_rioxarray_ds_from_lake(
         .filterDate(start_date, end_date)
         .filterBounds(fc)
         .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", max_cloud_cover))
+        .filter(ee.Filter.calendarRange(6, 9, "month"))
     )
-    ds_rio = xr.open_dataset(ic, engine="ee", **grid).rio.write_crs(crs)
+    ds_rio = xr.open_dataset(ic, engine="ee", **grid).rio.write_crs(crs).sortby("time")
 
     return ds_rio
 
 
-def visualize_s2_first_and_last(ds: xr.Dataset, style: str = "rgb") -> plt.Figure:
+def visualize_s2_xee_cube(ds: xr.Dataset, dates: List[str], style: str = "rgb") -> plt.Figure:
     """
-    Visualize the first and last Sentinel-2 acquisition from an xarray Dataset.
+    Visualize Sentinel-2 acquisitions from an xarray Dataset for specified dates.
 
-    This function creates a two-panel figure showing Sentinel-2 imagery for the
-    first and last time steps in the dataset, useful for comparing temporal
-    changes in lake appearance or extent.
+    This function creates a multi-panel figure showing Sentinel-2 imagery for
+    the dates specified in the dates list, useful for comparing temporal changes
+    in lake appearance or extent.
 
     Args:
         ds (xr.Dataset): An xarray Dataset containing Sentinel-2 bands as data
             variables with a 'time' dimension. Expected bands include B2, B3, B4,
             and optionally B8 for vegetation analysis.
+        dates (List[str]): List of dates to visualize, in any format accepted by
+            xarray's `sel(time=..., method='nearest')`.
         style (str, optional): Visualization style - either 'rgb' for true color
             composite (B4, B3, B2) or any other value for vegetation false color
             composite (B8, B4, B3). Defaults to 'rgb'.
 
     Returns:
-        plt.Figure: A matplotlib Figure object containing two subplots with the
-            visualized satellite imagery. The figure should be displayed with
-            plt.show() or saved with fig.savefig().
+        plt.Figure: A matplotlib Figure object containing subplots with the
+            visualized satellite imagery.
 
     Example:
         >>> ds = get_rioxarray_ds_from_lake(gdf, "c22iz2n", "2026-05-01", "2026-06-01")
-        >>> fig = visualize_s2_first_and_last(ds, style="rgb")
+        >>> dates = ["2026-05-10", "2026-05-20", "2026-06-01"]
+        >>> fig = visualize_s2_xee_cube(ds, dates, style="rgb")
         >>> fig.savefig("comparison.png", dpi=150, bbox_inches="tight")
 
     Notes:
@@ -886,10 +972,11 @@ def visualize_s2_first_and_last(ds: xr.Dataset, style: str = "rgb") -> plt.Figur
         - Values outside 0-1 are clipped
         - Y-axis aspect ratio is set to 'equal' for accurate spatial representation
     """
-    fig, axes = plt.subplots(ncols=2)
-    for date in [0, -1]:
-        ax = axes[date]
-        ds_rio = ds.isel(time=date)  # .rio.write_crs("EPSG:32604")
+    fig, axes = plt.subplots(ncols=len(dates))
+    i = 0
+    for date in dates:
+        ax = axes[i]
+        ds_rio = ds.sel(time=date, method="nearest")  # .rio.write_crs("EPSG:32604")
         if style == "rgb":
             (ds_rio[["B4", "B3", "B2"]].to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
         else:
@@ -900,4 +987,5 @@ def visualize_s2_first_and_last(ds: xr.Dataset, style: str = "rgb") -> plt.Figur
         ax.set_xlabel("")
         ax.set_xticklabels([])
         ax.set_yticklabels([])
+        i += 1
     return fig

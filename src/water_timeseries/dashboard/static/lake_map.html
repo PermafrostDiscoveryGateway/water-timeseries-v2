@@ -436,11 +436,17 @@
       window.location.href = url.toString();
     }
 
+    const hoverPopup = new maplibregl.Popup({
+      closeButton: false,
+      closeOnClick: false,
+      offset: 15
+    });
+
     const interactiveLayers = [];
     if (CONFIG.show_main_layer !== false) {
       interactiveLayers.push("lakes-fill", "lakes-points");
     }
-    
+
     interactiveLayers.forEach(layer => {
       map.on("click", layer, (e) => {
         if (!e.features || !e.features.length) return;
@@ -458,8 +464,20 @@
           ?.addEventListener("click", () => selectLake(geohash));
       });
 
-      map.on("mouseenter", layer, () => { map.getCanvas().style.cursor = "pointer"; });
-      map.on("mouseleave", layer, () => { map.getCanvas().style.cursor = ""; });
+      map.on("mousemove", layer, (e) => {
+        if (!e.features || !e.features.length) return;
+        map.getCanvas().style.cursor = "pointer";
+        const props = e.features[0].properties || {};
+        const html = formatProps(props);
+        hoverPopup.setLngLat(e.lngLat)
+          .setHTML(html)
+          .addTo(map);
+      });
+
+      map.on("mouseleave", layer, () => {
+        map.getCanvas().style.cursor = "";
+        hoverPopup.remove();
+      });
     });
 
     const legend = document.getElementById("legend");

@@ -22,7 +22,7 @@ DEFAULT_TILE_PROPERTIES: tuple[str, ...] = (
     "NetChange_perc",
 )
 
-TIPPECANOE_TEMP_DIR = Path("downloads/data").absolute()
+TIPPECANOE_TEMP_DIR = Path("downloads/tippecanoe_tmp").absolute()
 TIPPECANOE_TEMP_DIR.mkdir(exist_ok=True, parents=True)
 # Tippecanoe defaults tuned for global lake polygons (millions of features).
 DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
@@ -63,7 +63,8 @@ def _sanitize_properties(gdf: gpd.GeoDataFrame, columns: Sequence[str]) -> gpd.G
 
     for col in keep:
         if pd.api.types.is_numeric_dtype(out[col]):
-            out[col] = pd.to_numeric(out[col], errors="coerce")
+            # Round numeric float/double properties to 2 decimal places
+            out[col] = pd.to_numeric(out[col], errors="coerce").round(2)
 
     return out
 
@@ -244,5 +245,28 @@ def build_pmtiles_for_nrt(
         parquet_path,
         output_path,
         property_columns=nrt_columns,
+        **kwargs,
+    )
+
+
+def build_pmtiles_drainage_year(
+    parquet_path: Path | str,
+    output_path: Path | str,
+    **kwargs,
+) -> Path:
+    """Build PMTiles with NRT drainage styling properties."""
+    columns = (
+        "id_geohash",
+        "date_break",
+        "date_break_year",
+        "pre_break_median",
+        "post_break_median",
+        "water_change_ha",
+        "water_change_perc",
+    )
+    return build_pmtiles(
+        parquet_path,
+        output_path,
+        property_columns=columns,
         **kwargs,
     )

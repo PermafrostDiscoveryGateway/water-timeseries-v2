@@ -12,13 +12,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import pygeohash
 import streamlit as st
 from streamlit_folium import st_folium
 
-from water_timeseries.dashboard.pmtiles_viewer import (
-    render_pmtiles_map,
-    sync_query_param_selection,
-)
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
@@ -32,7 +29,7 @@ from water_timeseries.utils.dashboard import (
 from water_timeseries.utils.earthengine import (
     get_rioxarray_ds_from_lake,
     initialize_earth_engine,
-    visualize_s2_first_and_last,
+    visualize_s2_xee_cube,
 )
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.map_styling import (
@@ -136,6 +133,7 @@ class MapViewer:
         self.drained_gdf = drained_gdf
         self.drained_label = drained_label
         self.show_main_layer = show_main_layer
+        self.drained_data = None
         self.viz_configuration_name = viz_configuration_name
 
         use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
@@ -225,7 +223,7 @@ class MapViewer:
         st.subheader("Interactive Map Viewer")
 
         if self.map_backend == "pmtiles":
-            return self._render_pmtiles()
+            return self._render_pmtiles(viz_configuration_name=self.viz_configuration_name)
 
         gdf = self._ensure_gdf()
 
@@ -257,33 +255,130 @@ class MapViewer:
             viz_configuration_name=self.viz_configuration_name,
         )
 
-    def _render_pmtiles(self) -> Optional[str]:
+    def _render_pmtiles(
+        self,
+        # valid_gdf: gpd.GeoDataFrame,
+        viz_configuration_name: Optional[str] = "colored_historical",
+    ) -> Optional[str]:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
+        from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
+
         st.caption(
             "Vector tiles (PMTiles): only visible map tiles are loaded. "
-            "Click a lake, then **Select for time series** to load plots below. "
+            "Click a lake to load plots below. "
             "Lakes are colored by net change (red = shrink, blue = grow)."
         )
+
+        pmtiles_source = self.pmtiles_url or (str(self.pmtiles_file) if self.pmtiles_file else None)
+        if not pmtiles_source:
+            st.error("No pmtiles_file or pmtiles_url provided.")
+            return None
+
         if self.pmtiles_file:
             st.caption(f"Tiles: `{self.pmtiles_file}`")
-        drained_data = None
-        if getattr(self, "drained_data", None) is not None:
-            drained_data = self.drained_data
 
-        render_pmtiles_map(
-            pmtiles_file=self.pmtiles_file,
-            pmtiles_url=self.pmtiles_url,
-            vector_file_for_bounds=None,
-            id_column=self.id_column,
-            viz_configuration=self.viz_configuration_name or "colored_historical",
-            drained_data=drained_data,
-            show_main_layer=self.show_main_layer,
+        pmtiles_url = resolve_pmtiles_url(pmtiles_source)
+
+        # Determine center of map (lat, lon)
+        if self.map_center is None:
+            center = [66.5, -164.1]  # Default fallback center
+        else:
+            center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
+
+        drained_ids = None
+        if getattr(self, "drained_data", None) is not None:
+            drained_ids = list(self.drained_data.keys())
+
+        tooltip = None
+        m = build_pmtiles_map(
+            pmtiles_url,
+            center=tuple(center),
+            zoom_start=self.zoom,
+            drained_ids=drained_ids,
+            viz_configuration_name=viz_configuration_name,
+            tooltip=tooltip,
         )
-        selected = sync_query_param_selection(self.id_column)
-        if selected and selected != st.session_state.get("_pmtiles_last_rerun"):
-            st.session_state._pmtiles_last_rerun = selected
+
+        # Render the map and get click data
+        map_data = st_folium(
+            m,
+            width="100%",
+            height=600,
+            key="map_viewer_pmtiles",
+            returned_objects=[
+                "last_active_drawing",
+                "last_object_clicked",
+                "last_object_clicked_tooltip",
+                "last_clicked",
+            ],
+        )
+
+        # Extract clicked feature's id_geohash for time-series lookup
+        clicked_id = None
+        clicked_data = map_data.get("last_object_clicked")
+        if clicked_data and "properties" in clicked_data:
+            clicked_id = clicked_data["properties"].get(self.id_column)
+
+        if not clicked_id:
+            clicked_active = map_data.get("last_active_drawing")
+            if clicked_active and "properties" in clicked_active:
+                clicked_id = clicked_active["properties"].get(self.id_column)
+
+        if not clicked_id:
+            clicked_tooltip = map_data.get("last_object_clicked_tooltip")
+            if clicked_tooltip:
+                import re
+
+                match = re.search(r"id_geohash.*?(?:>|:|\s|^)([a-zA-Z0-9]{12})", clicked_tooltip, re.DOTALL)
+                if match:
+                    clicked_id = match.group(1)
+                else:
+                    match = re.search(r"\b([a-z0-9]{12})\b", clicked_tooltip)
+                    if match:
+                        clicked_id = match.group(1)
+
+        # Fallback spatial search: check map click coordinates
+        if not clicked_id and map_data:
+            clicked_map = map_data.get("last_clicked")
+            if clicked_map:
+                lat = clicked_map.get("lat")
+                lng = clicked_map.get("lng")
+                if lat is not None and lng is not None:
+                    from shapely.geometry import Point
+
+                    click_point = Point(lng, lat)
+                    lakes_gdf = st.session_state.get("lake_polygons")
+                    if lakes_gdf is not None and not lakes_gdf.empty:
+                        sindex = lakes_gdf.sindex
+                        possible_matches_idx = list(sindex.intersection((lng, lat, lng, lat)))
+                        possible_matches = lakes_gdf.iloc[possible_matches_idx]
+                        matching = possible_matches[possible_matches.geometry.contains(click_point)]
+                        if not matching.empty:
+                            clicked_id = matching.iloc[0][self.id_column]
+
+                            clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
+                            # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+                            st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
+                            st.session_state.zoom_level = 12
+                            print(clicked_lat, clicked_lon)
+
+        # Update session state only if a NEW feature was clicked
+        if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
+            st.session_state.selected_geohash = clicked_id
+            st.query_params["selected_lake"] = clicked_id
+
+            clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
+            # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+            st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
+            st.session_state.zoom_level = 12
+            print(clicked_lat, clicked_lon)
+            if clicked_id not in st.session_state.get("clicked_features", []):
+                if "clicked_features" not in st.session_state:
+                    st.session_state.clicked_features = []
+                st.session_state.clicked_features.append(clicked_id)
             st.rerun()
-        return selected
+
+        return st.session_state.get("selected_geohash")
 
     # TODO: create configuration option
     def _render_folium(
@@ -302,7 +397,7 @@ class MapViewer:
         Returns:
             The selected id_geohash value if a feature was clicked, None otherwise.
         """
-
+        print("PMTILES center", self.map_center)
         # Determine center of map
         if self.map_center is None:
             centroid = valid_gdf.geometry.unary_union.centroid
@@ -331,7 +426,8 @@ class MapViewer:
             # Create style function based on whether NetChange_perc column exists
             if "NetChange_perc" in valid_gdf.columns:
                 # add tile layers
-                tile_layer_darkmatter.add_to(m)
+                m.add_basemap("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
+                # tile_layer_darkmatter.add_to(m)
                 tile_layer_esriworld.add_to(m)
                 tcvis_tile_layer.add_to(m)
 
@@ -349,6 +445,33 @@ class MapViewer:
                     ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
                     ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
                     ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
+                ]
+            else:
+                style_function = get_default_style_function()
+
+        elif viz_configuration_name == "drainage_year":
+            # Create style function based on whether NetChange_perc column exists
+            if "water_residual" in valid_gdf.columns:
+                # add tile layers
+                tcvis_tile_layer.add_to(m)
+                tile_layer_esriworld.add_to(m)
+                tile_layer_darkmatter.add_to(m)
+
+                style_function = get_colored_style_function(
+                    color_column="date_break_year",
+                    vmin=2017,
+                    vmax=2025,
+                    colormap=plt.cm.Reds,
+                    edge_weight=2,
+                    fill_opacity=0.8,
+                    edge_color="#dddddd",
+                )
+
+                # Format tooltip columns using utility function
+                # Include Area columns for full tooltip display
+                tooltip_columns = [
+                    ("pre_break_median", "Water area before break [ha]:", "{:.2f}", ""),
+                    ("post_break_median", "Water area before break [ha]:", "{:.2f}", ""),
                 ]
             else:
                 style_function = get_default_style_function()
@@ -469,6 +592,23 @@ class MapViewer:
                     ),
                 ).add_to(m)
 
+                # --- ADD THIS BLOCK FOR DRAINED LAKE MARKERS ---
+                drained_markers = folium.FeatureGroup(name="Drained Lake Markers", show=True)
+                for idx, row in drained_gdf.iterrows():
+                    # Calculate centroid for standard geometries (Polygons/MultiPolygons)
+                    centroid = row.geometry.centroid
+
+                    # Optional: Grab the lake ID for the tooltip
+                    lake_id = row.get(self.id_column, "Unknown")
+
+                    folium.Marker(
+                        location=[centroid.y, centroid.x],
+                        icon=folium.Icon(color="red", icon="info-sign"),
+                        tooltip=f"Drained Lake: {lake_id}",
+                    ).add_to(drained_markers)
+                drained_markers.add_to(m)
+                # -----------------------------------------------
+
         folium.LayerControl().add_to(m)
 
         m.get_root().html.add_child(folium.Element(get_legend_html_net_change()))
@@ -487,6 +627,7 @@ class MapViewer:
         # Update session state only if a NEW feature was clicked (not the same one)
         if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
             st.session_state.selected_geohash = clicked_id
+            st.query_params["selected_lake"] = clicked_id
             if clicked_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(clicked_id)
             st.rerun()
@@ -829,7 +970,25 @@ def create_app(
     zarr_path_input = str(zarr_path)
     zarr_path_jrc_input = str(zarr_path_jrc)
     id_column = "id_geohash"
-    zoom_level = 10
+
+    if "zoom_level" not in st.session_state:
+        st.session_state.zoom_level = 10
+    if "map_center" not in st.session_state:
+        st.session_state.map_center = {"lat": 66.5, "lon": -164.1}
+
+    # Sync selection from URL query parameters
+    if "selected_geohash" not in st.session_state:
+        st.session_state.selected_geohash = None
+    if "clicked_features" not in st.session_state:
+        st.session_state.clicked_features = []
+
+    qp_selected = st.query_params.get("selected_lake")
+    if qp_selected:
+        selected_id = str(qp_selected)
+        if selected_id != st.session_state.selected_geohash:
+            st.session_state.selected_geohash = selected_id
+            if selected_id not in st.session_state.clicked_features:
+                st.session_state.clicked_features.append(selected_id)
 
     # Initialize dataset in session state if not already
     if "dw_dataset" not in st.session_state:
@@ -969,7 +1128,8 @@ def create_app(
         viewer = MapViewer(
             parquet_path=data_path_input,
             id_column=id_column,
-            zoom=zoom_level,
+            zoom=st.session_state.zoom_level,
+            map_center=st.session_state.map_center,
             map_backend=map_backend,
             max_features=max_features,
             viz_configuration_name=viz_configuration_name,
@@ -995,7 +1155,7 @@ def create_app(
                 )
                 viewer.drained_gdf = drained_gdf
                 viewer.drained_label = drained_label
-                viewer.show_main_layer = False
+                viewer.show_main_layer = True
         elif show_drained:
             viewer.drained_gdf = None
             viewer.drained_data = None
@@ -1034,6 +1194,12 @@ def create_app(
             # Update selection based on dropdown choice
             if selected_option != st.session_state.selected_geohash:
                 st.session_state.selected_geohash = selected_option
+                st.query_params["selected_lake"] = selected_option
+                # change map params
+                clicked_lat, clicked_lon = pygeohash.decode(selected_option)
+                st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
+                st.session_state.zoom_level = 12
+
                 st.rerun()
         else:
             st.sidebar.info("No features clicked yet. Click on a feature to select it.")
@@ -1239,17 +1405,31 @@ def create_app(
 
                 # setup today's date and one year go
                 today = datetime.now()
-                one_year_ago = today - timedelta(days=366)
+                if viz_configuration_name == "drainage_year":
+                    local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons["id_geohash"] == current]
+                    post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
+                    # break date (start of month after break)
+                    pre_break = post_break - timedelta(days=366)  # one year before
+                    print(today.strftime("%Y-%m-%d"))
+                    spinner_text = (
+                        "Pulling satellite image closest to the break + one year before... This may take a few seconds."
+                    )
+                    viz_dates = [pre_break, post_break, today]
+                else:
+                    today = datetime.now()
+                    one_year_ago = today - timedelta(days=366)
+                    spinner_text = "Pulling most recent satellite image + one year ago... This may take a few seconds."
+                    viz_dates = [one_year_ago, today]
 
-                with st.spinner("Pulling most recent satellite image + one year ago... This may take a few seconds."):
+                with st.spinner(spinner_text):
                     # pull ds via xee
                     ds = get_rioxarray_ds_from_lake(
                         lake_gdf=st.session_state.lake_polygons,
                         id_geohash=current,
-                        start_date=one_year_ago.strftime("%Y-%m-%d"),
+                        start_date="2016-06-01",
                         end_date=today.strftime("%Y-%m-%d"),
                     )
-                    fig = visualize_s2_first_and_last(ds)
+                    fig = visualize_s2_xee_cube(ds, dates=viz_dates)
 
                     # plot figure
                     st.pyplot(fig, width="content")

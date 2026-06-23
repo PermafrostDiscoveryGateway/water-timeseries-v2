@@ -1215,6 +1215,15 @@ wheels = [
 ]
 
 [[package]]
+name = "eval-type-backport"
+version = "0.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/1c/15/273a4baf8248d6d76220723c3caf039d283774b31a7c46ba686120145b76/eval_type_backport-0.4.0.tar.gz", hash = "sha256:8397d25e6524c2e67b9576bb0636be27dea2192017711220c534ec2de921e9b0", size = 10260 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/50/a7/bb99bf5e6f78736ddb53480f2c3ff3702ffe2196a7c5e1661c03081d398e/eval_type_backport-0.4.0-py3-none-any.whl", hash = "sha256:ad5e2a8db71b6696a56eafb938b0f5a337d3217f256b8e158b469422b4772b20", size = 6432 },
+]
+
+[[package]]
 name = "executing"
 version = "2.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1287,6 +1296,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c7/76/84a1b1b00ce71f9c0c44af7d80f310c02e2e583591fe7d4cb03baecd0d3f/folium-0.20.0.tar.gz", hash = "sha256:a0d78b9d5a36ba7589ca9aedbd433e84e9fcab79cd6ac213adbcff922e454cb9", size = 109932 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b5/a8/5f764f333204db0390362a4356d03a43626997f26818a0e9396f1b3bd8c9/folium-0.20.0-py2.py3-none-any.whl", hash = "sha256:f0bc2a92acde20bca56367aa5c1c376c433f450608d058daebab2fc9bf8198bf", size = 113394 },
+]
+
+[[package]]
+name = "folium-pmtiles"
+version = "0.4.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "folium" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/7a/21/10d1476ecbc5223e1af99f8fdee3d707b1a2a4a04a07197d6ceb53f21efa/folium_pmtiles-0.4.3.tar.gz", hash = "sha256:c3ab8e3d21e59e1941cf90f4438d5d4a8bbae3b0135f544409e713e24fd9ae8e", size = 4351 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c2/ce/65dfacfad9bcb4162ec18b3395fcc93c8db31592f8749c1fae005289eaae/folium_pmtiles-0.4.3-py3-none-any.whl", hash = "sha256:7a5eb9c20d148f544dab3665134ac22081fb8c07f1cec7e9cdecd27a53b5008e", size = 5518 },
 ]
 
 [[package]]
@@ -1410,6 +1431,21 @@ dependencies = [
     { name = "six" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/11/ab/d0cee58db2d8445c26e6f5db25d9b1f1aa14a3ab30eea8ce77ae808d10ef/gcloud-0.18.3.tar.gz", hash = "sha256:0af2dec59fce20561752f86e42d981c6a255e306a6c5e5d1fa3d358a8857e4fb", size = 454375 }
+
+[[package]]
+name = "gdown"
+version = "6.1.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "beautifulsoup4" },
+    { name = "filelock" },
+    { name = "requests", extra = ["socks"] },
+    { name = "tqdm" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/6a/b5/a45f62f20664031bf74a6aeb6f8d8cd5910e411bf90d756bd6b09bdc6c35/gdown-6.1.0.tar.gz", hash = "sha256:361c6e04c6ca335df50b9d71f40bcfe9ab70fb26a1b0e890a427267781389553", size = 269670 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/7d/56/a99f0f159cce5b26d267317d436afee184f45fc7911938757d7cbbd2d10c/gdown-6.1.0-py3-none-any.whl", hash = "sha256:38a36a94275b8272f684db469bbd73b4d1f64cbbc1751bcb993a1b2be8f013c8", size = 19216 },
+]
 
 [[package]]
 name = "geemap"
@@ -1556,6 +1592,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/df/78/4892343230a9d29faa1364564e525307a37e54ad776ea62c12129dbba704/geographiclib-2.1.tar.gz", hash = "sha256:6a6545e6262d0ed3522e13c515713718797e37ed8c672c31ad7b249f372ef108", size = 37004 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/31/b3/802576f2ea5dcb48501bb162e4c7b7b3ca5654a42b2c968ef98a797a4c79/geographiclib-2.1-py3-none-any.whl", hash = "sha256:e2a873b9b9e7fc38721ad73d5f4e6c9ed140d428a339970f505c07056997d40b", size = 40740 },
+]
+
+[[package]]
+name = "geojson"
+version = "3.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/13/a9/bd61eee2c7904947094b74866b569f3fd5a8d6ac907ecdfecef74b19d459/geojson-3.3.0.tar.gz", hash = "sha256:92e83b9cb378a450b42f1207bb9b2a031f9fc89185f335153c44369b8b8b71fd", size = 25141 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/aa/5e/fdd72167b57158d743353f71d453200719744d1e75f18b1c8230508db370/geojson-3.3.0-py3-none-any.whl", hash = "sha256:a2d885187eeaa8b357600b3fcc9d963cb4300d1694196636dbd7eddc82fd0825", size = 15181 },
 ]
 
 [[package]]
@@ -2095,6 +2140,42 @@ wheels = [
 ]
 
 [[package]]
+name = "ipytree"
+version = "0.2.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipywidgets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/52/e9/74ab8e327bb884b415124fc5ac2416916499278fef7a628620715ec326ce/ipytree-0.2.2.tar.gz", hash = "sha256:d53d739bbaaa45415733cd06e0dc420a2af3d173438617db472a517bc7a61e56", size = 636289 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e4/03/35cf1742598d784e96153175233318a2332f71863e55ad1007c9264c1a7a/ipytree-0.2.2-py2.py3-none-any.whl", hash = "sha256:744dc1a02c3ec26df8a5ecd87d085a67dc8232a1def6048834403ddcf3b64143", size = 1285067 },
+]
+
+[[package]]
+name = "ipyvue"
+version = "1.12.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipywidgets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d2/37/7b66ea86cde30f4983566cbfb8bb133eed4d2252a7f0b941057855e666e7/ipyvue-1.12.0.tar.gz", hash = "sha256:408b5e6a64e203fc679f447a071e3dbc178ab2906982f248adf722fc84773ffa", size = 1749270 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/48/be/cb0bd788bda9624a2facd270a6b1eef1b606bdeacee3a6c1cf9e79704afc/ipyvue-1.12.0-py2.py3-none-any.whl", hash = "sha256:c7f555a71c28724ceda344af294bdc48407eace17222065cfb7b4cff80665362", size = 2673161 },
+]
+
+[[package]]
+name = "ipyvuetify"
+version = "1.11.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipyvue" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/a4/07/31c9615532b6c190a3033460e4aa83a64ac532281758ff734e1bc42e3c00/ipyvuetify-1.11.3.tar.gz", hash = "sha256:3580afa76d9add4ae04ccb7fd57d4a0cf03a261705742e7137def3ebb65ac71d", size = 6170730 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/47/4d/fd1a6a888f8abb6b8dc316cc78b5153e75eff7ae66a94cf30b144fadd09d/ipyvuetify-1.11.3-py2.py3-none-any.whl", hash = "sha256:fa83aaf9f4ce669172d532094d60bd7c40d3cb9c5d6bb2f4a14565da2b09a8d8", size = 6290266 },
+]
+
+[[package]]
 name = "ipywidgets"
 version = "8.1.8"
 source = { registry = "https://pypi.org/simple" }
@@ -2608,6 +2689,40 @@ wheels = [
 ]
 
 [[package]]
+name = "leafmap"
+version = "0.62.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "anywidget" },
+    { name = "bqplot" },
+    { name = "duckdb" },
+    { name = "folium" },
+    { name = "gdown" },
+    { name = "geojson" },
+    { name = "geopandas" },
+    { name = "ipyevents" },
+    { name = "ipyfilechooser" },
+    { name = "ipyleaflet" },
+    { name = "ipyvue" },
+    { name = "ipyvuetify" },
+    { name = "ipywidgets" },
+    { name = "maplibre" },
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "plotly" },
+    { name = "pystac-client" },
+    { name = "python-box" },
+    { name = "scooby" },
+    { name = "whiteboxgui" },
+    { name = "xyzservices" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/fd/5c/4d5a42954bcc19c350fdd41f825142f1438138a7207eb3266b275a9786e9/leafmap-0.62.0.tar.gz", hash = "sha256:3c014298132a05a64b3c2e53dd3c0d695ed79ac888e9cd32688cdd0445aefc97", size = 3493592 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e9/53/02cb9c504b18365af0da71d2261a22009c651624891acdce005a4bbfbc96/leafmap-0.62.0-py2.py3-none-any.whl", hash = "sha256:e2b356c15c72b024c0815bc885cf6d2eb900c1ea37755e73b548b12528b76b3b", size = 667536 },
+]
+
+[[package]]
 name = "librt"
 version = "0.11.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2774,6 +2889,21 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/05/7e/767ae65d2652f720213fd6571c5a945b81352895b78b32f77b27d53af139/mapclassify-2.10.0.tar.gz", hash = "sha256:0d6736a08c0b1e10e6197224ef512951514204706514244bd01aea49fd1442b3", size = 6172445 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a7/5e/19fb53bd69379498c47bc234ca4d2851cfbca333d6d6929b10251916da25/mapclassify-2.10.0-py3-none-any.whl", hash = "sha256:dc39d6d924d546cdf2573bd587a7770e1a6ded3cb98272d6f0144319038566c5", size = 882230 },
+]
+
+[[package]]
+name = "maplibre"
+version = "0.3.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "branca" },
+    { name = "eval-type-backport" },
+    { name = "jinja2" },
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/d0/33/68e9378eef4feda7666af71c169ac598e405d30df03489c3544953a52b79/maplibre-0.3.6.tar.gz", hash = "sha256:10d3b80e15a71a029ac152a4094b699ef5b256155ca09d4a0fd2cfb2a8d8dbb1", size = 1359517 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/cd/e8/d0e506ebf78554e6d6670101ccb562448fd959d70527a11cb380f6c3de77/maplibre-0.3.6-py3-none-any.whl", hash = "sha256:eeafab617d4a1b71c0c174c71405f67c4b4e494fe1b27968d4d2359bc160e277", size = 1374309 },
 ]
 
 [[package]]
@@ -4190,6 +4320,26 @@ wheels = [
 ]
 
 [[package]]
+name = "pygeohash"
+version = "3.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/6a/95f1b9a40099a4e40b1f53ad154ed06f1b657cf7e37f99d946cdbe595ea8/pygeohash-3.3.0.tar.gz", hash = "sha256:5202bb0a8d1a7dca80ab398811de6514f773790b917961f66bae3b7190cf665c", size = 41460 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8c/ec/c29a52285ee10eaa5b61eaf7b32ddafdd70fcec0a12a92e8f6fa92aeb487/pygeohash-3.3.0-cp312-cp312-macosx_10_13_x86_64.whl", hash = "sha256:f5925d14e1fe209f03663b328ca1bc4a6bbd493a2a612ac78c6f9b839d913825", size = 32597 },
+    { url = "https://files.pythonhosted.org/packages/8b/79/bdddc57fad5971e95b84d96512575bf4c14b686700e39279d8f00f366889/pygeohash-3.3.0-cp312-cp312-macosx_11_0_arm64.whl", hash = "sha256:008f98d82c675097b932e5ae062dff5ccdfb5cdfbf65fb5a77cc4be992746192", size = 32982 },
+    { url = "https://files.pythonhosted.org/packages/7f/66/9c91822c11d43cda4ae746b168a82632de777f9e27ae67dd448c1a481927/pygeohash-3.3.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:5ebef51ce716e424c0480a4b91b84a8068c29bf19d2238ca236f125386428b6e", size = 44299 },
+    { url = "https://files.pythonhosted.org/packages/02/e4/a22870c3d3f79814c2b695f4235557d4304c5ee6a57acebc6dd6043da409/pygeohash-3.3.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:43bdb8450dad5ae745871ed372633a0bcb8cdc4d72d93e75f9185afaf249e1bc", size = 45793 },
+    { url = "https://files.pythonhosted.org/packages/1a/ef/4015f58b3d9e8522d8fc7c301fa32c2033462dfa34509c047be7c15e0891/pygeohash-3.3.0-cp312-cp312-win32.whl", hash = "sha256:b133bc304cf7838b95d5a3f70b860b1994c4a5dcfa8deaf3bf0791e463534327", size = 34876 },
+    { url = "https://files.pythonhosted.org/packages/22/c8/1daee48d8241f036889f6fc25d111e76b0e3a3ee8a4d01b1a8b9e563d778/pygeohash-3.3.0-cp312-cp312-win_amd64.whl", hash = "sha256:d42ec15d27186d8ec119ccf042dfc3b52b5fe86c1142985b43551365d625520e", size = 35843 },
+    { url = "https://files.pythonhosted.org/packages/f4/01/320364fac54404c9f3c3fe929040cc921688dbfd7654a2bdccdd5864962f/pygeohash-3.3.0-cp313-cp313-macosx_10_13_x86_64.whl", hash = "sha256:17e108b9a23c84ff6a5b8ab5019c83abef566652ab441a210cc3695467270ff7", size = 32604 },
+    { url = "https://files.pythonhosted.org/packages/89/fa/37934071ef427e3d61d8dac66afe91dcb0e918f9dd066ae2d280de100e2e/pygeohash-3.3.0-cp313-cp313-macosx_11_0_arm64.whl", hash = "sha256:7b65a569c42cc94b2c96ae8402c304e4480c6951b565c46090097ed9e09778c8", size = 32984 },
+    { url = "https://files.pythonhosted.org/packages/10/6c/882986e2c519e51150867c99095756d956786aec23df8a9da239fe3a3cdd/pygeohash-3.3.0-cp313-cp313-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl", hash = "sha256:1c3e7c5b6973aae7e67eaa5bdd6e2b7d732d1612664f774297e99c606adc0335", size = 44353 },
+    { url = "https://files.pythonhosted.org/packages/62/e7/ad5ca3e90c4e872569af6f2f0e4b5ca013baf8e8cdc61ab26786f70dbf1a/pygeohash-3.3.0-cp313-cp313-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:2adfd662df474fcede7227c8602bc8e1515cd79f1d6a3c1776a29953db22a92d", size = 45844 },
+    { url = "https://files.pythonhosted.org/packages/18/5d/da4f649fd144ba6c03e4fb4aea004c5b1999eb577308b7f51406b06ebe5e/pygeohash-3.3.0-cp313-cp313-win32.whl", hash = "sha256:ff17b1422933823c28877f541e46b096d6ef62f6d37e08e63b9046a36d967fd5", size = 34870 },
+    { url = "https://files.pythonhosted.org/packages/4a/28/7cf209396f6db3187057f6d59479133e54ce64699bbf5a4f2122023afd16/pygeohash-3.3.0-cp313-cp313-win_amd64.whl", hash = "sha256:b6b66b750964dea10dab3ad741985c6a0408727b47a59ca2fe0a6d3e127c68c6", size = 35839 },
+]
+
+[[package]]
 name = "pygments"
 version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
@@ -4308,6 +4458,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pysocks"
+version = "1.7.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/bd/11/293dd436aea955d45fc4e8a35b6ae7270f5b8e00b53cf6c024c83b657a11/PySocks-1.7.1.tar.gz", hash = "sha256:3f8804571ebe159c380ac6de37643bb4685970655d3bba243530d6558b799aa0", size = 284429 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/8d/59/b4572118e098ac8e46e399a1dd0f2d85403ce8bbaad9ec79373ed6badaf9/PySocks-1.7.1-py3-none-any.whl", hash = "sha256:2725bd0a9925919b9b51739eea5f9e2bae91e83288108a9ad338b2e3a4435ee5", size = 16725 },
+]
+
+[[package]]
 name = "pystac"
 version = "1.14.3"
 source = { registry = "https://pypi.org/simple" }
@@ -4317,6 +4476,25 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/31/e6/efbc20dbc94ad7ed18fe11a4208103a509384ffcccd9bdc27953b725e686/pystac-1.14.3.tar.gz", hash = "sha256:24f92d6f301371859aa0abc1bbe7b1523a603e1184a6d139ecb323967c2c9bb3", size = 164205 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ad/b4/a9430e72bfc3c458e1fcf8363890994e483052ab052ed93912be4e5b32c8/pystac-1.14.3-py3-none-any.whl", hash = "sha256:2f60005f521d541fb801428307098f223c14697b3faf4d2f0209afb6a43f39e5", size = 208506 },
+]
+
+[package.optional-dependencies]
+validation = [
+    { name = "jsonschema" },
+]
+
+[[package]]
+name = "pystac-client"
+version = "0.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pystac", extra = ["validation"] },
+    { name = "python-dateutil" },
+    { name = "requests" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/c5/8d/b98aeffd325fc208e1624cf586d0c4dfb927bc7a2bce20d3b58ee80d2483/pystac_client-0.9.0.tar.gz", hash = "sha256:3908951583bcc6a3aaaf2828024a8e03764e6ca9d9f9f1d8149df587e14dd744", size = 52339 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5d/d2/5f6367b14c9f250d1a6725d18bd1e9584f5ab1587e292f3a847e59189598/pystac_client-0.9.0-py3-none-any.whl", hash = "sha256:eed146b5980f93646aaa3a59080f11f1dcab6000b0bfbc28b1d0c6fd0a61eda1", size = 41826 },
 ]
 
 [[package]]
@@ -4681,6 +4859,11 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/43/b8/7a707d60fea4c49094e40262cc0e2ca6c768cca21587e34d3f705afec47e/requests-2.34.0.tar.gz", hash = "sha256:7d62fe92f50eb82c529b0916bb445afa1531a566fc8f35ffdc64446e771b856a", size = 142436 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ef/e6/e300fce5fe83c30520607a015dabd985df3251e188d234bfe9492e17a389/requests-2.34.0-py3-none-any.whl", hash = "sha256:917520a21b767485ce7c588f4ebb917c436b24a31231b44228715eaeb5a52c60", size = 73021 },
+]
+
+[package.optional-dependencies]
+socks = [
+    { name = "pysocks" },
 ]
 
 [[package]]
@@ -5591,6 +5774,7 @@ dependencies = [
     { name = "ffmpeg" },
     { name = "ffmpeg-python" },
     { name = "folium" },
+    { name = "folium-pmtiles" },
     { name = "gcloud" },
     { name = "geemap" },
     { name = "geopandas" },
@@ -5602,6 +5786,7 @@ dependencies = [
     { name = "joblib" },
     { name = "jupyterlab" },
     { name = "keplergl" },
+    { name = "leafmap" },
     { name = "loguru" },
     { name = "lonboard" },
     { name = "lz4" },
@@ -5619,6 +5804,7 @@ dependencies = [
     { name = "pmdarima" },
     { name = "polars" },
     { name = "pyarrow" },
+    { name = "pygeohash" },
     { name = "python-geohash" },
     { name = "ray", extra = ["default"] },
     { name = "rbeast" },
@@ -5679,6 +5865,7 @@ requires-dist = [
     { name = "ffmpeg-python", specifier = ">=0.2.0" },
     { name = "flake8", marker = "extra == 'dev'", specifier = ">=6.0" },
     { name = "folium", specifier = ">=0.20.0" },
+    { name = "folium-pmtiles", specifier = ">=0.4.0" },
     { name = "gcloud", specifier = ">=0.18.3" },
     { name = "geemap", specifier = ">=0.37.3" },
     { name = "geopandas", specifier = ">=0.8.0" },
@@ -5693,6 +5880,7 @@ requires-dist = [
     { name = "joblib", specifier = ">=1.4.2" },
     { name = "jupyterlab" },
     { name = "keplergl", specifier = ">=0.3.0" },
+    { name = "leafmap", specifier = ">=0.62.0" },
     { name = "loguru", specifier = ">=0.7.3" },
     { name = "lonboard", extras = ["streamlit"], specifier = ">=0.5.0" },
     { name = "lz4", specifier = ">=4.4.5" },
@@ -5714,6 +5902,7 @@ requires-dist = [
     { name = "pmdarima", specifier = ">=2.1.1" },
     { name = "polars", specifier = ">=1.40.1" },
     { name = "pyarrow" },
+    { name = "pygeohash", specifier = ">=3.3.0" },
     { name = "pymdown-extensions", marker = "extra == 'docs'", specifier = ">=10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=4.0" },
@@ -5819,6 +6008,33 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/39/62/75f18a0f03b4219c456652c7780e4d749b929eb605c098ce3a5b6b6bc081/wheel-0.47.0.tar.gz", hash = "sha256:cc72bd1009ba0cf63922e28f94d9d83b920aa2bb28f798a31d0691b02fa3c9b3", size = 63854 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/87/1b/9e33c09813d65e248f7f773119148a612516a4bea93e9c6f545f78455b7c/wheel-0.47.0-py3-none-any.whl", hash = "sha256:212281cab4dff978f6cedd499cd893e1f620791ca6ff7107cf270781e587eced", size = 32218 },
+]
+
+[[package]]
+name = "whitebox"
+version = "2.3.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ac/87/c628340efbf9f819a1e8b241967857b5cf69c197b998eae89a98c3c00dbd/whitebox-2.3.6.tar.gz", hash = "sha256:69571640a778253e27a05c63b08aed670457803798a0b8f233761eabcd39188b", size = 78177 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1c/44/9bd2ca55e07ee3d63a0d3b46c77ca75e3089e38cc7260e46fc597a632a5a/whitebox-2.3.6-py2.py3-none-any.whl", hash = "sha256:16b780134cabb9b9d067078f42265da692963d466747cbe655f573fab0f3f60e", size = 74005 },
+]
+
+[[package]]
+name = "whiteboxgui"
+version = "2.3.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "ipyfilechooser" },
+    { name = "ipytree" },
+    { name = "ipywidgets" },
+    { name = "whitebox" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/25/90/c2ad2b8982618e6f86c363b3c3d8b13c2aa27929126c24e1d15bc213275d/whiteboxgui-2.3.0.tar.gz", hash = "sha256:c59dfccb244bc2d7b9ff77c63a81b77d0e1b4a6fc19476449e450e0da009a754", size = 108918 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/f3/320f1f5b67fceb23a5f3556d5d728d2fbcaaca0ce60cdb50a8715e0f8c19/whiteboxgui-2.3.0-py2.py3-none-any.whl", hash = "sha256:f226783efaba1af1cd55f98bba743da590bccf4dd6cbba519f6c879993b57631", size = 108636 },
 ]
 
 [[package]]
