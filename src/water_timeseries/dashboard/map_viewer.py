@@ -1384,16 +1384,18 @@ def create_app(
                 st.subheader("🛰️ Recent imagery")
 
                 # setup today's date and one year go
-                # if viz_configuration_name == 'drainage_year':
-                #     local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons['id_geohash'] == current]
-                #     today = datetime(local_gdf.iloc[0]['date_break']).to_pydatetime()
-                #     print(today.strftime("%Y-%m-%d"))
-                # else:
-                #     today = datetime.now()
-                today = datetime.now()
-                one_year_ago = today - timedelta(days=366)
+                if viz_configuration_name == 'drainage_year':
+                    local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons['id_geohash'] == current]
+                    today = local_gdf.iloc[0]['date_break'].to_pydatetime() + timedelta(days=30) # break date (start of month after break)
+                    one_year_ago = today - timedelta(days=366) # one year before
+                    print(today.strftime("%Y-%m-%d"))
+                    spinner_text = "Pulling satellite image closest to the break + one year before... This may take a few seconds."
+                else:
+                    today = datetime.now()
+                    one_year_ago = today - timedelta(days=366)
+                    spinner_text = "Pulling most recent satellite image + one year ago... This may take a few seconds."          
 
-                with st.spinner("Pulling most recent satellite image + one year ago... This may take a few seconds."):
+                with st.spinner(spinner_text):
                     # pull ds via xee
                     ds = get_rioxarray_ds_from_lake(
                         lake_gdf=st.session_state.lake_polygons,
