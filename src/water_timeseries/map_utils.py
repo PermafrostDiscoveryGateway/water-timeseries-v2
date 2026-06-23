@@ -6,7 +6,7 @@ import folium
 import folium.elements
 from folium_pmtiles.vector import PMTilesMapLibreLayer
 import leafmap.foliumap as leafmap
-
+from water_timeseries.utils.map_styles.pmtiles import get_style_pmtiles_colored_historical, get_style_pmtiles_drainage_year
 from water_timeseries.utils.visualization import get_legend_html_net_change, get_legend_html_date_drainage_year
 
 class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.element.MacroElement):
@@ -130,26 +130,8 @@ def build_pmtiles_map(
 
     tooltip = PMTilesMapLibreTooltipWithRounding()
     if viz_configuration_name == 'colored_historical':
-        # Define default paint values
-        fill_color = [
-            "interpolate",
-            ["linear"],
-            ["get", "NetChange_perc"],
-            -40.0,
-            "#d73027",
-            -20.0,
-            "#f46d43",
-            0.0,
-            "#fee090",
-            20.0,
-            "#74add1",
-            40.0,
-            "#4575b4",
-        ]
-        fill_opacity = 0.7
-        line_color = "#333333"
-        line_width = 0.5
-        line_opacity=1
+
+        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
         # Use only one basemap to avoid overlap
         tile_layer_darkmatter.add_to(m)
@@ -158,28 +140,7 @@ def build_pmtiles_map(
 
     if viz_configuration_name == 'drainage_year':
         # Convert to number to handle string values in PMTiles
-        fill_color = [
-            "interpolate",
-            ["linear"],
-            ["to-number", ["get", "date_break_year"]],
-            2017.0,
-            "#fff5f0",
-            2025.0,
-            "#67000d",
-        ]
-        fill_opacity = 0.4
-        line_color = [
-            "interpolate",
-            ["linear"],
-            ["to-number", ["get", "date_break_year"]],
-            2017.0,
-            "#fff5f0",
-            2025.0,
-            "#67000d",
-        ]
-        # line_color = "#dddddd"
-        line_width = 3
-        line_opacity = 1
+        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
         legend = get_legend_html_date_drainage_year()
 
         # Use only one basemap to avoid overlap
@@ -189,24 +150,7 @@ def build_pmtiles_map(
 
     else:
         # Define default paint values
-        fill_color = [
-            "interpolate",
-            ["linear"],
-            ["get", "NetChange_perc"],
-            -40.0,
-            "#d73027",
-            -20.0,
-            "#f46d43",
-            0.0,
-            "#fee090",
-            20.0,
-            "#74add1",
-            40.0,
-            "#4575b4",
-        ]
-        fill_opacity = 0.7
-        line_color = "#333333"
-        line_width = 0.5
+        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         get_legend_html_net_change()
         # Add background tiles
         tile_layer_darkmatter.add_to(m)

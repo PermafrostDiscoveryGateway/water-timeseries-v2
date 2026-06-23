@@ -99,7 +99,7 @@ def get_legend_html_date_drainage_year() -> str:
     """Generate HTML legend for net change percentage visualization.
 
     Returns:
-        HTML string containing a styled legend for the NetChange_perc color scale.
+        HTML string containing a styled legend for the Drainage Year color scale.
         The legend displays a gradient from red (decrease) to blue (increase)
         with labels ranging from -40% to +40%.
 
@@ -123,7 +123,7 @@ def get_legend_html_date_drainage_year() -> str:
             border-radius: 5px;
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
         ">
-        <p style="margin: 0 0 5px 0; font-weight: bold;">Net Change (%)</p>
+        <p style="margin: 0 0 5px 0; font-weight: bold;">Drainage Year</p>
         <div style="
             background: linear-gradient(to right, #fff5f0, #f46d43, #67000d);
             width: 100%;
