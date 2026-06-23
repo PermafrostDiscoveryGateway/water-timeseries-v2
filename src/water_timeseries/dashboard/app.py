@@ -186,6 +186,9 @@ def main(
     if viz_configuration is None:
         viz_configuration = "colored_historical"
 
+    if pmtiles_url == "":
+        pmtiles_url = None
+
     create_app(
         data_path=vector_file,
         zarr_path=dw_dataset_file,

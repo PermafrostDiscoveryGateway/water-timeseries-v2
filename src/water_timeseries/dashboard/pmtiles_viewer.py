@@ -155,7 +155,7 @@ def render_pmtiles_map(
     share one origin. Streamlit's ``components.html`` sandbox often blocks cross-origin
     fetches to a separate tile port (basemap loads, vector lakes do not).
     """
-    if pmtiles_url and not pmtiles_file:
+    if pmtiles_url:
         server = _get_or_start_server(None)  # Server running in HTML-only remote mode
         config = _build_map_config(
             pmtiles_url=pmtiles_url,

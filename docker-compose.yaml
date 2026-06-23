@@ -20,6 +20,8 @@ services:
       - ${PRECOMPUTED_NRT_DIR:-downloads/nrt}
       - --pmtiles-file
       - ${PMTILES_FILE:-downloads/tiles/lake_polygons.pmtiles}
+      - --pmtiles-url
+      - ${PMTILES_URL:-}
       - --viz-configuration
       - ${VIZ_CONFIGURATION:-colored_historical}
     volumes:
