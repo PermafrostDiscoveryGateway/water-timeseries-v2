@@ -932,6 +932,7 @@ def get_rioxarray_ds_from_lake(
         .filterDate(start_date, end_date)
         .filterBounds(fc)
         .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", max_cloud_cover))
+        .filter(ee.Filter.calendarRange(6, 9, "month"))
     )
     ds_rio = xr.open_dataset(ic, engine="ee", **grid).rio.write_crs(crs).sortby("time")
 
