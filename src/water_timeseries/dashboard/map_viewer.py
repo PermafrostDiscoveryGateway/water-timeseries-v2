@@ -426,8 +426,7 @@ class MapViewer:
             # Create style function based on whether NetChange_perc column exists
             if "NetChange_perc" in valid_gdf.columns:
                 # add tile layers
-                m.add_basemap("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
-                # tile_layer_darkmatter.add_to(m)
+                tile_layer_darkmatter.add_to(m)
                 tile_layer_esriworld.add_to(m)
                 tcvis_tile_layer.add_to(m)
 
@@ -692,8 +691,9 @@ def _render_drain_heatmap(
     precomputed_counts: pd.DataFrame,
     precomputed_breaks: Optional[pd.DataFrame],
     container=None,
+    viz_configuration_name: Optional[str] = "colored_historical",
 ) -> None:
-    """Render an interactive month × year heatmap of drained lake counts.
+    """Render an interactive month × year heatmap of drained lake counts or net change percentage.
 
     Args:
         precomputed_counts: DataFrame with columns ``analysis_month`` and
@@ -701,7 +701,11 @@ def _render_drain_heatmap(
         precomputed_breaks: Optional per-lake detail DataFrame.
         container: Streamlit container to render into (e.g. ``st.sidebar``).
             Defaults to the main content area (``st``).
+        viz_configuration_name: Option to determine what styling and values to show.
     """
+    if precomputed_counts is None or precomputed_counts.empty:
+        return
+
     c = container if container is not None else st
 
     c.caption("Click a cell to pre-select that month below.")
@@ -711,15 +715,41 @@ def _render_drain_heatmap(
     df["year"] = df["analysis_month"].str[:4].astype(int)
     df["month"] = df["analysis_month"].str[5:7].astype(int)
 
-    pivot = df.pivot_table(index="year", columns="month", values="drained_lake_count", fill_value=0)
-    pivot = pivot.sort_index(ascending=False)  # newest year at top
+    show_net_change = (viz_configuration_name == "colored_historical")
+    lakes_df = st.session_state.get("lake_polygons")
 
-    years = pivot.index.tolist()
-    months_in_data = pivot.columns.tolist()
+    if show_net_change and lakes_df is not None and "NetChange_perc" in lakes_df.columns and precomputed_breaks is not None and not precomputed_breaks.empty:
+        # Merge breaks with lake polygons to get NetChange_perc for each drained lake
+        merged = precomputed_breaks.merge(
+            lakes_df[["id_geohash", "NetChange_perc"]],
+            on="id_geohash",
+            how="inner"
+        )
+        if not merged.empty:
+            # Compute median NetChange_perc per analysis_month
+            monthly_stats = merged.groupby("analysis_month")["NetChange_perc"].median().reset_index()
+            monthly_stats.columns = ["analysis_month", "net_change_stat"]
+            df = df.merge(monthly_stats, on="analysis_month", how="left")
+        else:
+            show_net_change = False
+            df["net_change_stat"] = df["drained_lake_count"]
+    else:
+        show_net_change = False
+        df["net_change_stat"] = df["drained_lake_count"]
+
+    # Pivot z-values and counts
+    pivot_z = df.pivot(index="year", columns="month", values="net_change_stat" if show_net_change else "drained_lake_count")
+    pivot_counts = df.pivot(index="year", columns="month", values="drained_lake_count").fillna(0).astype(int)
+
+    pivot_z = pivot_z.sort_index(ascending=False)  # newest year at top
+    pivot_counts = pivot_counts.sort_index(ascending=False)
+
+    years = pivot_z.index.tolist()
+    months_in_data = pivot_z.columns.tolist()
     month_labels = [_MONTH_NAMES[m - 1] for m in months_in_data]
 
-    z_values = pivot.values.tolist()
-    text_values = [[str(int(v)) if v > 0 else "" for v in row] for row in pivot.values]
+    z_values = pivot_z.values.tolist()
+    text_values = [[str(int(v)) if v > 0 else "" for v in row] for row in pivot_counts.values]
 
     # Build flat lists for the invisible scatter overlay (the only way to capture
     # single-click events in Streamlit – go.Heatmap cells are not selectable points).
@@ -730,30 +760,61 @@ def _render_drain_heatmap(
     scatter_text: list = []
     for year in years:
         for mi, month in enumerate(months_in_data):
-            count = int(pivot.at[year, month])
+            count = int(pivot_counts.at[year, month])
+            z_val = pivot_z.at[year, month]
+            
             scatter_x.append(month_labels[mi])
             scatter_y.append(str(year))
-            scatter_color.append(count)
-            scatter_custom.append(f"{year}-{month:02d}")
+            scatter_color.append(z_val if pd.notna(z_val) else 0.0)
+            
+            z_val_formatted = f"{z_val:.1f}%" if pd.notna(z_val) else "N/A"
+            scatter_custom.append([count, z_val_formatted, f"{year}-{month:02d}"])
             scatter_text.append(str(count) if count > 0 else "")
 
     fig = go.Figure()
 
-    # Layer 1: heatmap for colour fill and axis labels
-    fig.add_trace(
-        go.Heatmap(
-            z=z_values,
-            x=month_labels,
-            y=[str(y) for y in years],
-            colorscale="Blues",
-            text=text_values,
-            texttemplate="%{text}",
-            hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{z}<extra></extra>",
-            colorbar=dict(title="n", thickness=10, len=0.8),
-            xgap=2,
-            ygap=2,
+    if show_net_change:
+        heatmap_customdata = pivot_counts.values.tolist()
+        # Layer 1: heatmap for colour fill and axis labels
+        fig.add_trace(
+            go.Heatmap(
+                z=z_values,
+                x=month_labels,
+                y=[str(y) for y in years],
+                colorscale="RdYlBu",
+                zmin=-40.0,
+                zmax=40.0,
+                customdata=heatmap_customdata,
+                text=text_values,
+                texttemplate="%{text}",
+                hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{customdata}<br>Median Net Change: %{z:.1f}%<extra></extra>",
+                colorbar=dict(title="Net Change (%)", thickness=10, len=0.8),
+                xgap=2,
+                ygap=2,
+            )
         )
-    )
+        scatter_hovertemplate = (
+            "<b>%{y} – %{x}</b><br>"
+            "Lakes drained: %{customdata[0]}<br>"
+            "Median Net Change: %{customdata[1]}<extra></extra>"
+        )
+    else:
+        # Layer 1: heatmap for colour fill and axis labels
+        fig.add_trace(
+            go.Heatmap(
+                z=z_values,
+                x=month_labels,
+                y=[str(y) for y in years],
+                colorscale="Blues",
+                text=text_values,
+                texttemplate="%{text}",
+                hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{z}<extra></extra>",
+                colorbar=dict(title="n", thickness=10, len=0.8),
+                xgap=2,
+                ygap=2,
+            )
+        )
+        scatter_hovertemplate = "<b>%{y} – %{x}</b><br>Lakes drained: %{customdata[0]}<extra></extra>"
 
     # Layer 2: invisible scatter squares – these fire selection events on click
     fig.add_trace(
@@ -766,12 +827,14 @@ def _render_drain_heatmap(
                 size=22,
                 opacity=0.01,  # effectively invisible but still hittable
                 color=scatter_color,
-                colorscale="Blues",
+                colorscale="RdYlBu" if show_net_change else "Blues",
+                cmin=-40.0 if show_net_change else None,
+                cmax=40.0 if show_net_change else None,
                 showscale=False,
             ),
             customdata=scatter_custom,
             text=scatter_text,
-            hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{text}<extra></extra>",
+            hovertemplate=scatter_hovertemplate,
             showlegend=False,
         )
     )
@@ -794,8 +857,11 @@ def _render_drain_heatmap(
         pt = event.selection["points"][0]
         # Scatter points store the analysis_month string in customdata
         raw = pt.get("customdata")
-        if raw and isinstance(raw, str) and len(raw) == 7:
-            selected_analysis_month = raw
+        if raw:
+            if isinstance(raw, list):
+                selected_analysis_month = raw[2]
+            elif isinstance(raw, str) and len(raw) == 7:
+                selected_analysis_month = raw
 
     # Only raise the sync flag when the selection actually changes (the Plotly
     # on_select event persists the last clicked point on every rerun, so we must
@@ -819,14 +885,34 @@ def _render_drain_heatmap(
             df.query("analysis_month == @selected_analysis_month")["drained_lake_count"].sum() if not df.empty else 0
         )
 
-        c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drained")
+        if show_net_change and lakes_df is not None and precomputed_breaks is not None and not precomputed_breaks.empty:
+            month_breaks = precomputed_breaks.query("analysis_month == @selected_analysis_month")
+            if not month_breaks.empty:
+                month_merged = month_breaks.merge(lakes_df[["id_geohash", "NetChange_perc"]], on="id_geohash", how="inner")
+                if not month_merged.empty:
+                    med_change = month_merged["NetChange_perc"].median()
+                    med_change_str = f"{med_change:.1f}%" if pd.notna(med_change) else "N/A"
+                    c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drained (Median Net Change: {med_change_str})")
+                else:
+                    c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drained")
+            else:
+                c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drained")
+        else:
+            c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drained")
 
         if count_row > 0 and precomputed_breaks is not None:
             month_breaks = precomputed_breaks.query("analysis_month == @selected_analysis_month").copy()
             if not month_breaks.empty:
+                if lakes_df is not None:
+                    # Merge to get NetChange_perc and NetChange_ha
+                    month_breaks = month_breaks.merge(
+                        lakes_df[["id_geohash", "NetChange_perc", "NetChange_ha"]],
+                        on="id_geohash",
+                        how="left",
+                    )
                 display_cols = [
                     col
-                    for col in ["id_geohash", "water_residual", "water_observed", "water_predicted", "date"]
+                    for col in ["id_geohash", "NetChange_perc", "NetChange_ha", "water_residual", "water_observed", "date"]
                     if col in month_breaks.columns
                 ]
                 c.dataframe(month_breaks[display_cols].reset_index(drop=True), use_container_width=True)
@@ -1023,22 +1109,34 @@ def create_app(
     precomputed_counts: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_counts
     precomputed_breaks: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_breaks
 
-    # Near-real-time drainage overlay
+    # Near-real-time / Monthly drainage overlay
     st.sidebar.divider()
-    st.sidebar.subheader("Near-real-time drainage")
-    show_drained = st.sidebar.checkbox(
-        "Show lakes drained in the last month",
-        value=False,
-        help="Uses pre-computed NRT breakpoints (water_residual < -0.25).",
-    )
+    is_drainage_year = (viz_configuration_name == "drainage_year")
+    if is_drainage_year:
+        st.sidebar.subheader("Monthly drainage events")
+        show_drained = st.sidebar.checkbox(
+            "Show lakes drained per month",
+            value=False,
+            help="Uses pre-computed monthly breakpoints.",
+        )
+    else:
+        st.sidebar.subheader("Near-real-time drainage")
+        show_drained = st.sidebar.checkbox(
+            "Show lakes drained in the last month",
+            value=False,
+            help="Uses pre-computed NRT breakpoints (water_residual < -0.25).",
+        )
     drained_breaks = None
     drained_label = None
 
     if show_drained:
         if precomputed_counts is None and precomputed_breaks is None:
-            st.sidebar.warning(
-                "No pre-computed NRT data found. Run `water-timeseries breakpoint-analysis-nrt` to generate it."
+            warning_msg = (
+                "No pre-computed monthly drainage data found. Run `water-timeseries breakpoint-analysis-nrt` to generate it."
+                if is_drainage_year
+                else "No pre-computed NRT data found. Run `water-timeseries breakpoint-analysis-nrt` to generate it."
             )
+            st.sidebar.warning(warning_msg)
         else:
             available_months = (
                 sorted(precomputed_counts["analysis_month"].unique().tolist())
@@ -1046,7 +1144,11 @@ def create_app(
                 else sorted(precomputed_breaks["analysis_month"].unique().tolist())
             )
             if not available_months:
-                st.sidebar.warning("Pre-computed NRT files are empty.")
+                st.sidebar.warning(
+                    "Pre-computed monthly drainage files are empty."
+                    if is_drainage_year
+                    else "Pre-computed NRT files are empty."
+                )
             else:
                 # Build a counts lookup so we can annotate each month with its drain count
                 counts_lookup: dict = {}
@@ -1069,20 +1171,14 @@ def create_app(
                     st.sidebar.bar_chart(spark_df, height=80)
 
                 # Heatmap in sidebar – click a cell to pre-select the month dropdown
-                _render_drain_heatmap(precomputed_counts, precomputed_breaks, container=st.sidebar)
-
-                # Optional filter: hide months with zero drainages
-                only_nonzero = st.sidebar.toggle(
-                    "Only show months with drainages",
-                    value=False,
-                    help="Hide months where no lakes were flagged as drained.",
+                _render_drain_heatmap(
+                    precomputed_counts,
+                    precomputed_breaks,
+                    container=st.sidebar,
+                    viz_configuration_name=viz_configuration_name,
                 )
+
                 selectable_months = available_months
-                if only_nonzero and counts_lookup:
-                    selectable_months = [m for m in available_months if counts_lookup.get(m, 0) > 0]
-                    if not selectable_months:
-                        st.sidebar.info("No months with drainages found.")
-                        selectable_months = available_months
 
                 # Build display labels that include the drain count
                 def _month_label(m: str) -> str:
@@ -1103,10 +1199,10 @@ def create_app(
                         st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
 
                 selected_label = st.sidebar.selectbox(
-                    "NRT analysis month",
+                    "Analysis month" if is_drainage_year else "NRT analysis month",
                     month_labels,
                     key="nrt_month_selector",
-                    help="Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
+                    help="Select a month to view pre-computed drained lakes." if is_drainage_year else "Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
                 )
                 # Map label back to raw month string
                 selected_analysis_month = selectable_months[month_labels.index(selected_label)]
