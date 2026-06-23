@@ -1,0 +1,57 @@
+replicaCount: 1
+
+image:
+  repository: water-timeseries-v2
+  tag: 0.9.4
+  pullPolicy: IfNotPresent
+
+nameOverride: ""
+fullnameOverride: ""
+
+dashboard:
+  port: 8501
+  offlineMode: false
+  eeProject: ""
+  vectorFile: /data/input/lake_polygons.parquet
+  dwDatasetFile: /data/input/lakes_dw_test.zarr
+  jrcDatasetFile: /data/input/lakes_jrc_test.zarr
+  precomputedNrtDir: /data/nrt
+  vizConfiguration: colored_historical
+  dwStartYear: 2017
+  dwEndYear: 2025
+  dwStartMonth: 6
+  dwEndMonth: 9
+
+persistence:
+  enabled: true
+  existingClaim: "local-data-pvc"
+  mountPath: /data
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  storageClassName: ""
+  annotations: {}
+
+service:
+  type: ClusterIP
+  port: 8501
+
+ingress:
+  enabled: true
+  className: traefik
+  annotations: {}
+  host: water-timeseries.localhost
+  path: /
+  pathType: Prefix
+  tls: []
+
+resources: {}
+
+podAnnotations: {}
+podLabels: {}
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}

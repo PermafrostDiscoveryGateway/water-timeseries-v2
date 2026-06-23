@@ -1,0 +1,41 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "water-timeseries.fullname" . }}
+  labels:
+    {{- include "water-timeseries.labels" . | nindent 4 }}
+  {{- if gt (len .Values.ingress.annotations) 0 }}
+  annotations:
+    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tls }}
+  tls:
+    {{- toYaml .Values.ingress.tls | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- if .Values.ingress.host }}
+    - host: {{ .Values.ingress.host | quote }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "water-timeseries.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+    {{- else }}
+    - http:
+        paths:
+          - path: {{ .Values.ingress.path }}
+            pathType: {{ .Values.ingress.pathType }}
+            backend:
+              service:
+                name: {{ include "water-timeseries.fullname" . }}
+                port:
+                  number: {{ .Values.service.port }}
+    {{- end }}
+{{- end }}

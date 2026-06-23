@@ -1,11 +1,16 @@
 FROM python:3.12-slim
 
+# Example build:
+# docker build -t ghcr.io/permafrostdiscoverygateway/water-timeseries-v2:0.9.4 .
+
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     make \
     curl \
     cmake \
+    rustc \
+    cargo \
     git \
     pkg-config \
     libgdal-dev \
@@ -42,3 +47,10 @@ ENV VIRTUAL_ENV=/app/.venv
 # Remove the fixed ENTRYPOINT - we'll specify commands at runtime
 # Keep CMD as default for local testing, but it can be overridden
 CMD ["uv", "run", "water-timeseries"]
+
+# metadata
+LABEL org.opencontainers.image.title="water-timeseries-v2"
+LABEL org.opencontainers.image.description="Streamlit app for exploring water timeseries data for changing Arctic lakes."
+LABEL org.opencontainers.image.source="https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
+LABEL maintainer="PDG <https://github.com/PermafrostDiscoveryGateway>"

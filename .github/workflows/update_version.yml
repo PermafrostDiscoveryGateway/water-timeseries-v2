@@ -21,9 +21,7 @@ on:
         required: false
         type: boolean
         default: true
-  push:
-    branches:
-      - main
+
 
 jobs:
   # Only runs on manual workflow_dispatch
@@ -66,28 +64,8 @@ jobs:
           git add pyproject.toml
           git commit -m "Update version to $VERSION_NO_V"
           git push
-
-  # Get current version for main and add-dockerfile branch builds
-  get-current-version:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref_name == 'main')
-    outputs:
-      VERSION: ${{ steps.get_version.outputs.version }}
-      VERSION_TAG: ${{ steps.get_version.outputs.version_tag }}
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Get current version from pyproject.toml
-        id: get_version
-        run: |
-          VERSION=$(grep -m1 'version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "version_tag=v$VERSION" >> $GITHUB_OUTPUT
-          echo "Current version: $VERSION"
+          git tag -f $VERSION
+          git push origin --tags -f
 
   # Only runs on manual dispatch with publish=true
   build-and-publish:
@@ -104,6 +82,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.update-version.outputs.VERSION }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
@@ -129,20 +108,22 @@ jobs:
           draft: false
           prerelease: false
 
-  # Runs on: manual dispatch with publish=true OR push to main
+  # Runs on: manual dispatch with publish=true after tag+release
   build-and-push-docker:
     runs-on: ubuntu-latest
+    needs:
+      - update-version
+      - build-and-publish
     permissions:
       contents: read
       packages: write
-    if: |
-      (github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true') ||
-      (github.event_name == 'push' && (github.ref_name == 'main'))
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.update-version.outputs.VERSION }}
           token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
@@ -156,19 +137,9 @@ jobs:
           REGISTRY="ghcr.io/${REPO_LOWER}"
           BRANCH_NAME="${{ github.ref_name }}"
 
-          # Start with just the branch name tag
-          TAGS="${REGISTRY}:${BRANCH_NAME}"
-
-          # Add latest for main branch only
-          if [ "$BRANCH_NAME" == "main" ]; then
-            TAGS="${TAGS},${REGISTRY}:latest"
-          fi
-
-          # For manual dispatch with version
-          if [ "${{ github.event_name }}" == "workflow_dispatch" ] && [ -n "${{ needs.update-version.outputs.VERSION }}" ]; then
-            VERSION="${{ needs.update-version.outputs.VERSION }}"
-            TAGS="${TAGS},${REGISTRY}:${VERSION}"
-          fi
+          # Use version and latest tags for the release
+          VERSION="${{ needs.update-version.outputs.VERSION }}"
+          TAGS="${REGISTRY}:${VERSION},${REGISTRY}:latest"
 
           echo "tags=${TAGS}" >> $GITHUB_OUTPUT
           echo "registry=${REGISTRY}" >> $GITHUB_OUTPUT
@@ -219,6 +190,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: ${{ needs.update-version.outputs.VERSION }}
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
 
