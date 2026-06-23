@@ -14,6 +14,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 from streamlit_folium import st_folium
+
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
@@ -253,10 +254,11 @@ class MapViewer:
             viz_configuration_name=self.viz_configuration_name,
         )
 
-    def _render_pmtiles(self,
-                        # valid_gdf: gpd.GeoDataFrame,
-                        viz_configuration_name: Optional[str] = "colored_historical",
-                        ) -> Optional[str]:
+    def _render_pmtiles(
+        self,
+        # valid_gdf: gpd.GeoDataFrame,
+        viz_configuration_name: Optional[str] = "colored_historical",
+    ) -> Optional[str]:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
 
@@ -304,7 +306,14 @@ class MapViewer:
         #     )
 
         tooltip = None
-        m = build_pmtiles_map(pmtiles_url, center=tuple(center), zoom_start=self.zoom, drained_ids=drained_ids, viz_configuration_name=viz_configuration_name, tooltip = tooltip)
+        m = build_pmtiles_map(
+            pmtiles_url,
+            center=tuple(center),
+            zoom_start=self.zoom,
+            drained_ids=drained_ids,
+            viz_configuration_name=viz_configuration_name,
+            tooltip=tooltip,
+        )
 
         # Render the map and get click data
         map_data = st_folium(
@@ -312,7 +321,12 @@ class MapViewer:
             width="100%",
             height=600,
             key="map_viewer_pmtiles",
-            returned_objects=["last_active_drawing", "last_object_clicked", "last_object_clicked_tooltip", "last_clicked"],
+            returned_objects=[
+                "last_active_drawing",
+                "last_object_clicked",
+                "last_object_clicked_tooltip",
+                "last_clicked",
+            ],
         )
 
         # Extract clicked feature's id_geohash for time-series lookup
@@ -330,6 +344,7 @@ class MapViewer:
             clicked_tooltip = map_data.get("last_object_clicked_tooltip")
             if clicked_tooltip:
                 import re
+
                 match = re.search(r"id_geohash.*?(?:>|:|\s|^)([a-zA-Z0-9]{12})", clicked_tooltip, re.DOTALL)
                 if match:
                     clicked_id = match.group(1)
@@ -346,6 +361,7 @@ class MapViewer:
                 lng = clicked_map.get("lng")
                 if lat is not None and lng is not None:
                     from shapely.geometry import Point
+
                     click_point = Point(lng, lat)
                     lakes_gdf = st.session_state.get("lake_polygons")
                     if lakes_gdf is not None and not lakes_gdf.empty:
@@ -436,8 +452,7 @@ class MapViewer:
                 ]
             else:
                 style_function = get_default_style_function()
-                
-            
+
         elif viz_configuration_name == "drainage_year":
             # Create style function based on whether NetChange_perc column exists
             if "water_residual" in valid_gdf.columns:
@@ -460,11 +475,10 @@ class MapViewer:
                 # Include Area columns for full tooltip display
                 tooltip_columns = [
                     ("pre_break_median", "Water area before break [ha]:", "{:.2f}", ""),
-                    ("post_break_median", "Water area before break [ha]:", "{:.2f}", ""),   
+                    ("post_break_median", "Water area before break [ha]:", "{:.2f}", ""),
                 ]
             else:
                 style_function = get_default_style_function()
-
 
         elif viz_configuration_name == "nrt_drainage":
             # Create style function based on whether NetChange_perc column exists
@@ -587,10 +601,10 @@ class MapViewer:
                 for idx, row in drained_gdf.iterrows():
                     # Calculate centroid for standard geometries (Polygons/MultiPolygons)
                     centroid = row.geometry.centroid
-                    
+
                     # Optional: Grab the lake ID for the tooltip
                     lake_id = row.get(self.id_column, "Unknown")
-                    
+
                     folium.Marker(
                         location=[centroid.y, centroid.x],
                         icon=folium.Icon(color="red", icon="info-sign"),
@@ -967,7 +981,7 @@ def create_app(
         st.session_state.selected_geohash = None
     if "clicked_features" not in st.session_state:
         st.session_state.clicked_features = []
-    
+
     qp_selected = st.query_params.get("selected_lake")
     if qp_selected:
         selected_id = str(qp_selected)
@@ -1384,16 +1398,20 @@ def create_app(
                 st.subheader("🛰️ Recent imagery")
 
                 # setup today's date and one year go
-                if viz_configuration_name == 'drainage_year':
-                    local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons['id_geohash'] == current]
-                    today = local_gdf.iloc[0]['date_break'].to_pydatetime() + timedelta(days=30) # break date (start of month after break)
-                    one_year_ago = today - timedelta(days=366) # one year before
+                if viz_configuration_name == "drainage_year":
+                    local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons["id_geohash"] == current]
+                    today = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(
+                        days=30
+                    )  # break date (start of month after break)
+                    one_year_ago = today - timedelta(days=366)  # one year before
                     print(today.strftime("%Y-%m-%d"))
-                    spinner_text = "Pulling satellite image closest to the break + one year before... This may take a few seconds."
+                    spinner_text = (
+                        "Pulling satellite image closest to the break + one year before... This may take a few seconds."
+                    )
                 else:
                     today = datetime.now()
                     one_year_ago = today - timedelta(days=366)
-                    spinner_text = "Pulling most recent satellite image + one year ago... This may take a few seconds."          
+                    spinner_text = "Pulling most recent satellite image + one year ago... This may take a few seconds."
 
                 with st.spinner(spinner_text):
                     # pull ds via xee

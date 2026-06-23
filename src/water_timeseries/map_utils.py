@@ -1,13 +1,18 @@
-import os
 from pathlib import Path
-import pygeohash
+
 import branca.element
 import folium
 import folium.elements
-from folium_pmtiles.vector import PMTilesMapLibreLayer
 import leafmap.foliumap as leafmap
-from water_timeseries.utils.map_styles.pmtiles import get_style_pmtiles_colored_historical, get_style_pmtiles_drainage_year
-from water_timeseries.utils.visualization import get_legend_html_net_change, get_legend_html_date_drainage_year
+import pygeohash
+from folium_pmtiles.vector import PMTilesMapLibreLayer
+
+from water_timeseries.utils.map_styles.pmtiles import (
+    get_style_pmtiles_colored_historical,
+    get_style_pmtiles_drainage_year,
+)
+from water_timeseries.utils.visualization import get_legend_html_date_drainage_year, get_legend_html_net_change
+
 
 class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.element.MacroElement):
     _template = branca.element.Template(
@@ -94,14 +99,13 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
         self._name = name if name else "PMTilesTooltip"
 
 
-
 def build_pmtiles_map(
     pmtiles_url: str,
     center: tuple[float, float] = (70.0, -140.0),
     zoom_start: int = 4,
     source_layer: str = "lakes",
     drained_ids: list[str] | None = None,
-    viz_configuration_name: str="colored_historical",
+    viz_configuration_name: str = "colored_historical",
     tooltip=None,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
@@ -110,7 +114,7 @@ def build_pmtiles_map(
         zoom_start=zoom_start,  # lightweight basemap
     )
     print("running render pmtiles")
-    # Add background map types 
+    # Add background map types
     wms_url = "https://maps.awi.de/services/common/permafrost/ows"
     tcvis_tile_layer = folium.WmsTileLayer(
         url=wms_url,
@@ -129,8 +133,7 @@ def build_pmtiles_map(
     # tcvis_tile_layer.add_to(m)
 
     tooltip = PMTilesMapLibreTooltipWithRounding()
-    if viz_configuration_name == 'colored_historical':
-
+    if viz_configuration_name == "colored_historical":
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
         # Use only one basemap to avoid overlap
@@ -138,7 +141,7 @@ def build_pmtiles_map(
         tile_layer_esriworld.add_to(m)
         tcvis_tile_layer.add_to(m)
 
-    if viz_configuration_name == 'drainage_year':
+    if viz_configuration_name == "drainage_year":
         # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
         legend = get_legend_html_date_drainage_year()
@@ -242,9 +245,10 @@ def build_pmtiles_map(
     # -----------------------------------------------
 
     folium.LayerControl().add_to(m)
-    
+
     m.get_root().html.add_child(folium.Element(legend))
     return m
+
 
 def resolve_pmtiles_url(pmtiles_file: str) -> str:
     """Given a local path or existing URL, return a URL the browser can fetch.
@@ -258,8 +262,8 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
         path = pmtiles_file[5:]
         return f"https://storage.googleapis.com/{path}"
 
-    from pathlib import Path
     import streamlit as st
+
     from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
     pmtiles_path = Path(pmtiles_file).resolve()
