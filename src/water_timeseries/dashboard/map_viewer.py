@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
-
+import pygeohash
 import folium
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -288,23 +288,6 @@ class MapViewer:
         if getattr(self, "drained_data", None) is not None:
             drained_ids = list(self.drained_data.keys())
 
-        # valid_gdf = _sanitize_geojson_properties(valid_gdf)
-        # tooltip_columns = [
-        #     ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
-        #     ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
-        #     ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
-        #     ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
-        # ]
-        # valid_gdf, fields_to_show, aliases_to_show = format_tooltip_columns(
-        #     valid_gdf,
-        #     id_column=self.id_column,
-        #     tooltip_columns=tooltip_columns,
-        # )
-        # tooltip=folium.GeoJsonTooltip(
-        #         fields=fields_to_show,
-        #         aliases=aliases_to_show,
-        #     )
-
         tooltip = None
         m = build_pmtiles_map(
             pmtiles_url,
@@ -371,11 +354,23 @@ class MapViewer:
                         matching = possible_matches[possible_matches.geometry.contains(click_point)]
                         if not matching.empty:
                             clicked_id = matching.iloc[0][self.id_column]
+                            
+                            clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
+                            # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+                            st.session_state.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+                            st.session_state.zoom_level = 12
+                            print(clicked_lat, clicked_lon)
 
         # Update session state only if a NEW feature was clicked
         if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
             st.session_state.selected_geohash = clicked_id
             st.query_params["selected_lake"] = clicked_id
+
+            clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
+            # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+            st.session_state.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+            st.session_state.zoom_level = 12
+            print(clicked_lat, clicked_lon)
             if clicked_id not in st.session_state.get("clicked_features", []):
                 if "clicked_features" not in st.session_state:
                     st.session_state.clicked_features = []
@@ -401,7 +396,7 @@ class MapViewer:
         Returns:
             The selected id_geohash value if a feature was clicked, None otherwise.
         """
-
+        print("PMTILES center", self.map_center)
         # Determine center of map
         if self.map_center is None:
             centroid = valid_gdf.geometry.unary_union.centroid
@@ -974,7 +969,11 @@ def create_app(
     zarr_path_input = str(zarr_path)
     zarr_path_jrc_input = str(zarr_path_jrc)
     id_column = "id_geohash"
-    zoom_level = 10
+    
+    if "zoom_level" not in st.session_state:
+        st.session_state.zoom_level = 10
+    if "map_center" not in st.session_state:
+        st.session_state.map_center = {'lat': 66.5, 'lon': -164.1}
 
     # Sync selection from URL query parameters
     if "selected_geohash" not in st.session_state:
@@ -1128,7 +1127,8 @@ def create_app(
         viewer = MapViewer(
             parquet_path=data_path_input,
             id_column=id_column,
-            zoom=zoom_level,
+            zoom=st.session_state.zoom_level,
+            map_center=st.session_state.map_center,
             map_backend=map_backend,
             max_features=max_features,
             viz_configuration_name=viz_configuration_name,
@@ -1194,6 +1194,11 @@ def create_app(
             if selected_option != st.session_state.selected_geohash:
                 st.session_state.selected_geohash = selected_option
                 st.query_params["selected_lake"] = selected_option
+                # change map params
+                clicked_lat, clicked_lon = pygeohash.decode(selected_option)
+                st.session_state.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+                st.session_state.zoom_level = 12
+                
                 st.rerun()
         else:
             st.sidebar.info("No features clicked yet. Click on a feature to select it.")
