@@ -25,7 +25,7 @@ def load_xarray_dataset_cached(file_path: str):
 
 
 # loading slow for large datasets
-@st.cache_data(ttl=3600, show_spinner="Loading xarray dataset from zarr...")
+# @st.cache_data(ttl=3600, show_spinner="Loading xarray dataset from zarr...")
 def load_dataset(
     dataset_type: str,
     zarr_path: str | Path,
