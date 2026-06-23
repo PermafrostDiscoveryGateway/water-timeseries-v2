@@ -5,13 +5,14 @@ from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
-import pygeohash
+
 import folium
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import pygeohash
 import streamlit as st
 from streamlit_folium import st_folium
 
@@ -354,10 +355,10 @@ class MapViewer:
                         matching = possible_matches[possible_matches.geometry.contains(click_point)]
                         if not matching.empty:
                             clicked_id = matching.iloc[0][self.id_column]
-                            
+
                             clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
                             # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
-                            st.session_state.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+                            st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
                             st.session_state.zoom_level = 12
                             print(clicked_lat, clicked_lon)
 
@@ -368,7 +369,7 @@ class MapViewer:
 
             clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
             # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
-            st.session_state.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+            st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
             st.session_state.zoom_level = 12
             print(clicked_lat, clicked_lon)
             if clicked_id not in st.session_state.get("clicked_features", []):
@@ -969,11 +970,11 @@ def create_app(
     zarr_path_input = str(zarr_path)
     zarr_path_jrc_input = str(zarr_path_jrc)
     id_column = "id_geohash"
-    
+
     if "zoom_level" not in st.session_state:
         st.session_state.zoom_level = 10
     if "map_center" not in st.session_state:
-        st.session_state.map_center = {'lat': 66.5, 'lon': -164.1}
+        st.session_state.map_center = {"lat": 66.5, "lon": -164.1}
 
     # Sync selection from URL query parameters
     if "selected_geohash" not in st.session_state:
@@ -1196,9 +1197,9 @@ def create_app(
                 st.query_params["selected_lake"] = selected_option
                 # change map params
                 clicked_lat, clicked_lon = pygeohash.decode(selected_option)
-                st.session_state.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
+                st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
                 st.session_state.zoom_level = 12
-                
+
                 st.rerun()
         else:
             st.sidebar.info("No features clicked yet. Click on a feature to select it.")
