@@ -232,7 +232,7 @@ def build_pmtiles_drainage_year(
     output_path: Path | str,
     **kwargs,
 ) -> Path:
-    """Build PMTiles with NRT drainage styling properties."""
+    """Build PMTiles with drainage year styling properties."""
     columns = (
         "id_geohash",
         "date_break",

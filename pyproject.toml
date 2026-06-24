@@ -107,8 +107,10 @@ build-backend = "hatchling.build"
 # use ruff as the primary linter/formatter with compatibility to black/isort
 # ruff will enforce the same line length and import sorting style
 line-length = 120
-extend-select = ["I"]
 exclude = [".venv", "build", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+extend-select = ["I"]
 extend-ignore = ["E203"]
 
 [tool.pytest.ini_options]
