@@ -227,28 +227,6 @@ def build_pmtiles(
     return output_path
 
 
-def build_pmtiles_for_nrt(
-    parquet_path: Path | str,
-    output_path: Path | str,
-    **kwargs,
-) -> Path:
-    """Build PMTiles with NRT drainage styling properties."""
-    nrt_columns = (
-        "id_geohash",
-        "water_residual",
-        "water_observed",
-        "water_predicted",
-        "water_historical_median",
-        "drainage_confidence",
-    )
-    return build_pmtiles(
-        parquet_path,
-        output_path,
-        property_columns=nrt_columns,
-        **kwargs,
-    )
-
-
 def build_pmtiles_drainage_year(
     parquet_path: Path | str,
     output_path: Path | str,
