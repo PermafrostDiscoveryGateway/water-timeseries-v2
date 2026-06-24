@@ -15,7 +15,6 @@ dependencies = [
     # "xarray>=2023.0.0",
     "tqdm",
     "netcdf4",
-    "python-geohash",
     "seaborn",
     "matplotlib>=3.8.0",
     "shapely",
