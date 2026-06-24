@@ -1,6 +1,7 @@
 """Map Viewer dashboard component using Streamlit and lonboard for high-performance mapping."""
 
 import os
+import sys
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -14,6 +15,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import pygeohash
 import streamlit as st
+from loguru import logger
 from streamlit_folium import st_folium
 
 from water_timeseries.dataset import DWDataset, JRCDataset
@@ -41,6 +43,44 @@ from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
 )
+
+
+def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
+    """Configure logging with verbosity control.
+
+    Args:
+        logfile: Path to log file. If not provided, logs to console only.
+        verbose: Verbosity level (0=INFO, 1=DEBUG)
+
+    Verbosity flags:
+        - No flag or -v: INFO level (default)
+        - -v: DEBUG level
+    """
+    # Determine log level based on verbosity count
+    if verbose >= 1:
+        log_level = "DEBUG"
+    else:
+        log_level = "INFO"
+
+    # Generate default logfile name from subcommand and timestamp
+    if logfile is None:
+        try:
+            # sys.argv[0] is the script name, sys.argv[1] is the subcommand
+            if len(sys.argv) >= 2:
+                subcommand = sys.argv[1].replace("-", "_")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                logfile = f"{subcommand}_{timestamp}.log"
+                print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
+        except Exception:
+            pass
+        # If no logfile set, log to console only
+        if logfile is None:
+            return
+
+    logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
+    print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
+    return logfile
+
 
 # Initialize Earth Engine when credentials are available
 _ee_project = os.environ.get("EE_PROJECT") or None
@@ -99,6 +139,7 @@ class MapViewer:
         drained_label: Optional[str] = None,
         show_main_layer: bool = True,
         viz_configuration_name: Optional[str] = "colored_historical",
+        logfile: str = None,
     ):
         """Initialize the MapViewer.
 
@@ -119,6 +160,11 @@ class MapViewer:
             show_main_layer: Whether to show the main layer (gdf) by default. If False, it will be added but initially hidden.
             viz_configuration_name: The visualization configuration name to determine styling and tooltip content.
         """
+
+        # Setup logging
+        logfile = setup_logging(logfile=logfile)
+        logger.info("logging started for Dashboard")
+
         self.geometry_column = geometry_column
         self.id_column = id_column
         # Default hover columns if not specified (use from visualization module)
@@ -139,12 +185,15 @@ class MapViewer:
         use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
         if use_pmtiles and map_backend != "pmtiles":
             self.map_backend = "pmtiles"
+            logger.info("Using PMTiles backend")
 
         # Load vector data when needed (folium or drained-layer merges)
         if gdf is not None:
             self.gdf = gdf
+            logger.info(f"Using provided GeoDataFrame with {len(gdf)} features")
         elif parquet_path is not None and self.map_backend != "pmtiles":
             self.gdf = self._load_parquet(parquet_path)
+            logger.info(f"Loaded GeoDataFrame from parquet: {parquet_path}")
         elif parquet_path is not None:
             self.gdf = None  # lazy load for NRT overlay only
         elif use_pmtiles:
@@ -167,6 +216,7 @@ class MapViewer:
         Returns:
             GeoDataFrame loaded from parquet.
         """
+        logger.info(f"Loading GeoDataFrame from parquet: {path}")
         # Use the utility function to load the vector dataset
         gdf = load_vector_dataset(path)
 
@@ -234,17 +284,20 @@ class MapViewer:
         # Apply sampling if max_features specified (for faster loading)
         if self.max_features and len(valid_gdf) > self.max_features:
             valid_gdf = valid_gdf.head(n=self.max_features).reset_index(drop=True)
+            logger.info(f"Sampling applied: showing {self.max_features} of {len(gdf)} features")
             st.caption(f"Showing largest {self.max_features} of {len(gdf)} features (use max_features to change)")
 
         # Ensure geometry is in proper shapely format
         valid_gdf = valid_gdf.reset_index(drop=True)
 
         if len(valid_gdf) == 0:
+            logger.warning("No valid geometries found in GeoDataFrame")
             st.warning("No valid geometries found.")
             return None
 
         # Use st.map for simple point rendering
         if self.map_backend == "st_map":
+            logger.info("Rendering map using st_map backend")
             st.map(valid_gdf)
             return None
 
@@ -268,13 +321,16 @@ class MapViewer:
             "Click a lake to load plots below. "
             "Lakes are colored by net change (red = shrink, blue = grow)."
         )
+        logger.info("PMTiles map view rendered")
 
         pmtiles_source = self.pmtiles_url or (str(self.pmtiles_file) if self.pmtiles_file else None)
         if not pmtiles_source:
             st.error("No pmtiles_file or pmtiles_url provided.")
+            logger.error("No PMTiles source provided")
             return None
 
         if self.pmtiles_file:
+            logger.info(f"Using PMTiles file: {self.pmtiles_file}")
             st.caption(f"Tiles: `{self.pmtiles_file}`")
 
         pmtiles_url = resolve_pmtiles_url(pmtiles_source)
@@ -282,13 +338,16 @@ class MapViewer:
         # Determine center of map (lat, lon)
         if self.map_center is None:
             center = [66.5, -164.1]  # Default fallback center
+            logger.info("Using default map center")
         else:
             center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
+            logger.info(f"Using provided map center: lat={center[0]}, lon={center[1]}")
 
         drained_ids = None
         if getattr(self, "drained_data", None) is not None:
             drained_ids = list(self.drained_data.keys())
-
+            logger.info(f"Drained data overlay: {len(drained_ids) if drained_ids else 0} lakes")
+            logger.info("Setting up map")
         tooltip = None
         m = build_pmtiles_map(
             pmtiles_url,
@@ -355,27 +414,32 @@ class MapViewer:
                         matching = possible_matches[possible_matches.geometry.contains(click_point)]
                         if not matching.empty:
                             clicked_id = matching.iloc[0][self.id_column]
-
+                            logger.info(f"Found lake via spatial search: {clicked_id}")
                             clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
                             # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
                             st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
                             st.session_state.zoom_level = 12
-                            print(clicked_lat, clicked_lon)
+                            logger.info(f"Clicked on lake {clicked_id} and coodinate {clicked_lat} {clicked_lon}")
 
         # Update session state only if a NEW feature was clicked
         if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
             st.session_state.selected_geohash = clicked_id
             st.query_params["selected_lake"] = clicked_id
+            logger.info(f"New lake selected: {clicked_id}")
 
             clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
             # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
             st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
             st.session_state.zoom_level = 12
-            print(clicked_lat, clicked_lon)
+            logger.info(f"Clicked on lake {clicked_id} and coodinate {clicked_lat} {clicked_lon}")
             if clicked_id not in st.session_state.get("clicked_features", []):
                 if "clicked_features" not in st.session_state:
                     st.session_state.clicked_features = []
                 st.session_state.clicked_features.append(clicked_id)
+            logger.info(
+                f"Added {clicked_id} to clicked_features list (total: {len(st.session_state.clicked_features)})"
+            )
+            logger.info(f"Reload map and center to lake {clicked_id}")
             st.rerun()
 
         return st.session_state.get("selected_geohash")
@@ -901,6 +965,7 @@ def create_app(
     viz_configuration_name: Optional[str] = "colored_historical",
     pmtiles_file: Optional[str | Path] = None,
     pmtiles_url: Optional[str] = None,
+    logfile: Optional[str] = None,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -1216,6 +1281,7 @@ def create_app(
 
         # Time Series Plot Section
         if current:
+            logger.info(f"Map click event: id_geohash={current} - Opening time series section")
             st.divider()
             st.subheader(f"📈 Time Series: {current}")
 
@@ -1224,6 +1290,7 @@ def create_app(
                 st.session_state.show_ts_popup = True
 
             # Show inline preview
+            logger.info(f"Time series section opened for lake: {current}")
             st.caption("Preview - click button above for full view")
 
             # Load datasets using unified helper function
@@ -1232,13 +1299,15 @@ def create_app(
 
             id_available_dw_raw = check_dataset_availability_ds_raw(st.session_state.dw_dataset_raw, current)
             id_available_jrc_raw = check_dataset_availability_ds_raw(st.session_state.jrc_dataset_raw, current)
-            print("DWDATASET:", dw_dataset is None, id_available_dw_raw)
+            logger.info(f"Lake {current} available from Dynamic world database file: {id_available_dw_raw}")
             # Load DW dataset if needed
             if id_available_dw_raw:
+                logger.info(f"Lake {current} is available from Dynamic world database file")
                 dw_dataset = DWDataset(st.session_state.dw_dataset_raw.sel(id_geohash=[current]))
                 success = True
                 st.session_state.dw_dataset = dw_dataset
             else:
+                logger.info(f"Lake {current} is not available from the Dynamic World database file")
                 # elif dw_dataset is None and st.session_state.dw_dataset_raw is None:
                 dw_dataset, success = load_dataset("dw", zarr_path_input, st.session_state.downloaded_dsdw)
 
@@ -1247,10 +1316,12 @@ def create_app(
 
             # Load JRC dataset if needed
             if id_available_jrc_raw:
+                logger.info(f"Lake {current} is available from the JRC database file")
                 jrc_dataset = JRCDataset(st.session_state.jrc_dataset_raw.sel(id_geohash=[current]))
                 success = True
 
             else:
+                logger.info(f"Lake {current} is not available from the JRC database file")
                 # elif jrc_dataset is None and st.session_state.jrc_dataset_raw is None:
                 jrc_dataset, success = load_dataset("jrc", zarr_path_jrc_input, st.session_state.downloaded_dsjrc)
 
@@ -1260,18 +1331,21 @@ def create_app(
             # Re-check availability after loading
             id_available_dw = check_dataset_availability(st.session_state.dw_dataset, current)
             id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
-            st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
+            # st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
 
             # Automatically download if not available
             if not id_available_dw or not id_available_jrc:
                 if st.session_state.get("offline_mode", False):
+                    logger.warning(f"Offline mode: data download disabled for lake {current}")
                     st.warning(
                         "⚠️ Offline mode enabled: Data download is disabled. "
                         "Please provide data files via --dw-dataset-file and --jrc-dataset-file, "
                         "or run without --offline-mode to enable downloads."
                     )
                     return  # Exit early to prevent download attempts
-                st.caption("Downloading...")
+
+                    logger.info(f"Initiating data download for lake: {current}")
+                    st.caption("Downloading...")
 
                 # Download data for the specific geohash
                 try:
@@ -1280,6 +1354,7 @@ def create_app(
 
                     if not id_available_dw:
                         # Download data for the specific geohash
+                        logger.info(f"Downloading Dynamic World data for lake: {current}")
                         st.caption("Downloading DW data ...")
                         dsdw_downloaded = downloader.download_dw_monthly(
                             vector_dataset=data_path_input,
@@ -1302,6 +1377,7 @@ def create_app(
                                     )
                                 except Exception as merge_e:
                                     # If merge fails, use downloaded data only
+                                    logger.warning(f"Could not merge DW data for lake {current}: {merge_e}")
                                     st.sidebar.warning(f"Could not merge data: {merge_e}")
                                     st.session_state.dw_dataset = downloaded_dataset_dw
                             else:
@@ -1315,6 +1391,7 @@ def create_app(
 
                     if not id_available_jrc:
                         # JRC Download
+                        logger.info(f"Downloading JRC data for lake: {current}")
                         st.caption("Downloading JRC data ...")
                         dsjrc_downloaded = downloader.download_jrc_annual(
                             vector_dataset=data_path_input,
@@ -1336,6 +1413,7 @@ def create_app(
                                     )
                                 except Exception as merge_e:
                                     # If merge fails, use downloaded data only
+                                    logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
                                     st.sidebar.warning(f"Could not merge data: {merge_e}")
                                     st.session_state.jrc_dataset = downloaded_dataset_jrc
                             else:
@@ -1347,18 +1425,20 @@ def create_app(
                             # Also set id_available_dw = True since DW data was also downloaded
                             id_available_dw = True
 
+                            logger.info(f"Successfully downloaded DW and JRC data for lake: {current}")
                             st.caption("Both DW and JRC data downloaded successfully!")
                             st.rerun()
                         else:
                             st.error("Download returned no data.")
-
                 except Exception as e:
+                    logger.error(f"Failed to download data for lake {current}: {e}")
                     st.error(f"Error downloading data: {e}")
                     st.info("Make sure you have Google Earth Engine authentication configured.")
 
             # Plot time series if available
             if st.session_state.dw_dataset is not None and id_available_dw:
                 try:
+                    logger.info(f"Plotting time series for lake: {current}")
                     # Create container with one row and two columns for time series plots
                     ts_col1, ts_col2 = st.columns(2)
 
@@ -1388,13 +1468,18 @@ def create_app(
                             )
                     else:
                         with ts_col2:
+                            logger.info(f"JRC data not available for lake: {current}")
                             st.caption("JRC data not available for this feature")
                 except Exception as e:
+                    logger.error(f"Error plotting time series for lake {current}: {e}")
                     st.error(f"Error plotting time series: {e}")
 
             ###################### START Recent imagery plotter #############################
             st.divider()
             if st.session_state.get("offline_mode", False):
+                logger.warning(
+                    f"Offline mode enabled: Data download is disabled. Satellite image preview for {current} cannot be provided"
+                )
                 st.warning(
                     "⚠️ Offline mode enabled: Data download is disabled. "
                     "Please provide data files via --dw-dataset-file and --jrc-dataset-file, "
@@ -1415,6 +1500,7 @@ def create_app(
                         "Pulling satellite image closest to the break + one year before... This may take a few seconds."
                     )
                     viz_dates = [pre_break, post_break, today]
+
                 else:
                     today = datetime.now()
                     one_year_ago = today - timedelta(days=366)
@@ -1423,6 +1509,7 @@ def create_app(
 
                 with st.spinner(spinner_text):
                     # pull ds via xee
+                    logger.info(f"Collecting Satellite image previews for dates: {viz_dates}")
                     ds = get_rioxarray_ds_from_lake(
                         lake_gdf=st.session_state.lake_polygons,
                         id_geohash=current,
@@ -1430,9 +1517,9 @@ def create_app(
                         end_date=today.strftime("%Y-%m-%d"),
                     )
                     fig = visualize_s2_xee_cube(ds, dates=viz_dates)
-
                     # plot figure
                     st.pyplot(fig, width="content")
+                    logger.info("Loaded Satellite image previews finished")
 
             ###################### END Recent imagery plotter #############################
 
@@ -1457,12 +1544,14 @@ def create_app(
             timelapse_clicked = st.button("🎬 Create Timelapse", key="create_timelapse")
 
             if timelapse_clicked:
+                logger.info("Starting timelapse creation")
                 if st.session_state.get("offline_mode", False):
                     st.warning(
                         "⚠️ Offline mode enabled: Timelapse generation is disabled. "
                         "Timelapses require Google Earth Engine access. "
                         "Run without --offline-mode to enable timelapse generation."
                     )
+                    logger.warning("Offline mode enabled: timelape creation is disabled")
                 elif not create_sentinel2 and not create_landsat:
                     st.warning("Please select at least one data source (Sentinel-2 or Landsat)")
                 else:
@@ -1545,7 +1634,7 @@ def create_app(
 
                                         # Use simple path like the working version
                                         st.image(str(gif_ls_path), caption=f"Timelapse: {current}", width=512)
-
+                                        logger.info("Landsat timelapse downloaded and visualized finished")
                                         with open(gif_ls_path, "rb") as f:
                                             st.download_button(
                                                 label="💾 Download GIF",
@@ -1569,7 +1658,7 @@ def create_app(
                             st.info("Timelapse already exists")
                             # Use simple path like the working version
                             st.image(str(potential_gif_s2), caption=f"Timelapse: {current}", width=512)
-
+                            logger.info("Landsat timelapse downloaded and visualized finished")
                             with open(potential_gif_s2, "rb") as f:
                                 st.download_button(
                                     label="💾 Download GIF",

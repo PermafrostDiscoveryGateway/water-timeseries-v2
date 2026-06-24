@@ -72,6 +72,7 @@ dependencies = [
     "tippecanoe>=2.72.0",
     "leafmap>=0.62.0",
     "pygeohash>=3.3.0",
+    "ruff>=0.15.19",
 ]
 
 [project.optional-dependencies]

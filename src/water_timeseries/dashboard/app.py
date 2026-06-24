@@ -1,14 +1,56 @@
 """Run the Streamlit dashboard."""
 
 import argparse
+import sys
 import warnings
+from datetime import datetime
 from pathlib import Path
+from typing import Optional
+
+from loguru import logger
 
 from water_timeseries.dashboard.map_viewer import create_app
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent
 _DEFAULT_NRT_DIR = _REPO_ROOT / "precomputed" / "nrt"
 _TEST_NRT_DIR = _REPO_ROOT / "tests" / "data" / "nrt"
+
+
+def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
+    """Configure logging with verbosity control.
+
+    Args:
+        logfile: Path to log file. If not provided, logs to console only.
+        verbose: Verbosity level (0=INFO, 1=DEBUG)
+
+    Verbosity flags:
+        - No flag or -v: INFO level (default)
+        - -v: DEBUG level
+    """
+    # Determine log level based on verbosity count
+    if verbose >= 1:
+        log_level = "DEBUG"
+    else:
+        log_level = "INFO"
+
+    # Generate default logfile name from subcommand and timestamp
+    if logfile is None:
+        try:
+            # sys.argv[0] is the script name, sys.argv[1] is the subcommand
+            if len(sys.argv) >= 2:
+                subcommand = sys.argv[1].replace("-", "_")
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                logfile = f"{subcommand}_{timestamp}.log"
+                print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
+        except Exception:
+            pass
+        # If no logfile set, log to console only
+        if logfile is None:
+            return
+
+    logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
+    print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
+    return logfile
 
 
 def _resolve_default_nrt_dir() -> Path | None:
@@ -112,6 +154,12 @@ def parse_args():
         default=None,
         help="HTTP(S) URL to a hosted .pmtiles file (e.g. on S3). Overrides local tile server.",
     )
+    parser.add_argument(
+        "--logfile",
+        type=str,
+        default=None,
+        help="Path to logfile",
+    )
 
     return parser.parse_args()
 
@@ -130,6 +178,7 @@ def main(
     dw_end_year: int = None,
     dw_start_month: int = None,
     dw_end_month: int = None,
+    logfile: str = None,
 ):
     """Run the dashboard app.
 
@@ -142,6 +191,8 @@ def main(
         offline_mode: If True, disables Google Earth Engine download functionality.
         viz_configuration: The visualization configuration name for the map viewer.
     """
+    logfile = setup_logging(logfile)
+
     # Default paths to test data
     default_vector_file = _REPO_ROOT / "tests" / "data" / "lake_polygons.parquet"
     default_dw_dataset_file = _REPO_ROOT / "tests" / "data" / "lakes_dw_test.zarr"
