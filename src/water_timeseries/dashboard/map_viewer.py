@@ -850,9 +850,10 @@ def _load_precomputed_nrt(
     if precomputed_nrt_dir is None:
         return None, None
 
-    from loguru import logger
-    from water_timeseries.utils.io import is_remote_path
     import fsspec
+    from loguru import logger
+
+    from water_timeseries.utils.io import is_remote_path
 
     path_str = str(precomputed_nrt_dir)
     is_remote = is_remote_path(path_str)
