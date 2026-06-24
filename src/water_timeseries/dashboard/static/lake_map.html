@@ -122,9 +122,8 @@
     const viz = CONFIG.viz_configuration || "colored_historical";
     const sourceLayer = CONFIG.source_layer || "lakes";
 
-    // DATA-DRIVEN fill-color:
     //  1. If NetChange_perc is a number  → historical colour ramp (red→blue)
-    //  2. Else if water_residual is a number → NRT colour ramp (dark-red→peach)
+    //  2. Else if date_break_year is present → drainage_year colour ramp
     //  3. Otherwise                           → neutral grey
     const dataDrivenFillColor = [
       "case",
@@ -137,12 +136,11 @@
          20, "#74add1",
          40, "#4575b4"
       ],
-      ["==", ["typeof", ["get", "water_residual"]], "number"],
+      ["has", "date_break_year"],
       [
-        "interpolate", ["linear"], ["get", "water_residual"],
-        -1.0, "#7f0000",
-        -0.5, "#d73027",
-         0.0, "#fcae91"
+        "interpolate", ["linear"], ["to-number", ["get", "date_break_year"]],
+        2017.0, "#fff5f0",
+        2025.0, "#67000d"
       ],
       "#888888"
     ];
@@ -216,7 +214,7 @@
     };
 
     const savedBasemap = sessionStorage.getItem("preferred_basemap");
-    const defaultBasemap = savedBasemap || (viz === "nrt_drainage" ? "tcvis" : "darkmatter");
+    const defaultBasemap = savedBasemap || "darkmatter";
     
     const layers = [
       { id: "basemap-darkmatter", type: "raster", source: "darkmatter", layout: { visibility: defaultBasemap === "darkmatter" ? "visible" : "none" } },
@@ -414,9 +412,8 @@
         lines.push(`<b>Area 2000 (ha):</b> ${fmt(displayProps.Area_start_ha)}`);
         lines.push(`<b>Area 2020 (ha):</b> ${fmt(displayProps.Area_end_ha)}`);
       }
-      if (displayProps.water_residual !== undefined) {
-        lines.push(`<b>Water residual:</b> ${fmt(displayProps.water_residual)}`);
-        lines.push(`<b>Observed water:</b> ${fmt(displayProps.water_observed)}`);
+      if (displayProps.date_break_year !== undefined) {
+        lines.push(`<b>Drainage year:</b> ${fmt(displayProps.date_break_year)}`);
       }
       lines.push(`<b>ID:</b> ${fmt(displayProps[idField])}`);
       return lines.join("<br/>");
@@ -483,16 +480,16 @@
     const legend = document.getElementById("legend");
 
     // Set legend initially based on config hint, then refine once tiles load.
-    function setLegendForData(hasNetChange, hasWaterResidual) {
+    function setLegendForData(hasNetChange, hasDrainageYear) {
       if (hasNetChange) {
         legend.innerHTML = "<b>Net change (%)</b><div class='legend-bar'></div><div style='display:flex;justify-content:space-between'><span>-40%</span><span>0</span><span>+40%</span></div>";
-      } else if (hasWaterResidual) {
-        legend.innerHTML = "<b>Water residual</b><div class='legend-bar' style='background:linear-gradient(to right,#7f0000,#fcae91)'></div>";
+      } else if (hasDrainageYear) {
+        legend.innerHTML = "<b>Drainage year</b><div class='legend-bar' style='background:linear-gradient(to right,#fff5f0,#67000d)'></div><div style='display:flex;justify-content:space-between'><span>2017</span><span>2025</span></div>";
       }
     }
 
     // Initial legend based on config hint (replaced once tiles are inspected).
-    setLegendForData(viz !== "nrt_drainage", viz === "nrt_drainage");
+    setLegendForData(viz !== "drainage_year", viz === "drainage_year");
 
     // After tiles load, inspect actual rendered features and correct the legend.
     map.on("idle", function detectDataType() {
@@ -500,8 +497,8 @@
       if (!features.length) return;
       const props = features[0].properties || {};
       const hasNetChange = typeof props["NetChange_perc"] === "number";
-      const hasWaterResidual = typeof props["water_residual"] === "number";
-      setLegendForData(hasNetChange, hasWaterResidual);
+      const hasDrainageYear = props["date_break_year"] !== undefined;
+      setLegendForData(hasNetChange, hasDrainageYear);
       // Only run once — remove listener after first successful detection.
       map.off("idle", detectDataType);
     });

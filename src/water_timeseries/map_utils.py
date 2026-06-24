@@ -141,7 +141,7 @@ def build_pmtiles_map(
         tile_layer_esriworld.add_to(m)
         tcvis_tile_layer.add_to(m)
 
-    if viz_configuration_name == "drainage_year":
+    elif viz_configuration_name == "drainage_year":
         # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
         legend = get_legend_html_date_drainage_year()
@@ -154,7 +154,7 @@ def build_pmtiles_map(
     else:
         # Define default paint values
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
-        get_legend_html_net_change()
+        legend = get_legend_html_net_change()
         # Add background tiles
         tile_layer_darkmatter.add_to(m)
         tcvis_tile_layer.add_to(m)

@@ -476,67 +476,6 @@ class MapViewer:
             else:
                 style_function = get_default_style_function()
 
-        elif viz_configuration_name == "nrt_drainage":
-            # Create style function based on whether NetChange_perc column exists
-            if "water_residual" in valid_gdf.columns:
-                # add tile layers
-                tcvis_tile_layer.add_to(m)
-                tile_layer_esriworld.add_to(m)
-                tile_layer_darkmatter.add_to(m)
-
-                style_function = get_colored_style_function(
-                    color_column="water_residual",
-                    vmin=-1,
-                    vmax=0,
-                    colormap=plt.cm.Reds,
-                    edge_weight=2,
-                    fill_opacity=0.8,
-                    edge_color="#dddddd",
-                )
-
-                # Format tooltip columns using utility function
-                # Include Area columns for full tooltip display
-                tooltip_columns = [
-                    ("water_residual", "Water residual:", "{:.2f}", ""),
-                    ("water_observed", "Observed water:", "{:.2f}", ""),
-                    ("water_predicted", "Predicted water:", "{:.2f}", ""),
-                    ("water_historical_median", "Historical median water:", "{:.2f}", ""),
-                    ("water_historical_min", "Historical minimum:", "{:.2f}", ""),
-                    ("drainage_confidence", "Drainage Confidence:", "{:}", ""),
-                ]
-            else:
-                style_function = get_default_style_function()
-
-        elif viz_configuration_name == "nrt_drainage_confidence":
-            # Create style function based on whether NetChange_perc column exists
-            if "drainage_confidence" in valid_gdf.columns:
-                # add tile layers
-                tcvis_tile_layer.add_to(m)
-                tile_layer_esriworld.add_to(m)
-                tile_layer_darkmatter.add_to(m)
-
-                style_function = get_colored_style_function(
-                    color_column="drainage_confidence",
-                    vmin=0,
-                    vmax=3,
-                    colormap=plt.cm.Reds_r,
-                    edge_weight=2,
-                    fill_opacity=0.8,
-                    edge_color="#dddddd",
-                )
-
-                # Format tooltip columns using utility function
-                # Include Area columns for full tooltip display
-                tooltip_columns = [
-                    ("water_residual", "Water residual:", "{:.2f}", ""),
-                    ("water_observed", "Observed water:", "{:.2f}", ""),
-                    ("water_predicted", "Predicted water:", "{:.2f}", ""),
-                    ("water_historical_median", "Historical median water:", "{:.2f}", ""),
-                    ("water_historical_min", "Historical minimum:", "{:.2f}", ""),
-                    ("drainage_confidence", "Drainage Confidence:", "{:}", ""),
-                ]
-            else:
-                style_function = get_default_style_function()
         else:
             style_function = get_default_style_function()
 
