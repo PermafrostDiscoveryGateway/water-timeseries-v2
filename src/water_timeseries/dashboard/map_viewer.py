@@ -992,31 +992,10 @@ def create_app(
                         )
                     )
 
-                # Show a compact sparkline in the sidebar before the selector
-                if counts_lookup:
-                    spark_df = (
-                        pd.DataFrame({"month": list(counts_lookup.keys()), "drained": list(counts_lookup.values())})
-                        .sort_values("month")
-                        .set_index("month")
-                    )
-                    st.sidebar.caption("Drained lake counts per month:")
-                    st.sidebar.bar_chart(spark_df, height=80)
-
                 # Heatmap in sidebar – click a cell to pre-select the month dropdown
                 _render_drain_heatmap(precomputed_counts, precomputed_breaks, container=st.sidebar)
 
-                # Optional filter: hide months with zero drainages
-                only_nonzero = st.sidebar.toggle(
-                    "Only show months with drainages",
-                    value=False,
-                    help="Hide months where no lakes were flagged as drained.",
-                )
                 selectable_months = available_months
-                if only_nonzero and counts_lookup:
-                    selectable_months = [m for m in available_months if counts_lookup.get(m, 0) > 0]
-                    if not selectable_months:
-                        st.sidebar.info("No months with drainages found.")
-                        selectable_months = available_months
 
                 # Build display labels that include the drain count
                 def _month_label(m: str) -> str:
