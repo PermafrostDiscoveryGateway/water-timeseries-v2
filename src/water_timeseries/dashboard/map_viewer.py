@@ -1,4 +1,4 @@
-"""Map Viewer dashboard component using Streamlit and lonboard for high-performance mapping."""
+"""Map Viewer dashboard component using Streamlit for mapping."""
 
 import os
 from datetime import datetime, timedelta
@@ -73,13 +73,13 @@ _init_ee()
 
 
 class MapViewer:
-    """Interactive map viewer for GeoDataFrames using Streamlit and lonboard.
+    """Interactive map viewer for GeoDataFrames using Streamlit.
 
     Features:
     - Display GeoDataFrame on an interactive map (high performance for large datasets)
     - Hover tooltips showing feature attributes
     - Click to select features and store their id_geohash value
-    - Supports multiple backends: folium, pydeck (WebGL), st.map
+    - Supports multiple backends: folium, pmtiles
     """
 
     def __init__(
@@ -91,7 +91,7 @@ class MapViewer:
         hover_columns: Optional[List[str]] = None,
         map_center: Optional[dict] = None,
         zoom: int = 10,
-        map_backend: str = "folium",  # "folium", "st_map", or "pmtiles"
+        map_backend: str = "folium",  # "folium" or "pmtiles"
         max_features: Optional[int] = None,  # Limit features for faster loading
         pmtiles_file: Optional[Path | str] = None,
         pmtiles_url: Optional[str] = None,
@@ -110,7 +110,7 @@ class MapViewer:
             hover_columns: List of column names to show on hover. If None, shows all.
             map_center: Dictionary with 'lat' and 'lon' keys for map center.
             zoom: Initial zoom level for the map.
-            map_backend: Which mapping backend to use ("folium", "st_map", or "pmtiles").
+            map_backend: Which mapping backend to use ("folium" or "pmtiles").
             max_features: Maximum number of features to display (for performance).
             pmtiles_file: Local ``.pmtiles`` archive (vector tiles; fast for millions of lakes).
             pmtiles_url: Remote HTTP(S) URL to a ``.pmtiles`` file (e.g. on S3).
@@ -125,7 +125,7 @@ class MapViewer:
         self.hover_columns = hover_columns or DEFAULT_HOVER_COLUMNS
         self.zoom = zoom
         self.map_center = map_center
-        self.map_backend = map_backend  # "folium", "st_map", or "pmtiles"
+        self.map_backend = map_backend  # "folium" or "pmtiles"
         self.max_features = max_features  # Limit features for faster loading
         self.pmtiles_file = Path(pmtiles_file) if pmtiles_file else None
         self.pmtiles_url = pmtiles_url
@@ -241,11 +241,6 @@ class MapViewer:
 
         if len(valid_gdf) == 0:
             st.warning("No valid geometries found.")
-            return None
-
-        # Use st.map for simple point rendering
-        if self.map_backend == "st_map":
-            st.map(valid_gdf)
             return None
 
         # Default: use folium
