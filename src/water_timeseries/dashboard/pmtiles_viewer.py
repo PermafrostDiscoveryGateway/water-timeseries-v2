@@ -54,23 +54,14 @@ def _bounds_center_zoom(gdf: gpd.GeoDataFrame) -> tuple[list[float], float]:
     return center, zoom
 
 
-def _get_or_start_server(pmtiles_file: Optional[Path | str] = None) -> PmtilesServer:
-    """Start (or reuse) a local server that hosts the map page (and optionally the .pmtiles file)."""
-    if pmtiles_file is not None:
-        pmtiles_path = Path(pmtiles_file).resolve()
-        if not pmtiles_path.is_file():
-            raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
-    else:
-        pmtiles_path = None
+@st.cache_resource
+def _get_or_start_server(pmtiles_file: str) -> PmtilesServer:
+    """Start (or reuse) a global server that hosts both the map page and .pmtiles file."""
+    pmtiles_path = Path(pmtiles_file).resolve()
+    if not pmtiles_path.is_file():
+        raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
 
-    server: Optional[PmtilesServer] = st.session_state.get(_SESSION_SERVER_KEY)
-    if server is None or server.pmtiles_path != pmtiles_path:
-        if server is not None:
-            server.stop()
-        server = PmtilesServer(pmtiles_path).start()
-        st.session_state[_SESSION_SERVER_KEY] = server
-
-    return server
+    return PmtilesServer(pmtiles_path).start()
 
 
 def _build_map_config(
@@ -181,7 +172,7 @@ def render_pmtiles_map(
     if pmtiles_file is None:
         raise ValueError("Either pmtiles_file or pmtiles_url must be provided")
 
-    server = _get_or_start_server(pmtiles_file)
+    server = _get_or_start_server(str(pmtiles_file))
     config = _build_map_config(
         pmtiles_file=pmtiles_file,
         vector_file_for_bounds=vector_file_for_bounds if pmtiles_file is None else None,
