@@ -27,6 +27,9 @@ def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
         - No flag or -v: INFO level (default)
         - -v: DEBUG level
     """
+    # Remove default loguru handler and add custom format
+    logger.remove()
+
     # Determine log level based on verbosity count
     if verbose >= 1:
         log_level = "DEBUG"
@@ -41,15 +44,30 @@ def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
                 subcommand = sys.argv[1].replace("-", "_")
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 logfile = f"{subcommand}_{timestamp}.log"
-                print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
         except Exception:
             pass
-        # If no logfile set, log to console only
-        if logfile is None:
-            return
 
-    logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
-    print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
+    # Add console output with nice formatting
+    logger.add(
+        sys.stderr,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - <level>{message}</level>",
+        level=log_level,
+        colorize=True,
+    )
+
+    # Add file output if logfile is provided
+    if logfile is not None:
+        logger.add(
+            logfile,
+            rotation="10 MB",
+            retention="1 week",
+            level=log_level,
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{function}:{line} - {message}",
+            compression="zip",
+        )
+        print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
+
+    logger.info(f"Logging started with level: {log_level}")
     return logfile
 
 
@@ -160,6 +178,13 @@ def parse_args():
         default=None,
         help="Path to logfile",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="count",
+        default=0,
+        help="Increase verbosity. Use -v for DEBUG level, -vv for more verbose output.",
+    )
 
     return parser.parse_args()
 
@@ -179,6 +204,7 @@ def main(
     dw_start_month: int = None,
     dw_end_month: int = None,
     logfile: str = None,
+    verbose: int = 0,
 ):
     """Run the dashboard app.
 
@@ -190,8 +216,9 @@ def main(
             Auto-detected from ``precomputed/nrt/`` in the repo root when present.
         offline_mode: If True, disables Google Earth Engine download functionality.
         viz_configuration: The visualization configuration name for the map viewer.
+        verbose: Verbosity level for logging.
     """
-    logfile = setup_logging(logfile)
+    setup_logging(logfile=logfile, verbose=verbose)
 
     # Default paths to test data
     default_vector_file = _REPO_ROOT / "tests" / "data" / "lake_polygons.parquet"
@@ -265,4 +292,6 @@ if __name__ == "__main__":
         viz_configuration=args.viz_configuration,
         pmtiles_file=args.pmtiles_file,
         pmtiles_url=args.pmtiles_url,
+        logfile=args.logfile,
+        verbose=args.verbose,
     )

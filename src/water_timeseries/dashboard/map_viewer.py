@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 import pygeohash
 import streamlit as st
 from loguru import logger
+from loguru import logger
 from streamlit_folium import st_folium
 
 from water_timeseries.dataset import DWDataset, JRCDataset
@@ -45,41 +46,41 @@ from water_timeseries.utils.visualization import (
 )
 
 
-def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
-    """Configure logging with verbosity control.
+# def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
+#     """Configure logging with verbosity control.
 
-    Args:
-        logfile: Path to log file. If not provided, logs to console only.
-        verbose: Verbosity level (0=INFO, 1=DEBUG)
+#     Args:
+#         logfile: Path to log file. If not provided, logs to console only.
+#         verbose: Verbosity level (0=INFO, 1=DEBUG)
 
-    Verbosity flags:
-        - No flag or -v: INFO level (default)
-        - -v: DEBUG level
-    """
-    # Determine log level based on verbosity count
-    if verbose >= 1:
-        log_level = "DEBUG"
-    else:
-        log_level = "INFO"
+#     Verbosity flags:
+#         - No flag or -v: INFO level (default)
+#         - -v: DEBUG level
+#     """
+#     # Determine log level based on verbosity count
+#     if verbose >= 1:
+#         log_level = "DEBUG"
+#     else:
+#         log_level = "INFO"
 
-    # Generate default logfile name from subcommand and timestamp
-    if logfile is None:
-        try:
-            # sys.argv[0] is the script name, sys.argv[1] is the subcommand
-            if len(sys.argv) >= 2:
-                subcommand = sys.argv[1].replace("-", "_")
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                logfile = f"{subcommand}_{timestamp}.log"
-                print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
-        except Exception:
-            pass
-        # If no logfile set, log to console only
-        if logfile is None:
-            return
+#     # Generate default logfile name from subcommand and timestamp
+#     if logfile is None:
+#         try:
+#             # sys.argv[0] is the script name, sys.argv[1] is the subcommand
+#             if len(sys.argv) >= 2:
+#                 subcommand = sys.argv[1].replace("-", "_")
+#                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+#                 logfile = f"{subcommand}_{timestamp}.log"
+#                 print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
+#         except Exception:
+#             pass
+#         # If no logfile set, log to console only
+#         if logfile is None:
+#             return
 
-    logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
-    print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
-    return logfile
+#     logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
+#     print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
+#     return logfile
 
 
 # Initialize Earth Engine when credentials are available
@@ -139,6 +140,7 @@ class MapViewer:
         drained_label: Optional[str] = None,
         show_main_layer: bool = True,
         viz_configuration_name: Optional[str] = "colored_historical",
+        logger = None,
     ):
         """Initialize the MapViewer.
 
@@ -1107,6 +1109,7 @@ def create_app(
             viz_configuration_name=viz_configuration_name,
             pmtiles_file=pmtiles_file,
             pmtiles_url=pmtiles_url,
+            logger=logger,
         )
         if show_drained and drained_breaks is not None and not drained_breaks.empty:
             drained_ids = drained_breaks.index.unique().tolist()
