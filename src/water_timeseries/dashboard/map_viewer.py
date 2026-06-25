@@ -139,7 +139,6 @@ class MapViewer:
         drained_label: Optional[str] = None,
         show_main_layer: bool = True,
         viz_configuration_name: Optional[str] = "colored_historical",
-        logfile: str = None,
     ):
         """Initialize the MapViewer.
 
@@ -160,11 +159,6 @@ class MapViewer:
             show_main_layer: Whether to show the main layer (gdf) by default. If False, it will be added but initially hidden.
             viz_configuration_name: The visualization configuration name to determine styling and tooltip content.
         """
-
-        # Setup logging
-        logfile = setup_logging(logfile=logfile)
-        logger.info("logging started for Dashboard")
-
         self.geometry_column = geometry_column
         self.id_column = id_column
         # Default hover columns if not specified (use from visualization module)
@@ -182,18 +176,16 @@ class MapViewer:
         self.drained_data = None
         self.viz_configuration_name = viz_configuration_name
 
+        
         use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
         if use_pmtiles and map_backend != "pmtiles":
             self.map_backend = "pmtiles"
-            logger.info("Using PMTiles backend")
 
         # Load vector data when needed (folium or drained-layer merges)
         if gdf is not None:
             self.gdf = gdf
-            logger.info(f"Using provided GeoDataFrame with {len(gdf)} features")
         elif parquet_path is not None and self.map_backend != "pmtiles":
             self.gdf = self._load_parquet(parquet_path)
-            logger.info(f"Loaded GeoDataFrame from parquet: {parquet_path}")
         elif parquet_path is not None:
             self.gdf = None  # lazy load for NRT overlay only
         elif use_pmtiles:
@@ -272,6 +264,7 @@ class MapViewer:
         """
         st.subheader("Interactive Map Viewer")
 
+        logger.info(f"Map Backend: {self.map_backend}")
         if self.map_backend == "pmtiles":
             return self._render_pmtiles(viz_configuration_name=self.viz_configuration_name)
 
@@ -334,6 +327,7 @@ class MapViewer:
             st.caption(f"Tiles: `{self.pmtiles_file}`")
 
         pmtiles_url = resolve_pmtiles_url(pmtiles_source)
+        logger.info(f"PMTiles url: {pmtiles_url}")
 
         # Determine center of map (lat, lon)
         if self.map_center is None:
@@ -461,7 +455,7 @@ class MapViewer:
         Returns:
             The selected id_geohash value if a feature was clicked, None otherwise.
         """
-        print("PMTILES center", self.map_center)
+        print("Using Folium map backend")
         # Determine center of map
         if self.map_center is None:
             centroid = valid_gdf.geometry.unary_union.centroid
@@ -1189,6 +1183,7 @@ def create_app(
                     st.sidebar.caption(f"No per-lake break data available for {drained_label}")
 
     # Create map viewer
+    logger.info(map_backend)
     try:
         viewer = MapViewer(
             parquet_path=data_path_input,

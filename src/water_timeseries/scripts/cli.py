@@ -303,8 +303,8 @@ def serve_tiles(
 
     with PmtilesServer(pmtiles_path.parent, host=host, port=port) as server:
         url = server.url_for(pmtiles_path.name)
-        logger.info("Serving %s at %s (Ctrl+C to stop)", pmtiles_path.name, url)
-        logger.info("Dashboard: water-timeseries dashboard --pmtiles-url %s", url)
+        logger.info(f"Serving {pmtiles_path.name} at {url} (Ctrl+C to stop)")
+        logger.info(f"Dashboard: water-timeseries dashboard --pmtiles-url {url}")
         try:
             import time
 
