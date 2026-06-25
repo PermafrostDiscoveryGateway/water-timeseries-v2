@@ -151,16 +151,6 @@ def parse_args():
         help="End month for Dynamic World time series (inclusive). Default is 9.",
     )
     parser.add_argument(
-        "--viz-configuration",
-        type=str,
-        default="colored_historical",
-        help=(
-            "Visualization configuration name for the map viewer. "
-            "Options include 'colored_historical' (default) and 'drainage_year'. "
-            "This controls the styling and color scheme of the map layers."
-        ),
-    )
-    parser.add_argument(
         "--pmtiles-file",
         type=str,
         default=None,
@@ -196,7 +186,6 @@ def main(
     precomputed_nrt_dir: str | Path = None,
     offline_mode: bool = False,
     ee_project: str = None,
-    viz_configuration: str = None,
     pmtiles_file: str | Path = None,
     pmtiles_url: str = None,
     dw_start_year: int = None,
@@ -215,7 +204,6 @@ def main(
         precomputed_nrt_dir: Directory with pre-computed NRT parquet files.
             Auto-detected from ``precomputed/nrt/`` in the repo root when present.
         offline_mode: If True, disables Google Earth Engine download functionality.
-        viz_configuration: The visualization configuration name for the map viewer.
         verbose: Verbosity level for logging.
     """
     setup_logging(logfile=logfile, verbose=verbose)
@@ -261,9 +249,6 @@ def main(
     if precomputed_nrt_dir is None:
         precomputed_nrt_dir = _resolve_default_nrt_dir()
 
-    if viz_configuration is None:
-        viz_configuration = "colored_historical"
-
     if pmtiles_url == "":
         pmtiles_url = None
 
@@ -278,7 +263,6 @@ def main(
         dw_end_year=dw_end_year,
         dw_start_month=dw_start_month,
         dw_end_month=dw_end_month,
-        viz_configuration_name=viz_configuration,
         pmtiles_file=pmtiles_file,
         pmtiles_url=pmtiles_url,
     )
@@ -297,7 +281,6 @@ if __name__ == "__main__":
         dw_end_year=args.dw_end_year,
         dw_start_month=args.dw_start_month,
         dw_end_month=args.dw_end_month,
-        viz_configuration=args.viz_configuration,
         pmtiles_file=args.pmtiles_file,
         pmtiles_url=args.pmtiles_url,
         logfile=args.logfile,
