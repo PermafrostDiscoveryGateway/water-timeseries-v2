@@ -1,7 +1,6 @@
 """Map Viewer dashboard component using Streamlit for mapping."""
 
 import os
-import sys
 from datetime import datetime, timedelta
 from io import BytesIO
 from pathlib import Path
@@ -15,7 +14,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import pygeohash
 import streamlit as st
-from loguru import logger
 from loguru import logger
 from streamlit_folium import st_folium
 
@@ -44,7 +42,6 @@ from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
 )
-
 
 # def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
 #     """Configure logging with verbosity control.
@@ -140,7 +137,7 @@ class MapViewer:
         drained_label: Optional[str] = None,
         show_main_layer: bool = True,
         viz_configuration_name: Optional[str] = "colored_historical",
-        logger = None,
+        logger=None,
     ):
         """Initialize the MapViewer.
 
@@ -178,7 +175,6 @@ class MapViewer:
         self.drained_data = None
         self.viz_configuration_name = viz_configuration_name
 
-        
         use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
         if use_pmtiles and map_backend != "pmtiles":
             self.map_backend = "pmtiles"
