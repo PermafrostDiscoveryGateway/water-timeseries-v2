@@ -784,37 +784,123 @@ def _load_precomputed_nrt(
     if precomputed_nrt_dir is None:
         return None, None
 
+    import fsspec
     from loguru import logger
 
-    nrt_dir = Path(precomputed_nrt_dir)
-    counts_path = nrt_dir / "nrt_monthly_drain_counts.parquet"
-    breaks_path = nrt_dir / "nrt_monthly_drain_breaks.parquet"
+    from water_timeseries.utils.io import is_remote_path
+
+    path_str = str(precomputed_nrt_dir)
+    is_remote = is_remote_path(path_str)
 
     counts_df: Optional[pd.DataFrame] = None
     breaks_df: Optional[pd.DataFrame] = None
 
-    if counts_path.exists():
-        counts_df = pd.read_parquet(counts_path)
+    if path_str.endswith(".parquet"):
+        try:
+            logger.info(f"Loading single pre-computed breaks file from {path_str}")
+            breaks_df = pd.read_parquet(path_str)
+            
+            # Ensure "analysis_month" column exists if missing
+            if "analysis_month" not in breaks_df.columns:
+                if "date" in breaks_df.columns:
+                    breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date"]).dt.strftime("%Y-%m")
+                elif "date_break" in breaks_df.columns:
+                    breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date_break"]).dt.strftime("%Y-%m")
+                else:
+                    breaks_df["analysis_month"] = "2026-06" # Default fallback
+            
+            if "id_geohash" not in breaks_df.columns and breaks_df.index.name == "id_geohash":
+                breaks_df = breaks_df.reset_index()
+            
+            if "analysis_month" in breaks_df.columns:
+                counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
+            
+            return counts_df, breaks_df
+        except Exception as e:
+            logger.error(f"Failed to load single pre-computed breaks file: {e}")
+            return None, None
 
-    if breaks_path.exists():
-        breaks_df = pd.read_parquet(breaks_path)
+    # Handle directory loading (local or remote)
+    if is_remote:
+        # Use fsspec for remote directory paths
+        try:
+            counts_url = path_str.rstrip("/") + "/nrt_monthly_drain_counts.parquet"
+            breaks_url = path_str.rstrip("/") + "/nrt_monthly_drain_breaks.parquet"
+            
+            fs_counts, counts_path_fs = fsspec.core.url_to_fs(counts_url)
+            if fs_counts.exists(counts_path_fs):
+                counts_df = pd.read_parquet(counts_url)
+                
+            fs_breaks, breaks_path_fs = fsspec.core.url_to_fs(breaks_url)
+            if fs_breaks.exists(breaks_path_fs):
+                breaks_df = pd.read_parquet(breaks_url)
+                
+            if breaks_df is None:
+                # Try to list files in directory
+                fs_dir, dir_path_fs = fsspec.core.url_to_fs(path_str)
+                # List files matching nrt_*_drain_breaks.parquet
+                all_files = fs_dir.ls(dir_path_fs)
+                monthly_files = []
+                for f_path in all_files:
+                    name = f_path.split("/")[-1]
+                    if name.startswith("nrt_") and name.endswith("_drain_breaks.parquet"):
+                        # Reconstruct full URL/path
+                        full_path = path_str.rstrip("/") + "/" + name
+                        monthly_files.append(full_path)
+                
+                monthly_files = sorted(monthly_files)
+                if monthly_files:
+                    logger.info(f"Found {len(monthly_files)} remote NRT monthly files, aggregating...")
+                    dfs = []
+                    for file_path in monthly_files:
+                        try:
+                            df = pd.read_parquet(file_path)
+                            if not df.empty:
+                                dfs.append(df)
+                        except Exception as e:
+                            logger.warning(f"Failed to read {file_path}: {e}")
+                    if dfs:
+                        breaks_df = pd.concat(dfs, ignore_index=True)
+        except Exception as e:
+            logger.error(f"Failed to load pre-computed NRT from remote directory {path_str}: {e}")
+    else:
+        nrt_dir = Path(precomputed_nrt_dir)
+        counts_path = nrt_dir / "nrt_monthly_drain_counts.parquet"
+        breaks_path = nrt_dir / "nrt_monthly_drain_breaks.parquet"
 
-    if breaks_df is None:
-        monthly_files = sorted(list(nrt_dir.glob("nrt_*_drain_breaks.parquet")))
-        if monthly_files:
-            logger.info(f"Found {len(monthly_files)} individual NRT monthly files, aggregating...")
-            dfs = []
-            for file_path in monthly_files:
-                try:
-                    df = pd.read_parquet(file_path)
-                    if not df.empty:
-                        dfs.append(df)
-                except Exception as e:
-                    logger.warning(f"Failed to read {file_path}: {e}")
-            if dfs:
-                breaks_df = pd.concat(dfs, ignore_index=True)
+        if counts_path.exists():
+            counts_df = pd.read_parquet(counts_path)
+
+        if breaks_path.exists():
+            breaks_df = pd.read_parquet(breaks_path)
+
+        if breaks_df is None:
+            monthly_files = sorted(list(nrt_dir.glob("nrt_*_drain_breaks.parquet")))
+            if monthly_files:
+                logger.info(f"Found {len(monthly_files)} individual NRT monthly files, aggregating...")
+                dfs = []
+                for file_path in monthly_files:
+                    try:
+                        df = pd.read_parquet(file_path)
+                        if not df.empty:
+                            dfs.append(df)
+                    except Exception as e:
+                        logger.warning(f"Failed to read {file_path}: {e}")
+                if dfs:
+                    breaks_df = pd.concat(dfs, ignore_index=True)
 
     if counts_df is None and breaks_df is not None and not breaks_df.empty:
+        # Standardize index
+        if "id_geohash" not in breaks_df.columns and breaks_df.index.name == "id_geohash":
+            breaks_df = breaks_df.reset_index()
+            
+        # Ensure analysis_month exists
+        if "analysis_month" not in breaks_df.columns:
+            if "date" in breaks_df.columns:
+                breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date"]).dt.strftime("%Y-%m")
+            elif "date_break" in breaks_df.columns:
+                breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date_break"]).dt.strftime("%Y-%m")
+                
         if "analysis_month" in breaks_df.columns:
             counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
 

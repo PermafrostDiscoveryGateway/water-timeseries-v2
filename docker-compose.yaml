@@ -20,6 +20,8 @@ services:
       - ${PRECOMPUTED_NRT_DIR:-downloads/nrt}
       - --pmtiles-file
       - ${PMTILES_FILE:-downloads/tiles/lake_polygons.pmtiles}
+      - --pmtiles-url
+      - ${PMTILES_URL:-}
       - --viz-configuration
       - ${VIZ_CONFIGURATION:-colored_historical}
     volumes:
@@ -30,6 +32,8 @@ services:
       - ${DOWNLOADS_DIR:-./downloads}:/app/downloads:ro
       # Optional: host EE credentials (alternative to EARTHENGINE_TOKEN in .env)
       - ${EARTHENGINE_CREDENTIALS_DIR:-${HOME}/.config/earthengine}:/root/.config/earthengine:ro
+      # Host GCloud Application Default Credentials (ADC)
+      - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
     ports:
       - "8501:8501"
       # PMTiles tile server - the browser fetches tiles directly from this port.
@@ -42,6 +46,7 @@ services:
       MPLBACKEND: Agg
       EE_PROJECT: ${EE_PROJECT:-}
       EARTHENGINE_TOKEN: ${EARTHENGINE_TOKEN:-}
+      GOOGLE_APPLICATION_CREDENTIALS: /root/.config/gcloud/application_default_credentials.json
       # PMTiles tile server: bind on a fixed port so Docker can publish it,
       # and tell the browser to reach it via localhost (the published port).
       PMTILES_PORT: "8502"
