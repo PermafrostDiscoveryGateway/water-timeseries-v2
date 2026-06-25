@@ -226,23 +226,28 @@ def main(
     default_jrc_dataset_file = _REPO_ROOT / "tests" / "data" / "lakes_jrc_test.zarr"
 
     # Validate provided file paths and fall back to defaults if they don't exist
+    from water_timeseries.utils.io import is_remote_path
+
     if vector_file is not None:
-        path = Path(vector_file)
-        if not path.exists():
-            warnings.warn(f"Vector file not found: {vector_file}. Falling back to default test data.")
-            vector_file = None
+        if not is_remote_path(vector_file):
+            path = Path(vector_file)
+            if not path.exists():
+                warnings.warn(f"Vector file not found: {vector_file}. Falling back to default test data.")
+                vector_file = None
 
     if dw_dataset_file is not None:
-        path = Path(dw_dataset_file)
-        if not path.exists():
-            warnings.warn(f"DW dataset file not found: {dw_dataset_file}. Falling back to default test data.")
-            dw_dataset_file = None
+        if not is_remote_path(dw_dataset_file):
+            path = Path(dw_dataset_file)
+            if not path.exists():
+                warnings.warn(f"DW dataset file not found: {dw_dataset_file}. Falling back to default test data.")
+                dw_dataset_file = None
 
     if jrc_dataset_file is not None:
-        path = Path(jrc_dataset_file)
-        if not path.exists():
-            warnings.warn(f"JRC dataset file not found: {jrc_dataset_file}. Falling back to default test data.")
-            jrc_dataset_file = None
+        if not is_remote_path(jrc_dataset_file):
+            path = Path(jrc_dataset_file)
+            if not path.exists():
+                warnings.warn(f"JRC dataset file not found: {jrc_dataset_file}. Falling back to default test data.")
+                jrc_dataset_file = None
 
     # Use provided paths or defaults
     if vector_file is None:
@@ -258,6 +263,9 @@ def main(
 
     if viz_configuration is None:
         viz_configuration = "colored_historical"
+
+    if pmtiles_url == "":
+        pmtiles_url = None
 
     create_app(
         data_path=vector_file,

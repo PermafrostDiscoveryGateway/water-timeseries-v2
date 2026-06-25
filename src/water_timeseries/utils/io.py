@@ -8,6 +8,14 @@ import xarray as xr
 from loguru import logger as logger
 
 
+def is_remote_path(path: Union[str, Path]) -> bool:
+    """Check if path is a remote URL/URI (e.g. gs://, s3://, http://, https://)."""
+    if isinstance(path, Path):
+        return False
+    path_str = str(path)
+    return any(path_str.startswith(proto) for proto in ("gs://", "s3://", "http://", "https://"))
+
+
 def load_vector_dataset(
     file_path: Union[str, Path],
     logger: Optional[logger] = None,
@@ -26,23 +34,29 @@ def load_vector_dataset(
     Raises:
         FileNotFoundError: If the file does not exist.
     """
-    file_path = Path(file_path)
+    file_path_str = str(file_path)
+    is_remote = is_remote_path(file_path_str)
 
-    if not file_path.exists():
-        if logger:
-            logger.warning(f"Vector dataset file not found: {file_path}")
-        raise FileNotFoundError(f"Vector dataset file not found: {file_path}")
-
-    suffix = file_path.suffix.lower()
+    if is_remote:
+        # Determine suffix from remote string path
+        clean_path = file_path_str.split("?")[0].split("#")[0]
+        suffix = "." + clean_path.split(".")[-1].lower() if "." in clean_path else ""
+    else:
+        file_path = Path(file_path)
+        if not file_path.exists():
+            if logger:
+                logger.warning(f"Vector dataset file not found: {file_path}")
+            raise FileNotFoundError(f"Vector dataset file not found: {file_path}")
+        suffix = file_path.suffix.lower()
 
     if logger:
-        logger.info(f"Loading vector dataset from {file_path}")
+        logger.info(f"Loading vector dataset from {file_path_str}")
 
     # GeoPackage, Shapefile, GeoJSON formats
     if suffix in [".gpkg", ".shp", ".geojson", ".gjson"]:
-        vector_ds = gpd.read_file(file_path)
+        vector_ds = gpd.read_file(file_path_str if is_remote else file_path)
     elif suffix in [".parquet"]:
-        vector_ds = gpd.read_parquet(file_path)
+        vector_ds = gpd.read_parquet(file_path_str if is_remote else file_path)
     else:
         if logger:
             logger.warning(f"Unsupported vector file format: {suffix}")
@@ -120,6 +134,7 @@ def save_xarray_dataset(
 def load_xarray_dataset(
     path: Union[str, Path],
     format: Optional[str] = None,
+    **kwargs,
 ) -> xr.Dataset:
     """Load xarray dataset from file.
 
@@ -127,6 +142,7 @@ def load_xarray_dataset(
         path: Path to the dataset file.
         format: Format of the file ('zarr' or 'netcdf'). If None, auto-detected
             from extension.
+        **kwargs: Additional arguments passed to xr.open_zarr or xr.open_dataset.
 
     Returns:
         xr.Dataset: The loaded dataset.
@@ -134,20 +150,35 @@ def load_xarray_dataset(
     Raises:
         ValueError: If the file format is not supported.
     """
-    path = Path(path)
+    path_str = str(path)
+    is_remote = is_remote_path(path_str)
 
     if format is None:
-        ext = path.suffix.lower()
+        if is_remote:
+            clean_path = path_str.split("?")[0].split("#")[0]
+            ext = "." + clean_path.split(".")[-1].lower() if "." in clean_path else ""
+            if clean_path.endswith(".zarr/"):
+                ext = ".zarr"
+        else:
+            ext = Path(path).suffix.lower()
+
         if ext == ".zarr":
             format = "zarr"
-        elif ext == ".nc":
+        elif ext in (".nc", ".ncin"):
             format = "netcdf"
         else:
             raise ValueError(f"Cannot auto-detect format for extension: {ext}")
 
+    target_path = path_str if is_remote else Path(path)
+
     if format == "zarr":
-        return xr.open_zarr(path)
+        return xr.open_zarr(target_path, **kwargs)
     elif format == "netcdf":
-        return xr.open_dataset(path)
+        if is_remote:
+            import fsspec
+            f = fsspec.open(target_path)
+            return xr.open_dataset(f.open(), **kwargs)
+        else:
+            return xr.open_dataset(target_path, **kwargs)
     else:
         raise ValueError(f"Unsupported format: {format}. Use 'zarr' or 'netcdf'.")
