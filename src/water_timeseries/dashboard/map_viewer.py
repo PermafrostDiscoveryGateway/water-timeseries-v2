@@ -918,11 +918,11 @@ def create_app(
 
     st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
 
-    st.title("🗺️ Lake Polygon Map Viewer")
+    st.title("🗺️ Arctic Lake Drainage Explorer")
     st.markdown("""
-    This dashboard displays lake polygons from a GeoDataFrame.
+    This dashboard displays drained lakes across the circum-arctic.
     - **Hover** over a feature to see its attributes
-    - **Click** on a feature to select it and view time series & create timelapse animations
+    - **Click** on a feature to select it and view time series & create timelapse animations below the map.
     """)
 
     # Create sidebar for controls
