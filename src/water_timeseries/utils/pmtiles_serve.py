@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import parse_qs, unquote, urlparse
 
+from loguru import logger
+
 _MAP_HTML = Path(__file__).parent.parent / "dashboard" / "static" / "lake_map.html"
 
 
@@ -19,9 +21,10 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
     """HTTP handler: map page + static files with byte-range support for .pmtiles."""
 
     def log_message(self, format: str, *args) -> None:
-        pass
+        logger.info(f"PMTiles Server: {format % args}")
 
     def do_OPTIONS(self) -> None:
+        logger.debug(f"CORS preflight request: {self.path}")
         self.send_response(204)
         self._send_cors()
         self.end_headers()
@@ -94,6 +97,7 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_error(404, "Not found")
             return
 
+        logger.info(f"Serving file: {rel_path}")
         # In HTML-only remote URL mode, the server won't have a static file directory mapped.
         if not getattr(self.server, "directory", None):
             self.send_error(404, "Not found")
@@ -102,6 +106,7 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
         path = (self.server.directory / rel_path).resolve()  # type: ignore[attr-defined]
         directory = self.server.directory.resolve()  # type: ignore[attr-defined]
         if not str(path).startswith(str(directory)) or not path.is_file():
+            logger.warning(f"File not found: {rel_path}")
             self.send_error(404, "Not found")
             return
 
@@ -110,6 +115,7 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
         range_header = self.headers.get("Range")
 
         if range_header and range_header.startswith("bytes="):
+            logger.debug(f"Range request for {rel_path}: {range_header}")
             range_spec = range_header.removeprefix("bytes=").split(",", 1)[0]
             start_s, _, end_s = range_spec.partition("-")
             start = int(start_s) if start_s else 0
@@ -193,6 +199,9 @@ class PmtilesServer:
         self._httpd.base_url = self.base_url
         self._thread = threading.Thread(target=self._httpd.serve_forever, daemon=True)
         self._thread.start()
+        logger.info(f"PMTiles server started at {self.base_url}")
+        logger.info(f"Serving files from: {self.directory}")
+        logger.info(f"PMTiles file: {self.pmtiles_filename}")
         return self
 
     def map_iframe_url(self, config: dict[str, Any]) -> str:
@@ -211,6 +220,7 @@ class PmtilesServer:
         return f"{self.base_url}/map?config_id={config_id}"
 
     def stop(self) -> None:
+        logger.info("Stopping PMTiles server")
         if self._httpd is not None:
             self._httpd.shutdown()
             self._httpd.server_close()

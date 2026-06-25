@@ -75,6 +75,7 @@ def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
 
     logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
     print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
+    return logfile
 
 
 # Subcommand: dashboard
@@ -184,7 +185,7 @@ def dashboard(
     config_file = config_dict.get("config_file")
 
     # Setup logging
-    setup_logging(logfile=logfile, verbose=verbose)
+    logfile = setup_logging(logfile=logfile, verbose=verbose)
 
     # Build streamlit command with optional arguments
     cmd = [
@@ -225,6 +226,8 @@ def dashboard(
         script_args.extend(["--pmtiles-file", pmtiles_file])
     if pmtiles_url:
         script_args.extend(["--pmtiles-url", pmtiles_url])
+    if logfile:
+        script_args.extend(["--logfile", logfile])
     if script_args:
         cmd.extend(["--"] + script_args)
 
@@ -233,9 +236,10 @@ def dashboard(
         f"Dashboard config: port={port}, vector_file={vector_file}, "
         f"dw_dataset_file={dw_dataset_file}, jrc_dataset_file={jrc_dataset_file}, "
         f"precomputed_nrt_dir={precomputed_nrt_dir}, offline_mode={offline_mode}, "
-        f"ee_project={ee_project}, viz_configuration={viz_configuration}"
+        f"ee_project={ee_project}, viz_configuration={viz_configuration}, "
         f"dw_start_year={dw_start_year}, dw_end_year={dw_end_year}, "
-        f"dw_start_month={dw_start_month}, dw_end_month={dw_end_month}"
+        f"dw_start_month={dw_start_month}, dw_end_month={dw_end_month}, "
+        f"logfile={logfile}"
     )
     subprocess.run(cmd)
 
@@ -260,7 +264,7 @@ def build_pmtiles(
         water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
     """
     if logfile:
-        setup_logging(logfile=logfile, verbose=verbose)
+        logfile = setup_logging(logfile=logfile, verbose=verbose)
 
     if not find_tippecanoe():
         raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
@@ -290,15 +294,15 @@ def serve_tiles(
         water-timeseries serve-tiles tiles/lakes.pmtiles --port 8080
     """
     if logfile:
-        setup_logging(logfile=logfile, verbose=verbose)
+        logfile = setup_logging(logfile=logfile, verbose=verbose)
     pmtiles_path = Path(pmtiles_file).resolve()
     if not pmtiles_path.is_file():
         raise FileNotFoundError(pmtiles_path)
 
     with PmtilesServer(pmtiles_path.parent, host=host, port=port) as server:
         url = server.url_for(pmtiles_path.name)
-        logger.info("Serving %s at %s (Ctrl+C to stop)", pmtiles_path.name, url)
-        logger.info("Dashboard: water-timeseries dashboard --pmtiles-url %s", url)
+        logger.info(f"Serving {pmtiles_path.name} at {url} (Ctrl+C to stop)")
+        logger.info(f"Dashboard: water-timeseries dashboard --pmtiles-url {url}")
         try:
             import time
 
@@ -473,7 +477,7 @@ def breakpoint_analysis_historical(
         raise SystemExit(1)
 
     # Setup logging AFTER config is loaded
-    setup_logging(logfile=logfile_val, verbose=verbose_val)
+    logfile = setup_logging(logfile=logfile_val, verbose=verbose_val)
 
     # Run the pipeline
     pipeline = BreakpointPipeline(
@@ -577,7 +581,7 @@ def plot_timeseries(
         raise SystemExit(1)
 
     # Setup logging AFTER config is loaded
-    setup_logging(logfile=logfile_val, verbose=verbose_val)
+    logfile = setup_logging(logfile=logfile_val, verbose=verbose_val)
 
     # Log key parameters
     logger.info(
@@ -704,7 +708,7 @@ def breakpoint_analysis_nrt(
             --output-dir precomputed/nrt \\
             --no-resume
     """
-    setup_logging(logfile=logfile, verbose=verbose)
+    logfile = setup_logging(logfile=logfile, verbose=verbose)
 
     # --- Validate mode selection -------------------------------------------
     range_mode = analysis_date_start is not None or analysis_date_end is not None
@@ -916,7 +920,7 @@ def aggregate_nrt(
     Creates ``nrt_monthly_drain_breaks.parquet`` and ``nrt_monthly_drain_counts.parquet``
     in ``output_dir`` (defaulting to ``nrt_dir``).
     """
-    setup_logging(logfile=logfile, verbose=verbose)
+    logfile = setup_logging(logfile=logfile, verbose=verbose)
     aggregate_nrt_directory(nrt_dir, output_dir)
 
 
