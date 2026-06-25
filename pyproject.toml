@@ -15,7 +15,6 @@ dependencies = [
     # "xarray>=2023.0.0",
     "tqdm",
     "netcdf4",
-    "python-geohash",
     "seaborn",
     "matplotlib>=3.8.0",
     "shapely",
@@ -49,11 +48,9 @@ dependencies = [
     "eemont>=2025.7.1",
     "streamlit>=1.40.0",
     "plotly>=6.0.0",
-    "lonboard[streamlit]>=0.5.0",
     "folium>=0.20.0",
     "folium-pmtiles>=0.4.0",
     "streamlit-folium>=0.25.0",
-    "keplergl>=0.3.0",
     "ffmpeg>=1.4",
     "ffmpeg-python>=0.2.0",
     "mapclassify>=2.10.0",
@@ -111,8 +108,10 @@ build-backend = "hatchling.build"
 # use ruff as the primary linter/formatter with compatibility to black/isort
 # ruff will enforce the same line length and import sorting style
 line-length = 120
-extend-select = ["I"]
 exclude = [".venv", "build", "dist", "__pycache__"]
+
+[tool.ruff.lint]
+extend-select = ["I"]
 extend-ignore = ["E203"]
 
 [tool.pytest.ini_options]

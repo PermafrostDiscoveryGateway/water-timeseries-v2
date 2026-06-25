@@ -31,7 +31,7 @@ from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
 # Import NRT pre-computation
 from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
 from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_archive
-from water_timeseries.utils.pmtiles_build import build_pmtiles_drainage_year, build_pmtiles_for_nrt, find_tippecanoe
+from water_timeseries.utils.pmtiles_build import build_pmtiles_drainage_year, find_tippecanoe
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
 # Create the main app
@@ -270,8 +270,6 @@ def build_pmtiles(
         raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
 
     print(f"Building PMTiles from {vector_file} -> {output_file}")
-    if viz_configuration == "nrt_drainage":
-        build_pmtiles_for_nrt(vector_file, output_file, keep_geojsonl=keep_geojsonl)
     if viz_configuration == "drainage_year":
         build_pmtiles_drainage_year(vector_file, output_file, keep_geojsonl=keep_geojsonl)
     else:

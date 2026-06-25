@@ -1,4 +1,4 @@
-"""Map Viewer dashboard component using Streamlit and lonboard for high-performance mapping."""
+"""Map Viewer dashboard component using Streamlit for mapping."""
 
 import os
 import sys
@@ -113,13 +113,13 @@ _init_ee()
 
 
 class MapViewer:
-    """Interactive map viewer for GeoDataFrames using Streamlit and lonboard.
+    """Interactive map viewer for GeoDataFrames using Streamlit.
 
     Features:
     - Display GeoDataFrame on an interactive map (high performance for large datasets)
     - Hover tooltips showing feature attributes
     - Click to select features and store their id_geohash value
-    - Supports multiple backends: folium, pydeck (WebGL), st.map
+    - Supports multiple backends: folium, pmtiles
     """
 
     def __init__(
@@ -131,7 +131,7 @@ class MapViewer:
         hover_columns: Optional[List[str]] = None,
         map_center: Optional[dict] = None,
         zoom: int = 10,
-        map_backend: str = "folium",  # "folium", "st_map", or "pmtiles"
+        map_backend: str = "folium",  # "folium" or "pmtiles"
         max_features: Optional[int] = None,  # Limit features for faster loading
         pmtiles_file: Optional[Path | str] = None,
         pmtiles_url: Optional[str] = None,
@@ -150,7 +150,7 @@ class MapViewer:
             hover_columns: List of column names to show on hover. If None, shows all.
             map_center: Dictionary with 'lat' and 'lon' keys for map center.
             zoom: Initial zoom level for the map.
-            map_backend: Which mapping backend to use ("folium", "st_map", or "pmtiles").
+            map_backend: Which mapping backend to use ("folium" or "pmtiles").
             max_features: Maximum number of features to display (for performance).
             pmtiles_file: Local ``.pmtiles`` archive (vector tiles; fast for millions of lakes).
             pmtiles_url: Remote HTTP(S) URL to a ``.pmtiles`` file (e.g. on S3).
@@ -165,7 +165,7 @@ class MapViewer:
         self.hover_columns = hover_columns or DEFAULT_HOVER_COLUMNS
         self.zoom = zoom
         self.map_center = map_center
-        self.map_backend = map_backend  # "folium", "st_map", or "pmtiles"
+        self.map_backend = map_backend  # "folium" or "pmtiles"
         self.max_features = max_features  # Limit features for faster loading
         self.pmtiles_file = Path(pmtiles_file) if pmtiles_file else None
         self.pmtiles_url = pmtiles_url
@@ -288,12 +288,6 @@ class MapViewer:
             st.warning("No valid geometries found.")
             return None
 
-        # Use st.map for simple point rendering
-        if self.map_backend == "st_map":
-            logger.info("Rendering map using st_map backend")
-            st.map(valid_gdf)
-            return None
-
         # Default: use folium
         return self._render_folium(
             valid_gdf,
@@ -324,7 +318,7 @@ class MapViewer:
 
         if self.pmtiles_file:
             logger.info(f"Using PMTiles file: {self.pmtiles_file}")
-            st.caption(f"Tiles: `{self.pmtiles_file}`")
+            # st.caption(f"Tiles: `{self.pmtiles_file}`")
 
         pmtiles_url = resolve_pmtiles_url(pmtiles_source)
         logger.info(f"PMTiles url: {pmtiles_url}")
@@ -534,67 +528,6 @@ class MapViewer:
             else:
                 style_function = get_default_style_function()
 
-        elif viz_configuration_name == "nrt_drainage":
-            # Create style function based on whether NetChange_perc column exists
-            if "water_residual" in valid_gdf.columns:
-                # add tile layers
-                tcvis_tile_layer.add_to(m)
-                tile_layer_esriworld.add_to(m)
-                tile_layer_darkmatter.add_to(m)
-
-                style_function = get_colored_style_function(
-                    color_column="water_residual",
-                    vmin=-1,
-                    vmax=0,
-                    colormap=plt.cm.Reds,
-                    edge_weight=2,
-                    fill_opacity=0.8,
-                    edge_color="#dddddd",
-                )
-
-                # Format tooltip columns using utility function
-                # Include Area columns for full tooltip display
-                tooltip_columns = [
-                    ("water_residual", "Water residual:", "{:.2f}", ""),
-                    ("water_observed", "Observed water:", "{:.2f}", ""),
-                    ("water_predicted", "Predicted water:", "{:.2f}", ""),
-                    ("water_historical_median", "Historical median water:", "{:.2f}", ""),
-                    ("water_historical_min", "Historical minimum:", "{:.2f}", ""),
-                    ("drainage_confidence", "Drainage Confidence:", "{:}", ""),
-                ]
-            else:
-                style_function = get_default_style_function()
-
-        elif viz_configuration_name == "nrt_drainage_confidence":
-            # Create style function based on whether NetChange_perc column exists
-            if "drainage_confidence" in valid_gdf.columns:
-                # add tile layers
-                tcvis_tile_layer.add_to(m)
-                tile_layer_esriworld.add_to(m)
-                tile_layer_darkmatter.add_to(m)
-
-                style_function = get_colored_style_function(
-                    color_column="drainage_confidence",
-                    vmin=0,
-                    vmax=3,
-                    colormap=plt.cm.Reds_r,
-                    edge_weight=2,
-                    fill_opacity=0.8,
-                    edge_color="#dddddd",
-                )
-
-                # Format tooltip columns using utility function
-                # Include Area columns for full tooltip display
-                tooltip_columns = [
-                    ("water_residual", "Water residual:", "{:.2f}", ""),
-                    ("water_observed", "Observed water:", "{:.2f}", ""),
-                    ("water_predicted", "Predicted water:", "{:.2f}", ""),
-                    ("water_historical_median", "Historical median water:", "{:.2f}", ""),
-                    ("water_historical_min", "Historical minimum:", "{:.2f}", ""),
-                    ("drainage_confidence", "Drainage Confidence:", "{:}", ""),
-                ]
-            else:
-                style_function = get_default_style_function()
         else:
             style_function = get_default_style_function()
 
@@ -1117,31 +1050,10 @@ def create_app(
                         )
                     )
 
-                # Show a compact sparkline in the sidebar before the selector
-                if counts_lookup:
-                    spark_df = (
-                        pd.DataFrame({"month": list(counts_lookup.keys()), "drained": list(counts_lookup.values())})
-                        .sort_values("month")
-                        .set_index("month")
-                    )
-                    st.sidebar.caption("Drained lake counts per month:")
-                    st.sidebar.bar_chart(spark_df, height=80)
-
                 # Heatmap in sidebar – click a cell to pre-select the month dropdown
                 _render_drain_heatmap(precomputed_counts, precomputed_breaks, container=st.sidebar)
 
-                # Optional filter: hide months with zero drainages
-                only_nonzero = st.sidebar.toggle(
-                    "Only show months with drainages",
-                    value=False,
-                    help="Hide months where no lakes were flagged as drained.",
-                )
                 selectable_months = available_months
-                if only_nonzero and counts_lookup:
-                    selectable_months = [m for m in available_months if counts_lookup.get(m, 0) > 0]
-                    if not selectable_months:
-                        st.sidebar.info("No months with drainages found.")
-                        selectable_months = available_months
 
                 # Build display labels that include the drain count
                 def _month_label(m: str) -> str:

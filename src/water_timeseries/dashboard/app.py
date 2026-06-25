@@ -138,7 +138,7 @@ def parse_args():
         default="colored_historical",
         help=(
             "Visualization configuration name for the map viewer. "
-            "Options include 'colored_historical' (default) and 'nrt_drainage'. "
+            "Options include 'colored_historical' (default) and 'drainage_year'. "
             "This controls the styling and color scheme of the map layers."
         ),
     )
