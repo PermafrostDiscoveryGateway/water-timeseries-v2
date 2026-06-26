@@ -43,42 +43,6 @@ from water_timeseries.utils.visualization import (
     get_legend_html_net_change,
 )
 
-# def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
-#     """Configure logging with verbosity control.
-
-#     Args:
-#         logfile: Path to log file. If not provided, logs to console only.
-#         verbose: Verbosity level (0=INFO, 1=DEBUG)
-
-#     Verbosity flags:
-#         - No flag or -v: INFO level (default)
-#         - -v: DEBUG level
-#     """
-#     # Determine log level based on verbosity count
-#     if verbose >= 1:
-#         log_level = "DEBUG"
-#     else:
-#         log_level = "INFO"
-
-#     # Generate default logfile name from subcommand and timestamp
-#     if logfile is None:
-#         try:
-#             # sys.argv[0] is the script name, sys.argv[1] is the subcommand
-#             if len(sys.argv) >= 2:
-#                 subcommand = sys.argv[1].replace("-", "_")
-#                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#                 logfile = f"{subcommand}_{timestamp}.log"
-#                 print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
-#         except Exception:
-#             pass
-#         # If no logfile set, log to console only
-#         if logfile is None:
-#             return
-
-#     logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
-#     print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
-#     return logfile
-
 
 # Initialize Earth Engine when credentials are available
 _ee_project = os.environ.get("EE_PROJECT") or None
@@ -302,9 +266,7 @@ class MapViewer:
         from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
 
         st.caption(
-            "Vector tiles (PMTiles): only visible map tiles are loaded. "
-            "Click a lake to load plots below. "
-            "Lakes are colored by net change (red = shrink, blue = grow)."
+            "Click a lake to show interactive water area timeseries plots below. \n"
         )
         logger.info("PMTiles map view rendered")
 
@@ -573,7 +535,7 @@ class MapViewer:
                         fill_color="#d73027",
                         edge_color="#7f0000",
                         edge_weight=2,
-                        fill_opacity=0.7,
+                        fill_opacity=0.5,
                     ),
                     tooltip=folium.GeoJsonTooltip(
                         fields=drained_fields,
@@ -590,11 +552,21 @@ class MapViewer:
                     # Optional: Grab the lake ID for the tooltip
                     lake_id = row.get(self.id_column, "Unknown")
 
-                    folium.Marker(
+                    folium.CircleMarker(
                         location=[centroid.y, centroid.x],
                         icon=folium.Icon(color="red", icon="info-sign"),
                         tooltip=f"Drained Lake: {lake_id}",
                     ).add_to(drained_markers)
+
+                    # folium.CircleMarker(
+                    #     location=[centroid.y, centroid.x],
+                    #     radius=8,
+                    #     color="red",
+                    #     fill=True,
+                    #     fillColor="red",
+                    #     fillOpacity=0.8,
+                    #     tooltip=f"Drained Lake: {lake_id}",
+                    # ).add_to(drained_markers)
                 drained_markers.add_to(m)
                 # -----------------------------------------------
 
@@ -605,6 +577,7 @@ class MapViewer:
         # Render the map and get click data
         # Note: returned_objects includes 'last_active_drawing' for click detection
         result = st_folium(m, height=600, width="100%", key="map_viewer", returned_objects=["last_active_drawing"])
+        st.session_state.zoom_level = 6
 
         # Extract id_geohash from clicked feature
         clicked_id = None
@@ -619,8 +592,10 @@ class MapViewer:
             st.query_params["selected_lake"] = clicked_id
             if clicked_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(clicked_id)
+            
             st.rerun()
 
+        
         return None
 
     def get_selected_geohash(self) -> Optional[str]:
@@ -1004,7 +979,7 @@ def create_app(
 
     st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
 
-    st.title("🗺️ Arctic Lake Drainage Explorer")
+    st.title("💧 Lost Lakes: Arctic Lake Drainage Explorer")
     st.markdown("""
     This dashboard displays drained lakes across the circum-arctic.
     - **Hover** over a feature to see its attributes
@@ -1096,16 +1071,19 @@ def create_app(
         counts_loaded, breaks_loaded = _load_precomputed_nrt(precomputed_nrt_dir)
         st.session_state.precomputed_nrt_counts = counts_loaded
         st.session_state.precomputed_nrt_breaks = breaks_loaded
+        default_activate_historical = True
+    else:
+        default_activate_historical = True
     precomputed_counts: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_counts
     precomputed_breaks: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_breaks
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
-    st.sidebar.subheader("Near-real-time drainage")
+    st.sidebar.subheader("Activate Historical drainage events")
     show_drained = st.sidebar.checkbox(
-        "Show lakes drained in the last month",
-        value=False,
-        help="Uses pre-computed NRT breakpoints (water_residual < -0.25).",
+        "Show temporal drainage statistics",
+        value=default_activate_historical,
+        help="Activates visualization of number of drained lakes per month.",
     )
     drained_breaks = None
     drained_label = None
