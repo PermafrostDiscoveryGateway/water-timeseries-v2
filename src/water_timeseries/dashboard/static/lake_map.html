@@ -122,28 +122,37 @@
     const viz = CONFIG.viz_configuration || "colored_historical";
     const sourceLayer = CONFIG.source_layer || "lakes";
 
-    //  1. If NetChange_perc is a number  → historical colour ramp (red→blue)
-    //  2. Else if date_break_year is present → drainage_year colour ramp
-    //  3. Otherwise                           → neutral grey
-    const dataDrivenFillColor = [
-      "case",
-      ["==", ["typeof", ["get", "NetChange_perc"]], "number"],
-      [
-        "interpolate", ["linear"], ["get", "NetChange_perc"],
-        -40, "#d73027",
-        -20, "#f46d43",
-          0, "#fee090",
-         20, "#74add1",
-         40, "#4575b4"
-      ],
-      ["has", "date_break_year"],
-      [
-        "interpolate", ["linear"], ["to-number", ["get", "date_break_year"]],
-        2017.0, "#fff5f0",
-        2025.0, "#67000d"
-      ],
-      "#888888"
+    const netChangeRamp = [
+      "interpolate", ["linear"], ["get", "NetChange_perc"],
+      -40, "#d73027",
+      -20, "#f46d43",
+        0, "#fee090",
+       20, "#74add1",
+       40, "#4575b4"
     ];
+
+    const drainageYearRamp = [
+      "interpolate", ["linear"], ["to-number", ["get", "date_break_year"]],
+      2017.0, "#fff5f0",
+      2026.0, "#67000d"
+    ];
+
+    let dataDrivenFillColor;
+    if (viz === "drainage_year") {
+      dataDrivenFillColor = [
+        "case",
+        ["has", "date_break_year"], drainageYearRamp,
+        ["==", ["typeof", ["get", "NetChange_perc"]], "number"], netChangeRamp,
+        "#888888"
+      ];
+    } else {
+      dataDrivenFillColor = [
+        "case",
+        ["==", ["typeof", ["get", "NetChange_perc"]], "number"], netChangeRamp,
+        ["has", "date_break_year"], drainageYearRamp,
+        "#888888"
+      ];
+    }
 
     let lakePaint = {
       "fill-color": dataDrivenFillColor,
@@ -484,7 +493,7 @@
       if (hasNetChange) {
         legend.innerHTML = "<b>Net change (%)</b><div class='legend-bar'></div><div style='display:flex;justify-content:space-between'><span>-40%</span><span>0</span><span>+40%</span></div>";
       } else if (hasDrainageYear) {
-        legend.innerHTML = "<b>Drainage year</b><div class='legend-bar' style='background:linear-gradient(to right,#fff5f0,#67000d)'></div><div style='display:flex;justify-content:space-between'><span>2017</span><span>2025</span></div>";
+        legend.innerHTML = "<b>Drainage year</b><div class='legend-bar' style='background:linear-gradient(to right,#fff5f0,#67000d)'></div><div style='display:flex;justify-content:space-between'><span>2017</span><span>2026</span></div>";
       }
     }
 
