@@ -22,26 +22,35 @@ def get_style_pmtiles_colored_historical() -> tuple:
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
-def get_style_pmtiles_drainage_year() -> tuple:
+def get_style_pmtiles_drainage_year(all_drainage_years: dict[str, int] | None = None) -> tuple:
+    if all_drainage_years:
+        match_expr = ["match", ["get", "id_geohash"]]
+        for geohash, year in all_drainage_years.items():
+            match_expr.extend([geohash, year])
+        match_expr.append(["to-number", ["get", "date_break_year"]])
+        value_expr = match_expr
+    else:
+        value_expr = ["to-number", ["get", "date_break_year"]]
+
     fill_color = [
         "interpolate",
         ["linear"],
-        ["to-number", ["get", "date_break_year"]],
+        value_expr,
         2017.0,
         "#fff5f0",
-        2025.0,
+        2026.0,
         "#67000d",
     ]
     fill_opacity = 0.4
     line_color = [
         "interpolate",
         ["linear"],
-        ["to-number", ["get", "date_break_year"]],
+        value_expr,
         2017,
         "#fff5f0",
         2021,
         "#f46d43",
-        2025,
+        2026,
         "#67000d",
     ]
     # line_color = "#dddddd"

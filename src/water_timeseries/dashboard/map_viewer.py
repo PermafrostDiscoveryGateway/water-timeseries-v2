@@ -334,6 +334,15 @@ class MapViewer:
             drained_ids = list(self.drained_data.keys())
             logger.info(f"Drained data overlay: {len(drained_ids) if drained_ids else 0} lakes")
             logger.info("Setting up map")
+            
+        all_drainage_years = None
+        if viz_configuration_name == "drainage_year":
+            nrt_breaks = st.session_state.get("precomputed_nrt_breaks")
+            if nrt_breaks is not None and "analysis_month" in nrt_breaks.columns and "id_geohash" in nrt_breaks.columns:
+                years_df = nrt_breaks[["id_geohash", "analysis_month"]].copy()
+                years_df["year"] = years_df["analysis_month"].str[:4].astype(int)
+                all_drainage_years = years_df.groupby("id_geohash")["year"].max().to_dict()
+
         tooltip = None
         m = build_pmtiles_map(
             pmtiles_url,
@@ -342,6 +351,7 @@ class MapViewer:
             drained_ids=drained_ids,
             viz_configuration_name=viz_configuration_name,
             tooltip=tooltip,
+            all_drainage_years=all_drainage_years,
         )
 
         # Render the map and get click data

@@ -107,6 +107,7 @@ def build_pmtiles_map(
     drained_ids: list[str] | None = None,
     viz_configuration_name: str = "colored_historical",
     tooltip=None,
+    all_drainage_years: dict[str, int] | None = None,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
     m = leafmap.Map(
@@ -143,7 +144,7 @@ def build_pmtiles_map(
 
     elif viz_configuration_name == "drainage_year":
         # Convert to number to handle string values in PMTiles
-        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
+        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year(all_drainage_years)
         legend = get_legend_html_date_drainage_year()
 
         # Use only one basemap to avoid overlap
