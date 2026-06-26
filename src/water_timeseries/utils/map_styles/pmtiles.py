@@ -60,13 +60,13 @@ def get_style_pmtiles_generic_water() -> tuple:
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
-def get_style_pmtiles_drained_ids(drained_ids):
+def get_style_pmtiles_drained_ids(drained_ids: list[str]):
     fill_color = [
         "match",
         ["get", "id_geohash"],
         drained_ids,
         "#d73027",  # Red fill for drained
-        fill_color,  # Default color ramp for non-drained
+        #ADD8E6,  # Default color ramp for non-drained
     ]
     fill_opacity = [
         "match",
@@ -80,7 +80,7 @@ def get_style_pmtiles_drained_ids(drained_ids):
         ["get", "id_geohash"],
         drained_ids,
         "#7f0000",  # Dark red border for drained
-        "#333333",  # Default border color
+        "#eeeeee",  # Default border color
     ]
     line_width = [
         "match",

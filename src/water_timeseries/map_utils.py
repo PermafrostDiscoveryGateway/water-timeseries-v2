@@ -244,7 +244,6 @@ def build_pmtiles_map(
                 fill_color="red",
                 fill_opacity=0.6,
                 border_width=0.5,
-                # tooltip=f"Drained Lake: {gid}",
                 icon=folium.Icon(color="red", icon="tint", prefix="fa"),
             )
             # add to group
