@@ -16,7 +16,7 @@ def get_style_pmtiles_colored_historical() -> tuple:
         "#4575b4",
     ]
     fill_opacity = 0.7
-    line_color = "#333333"
+    line_color = fill_color
     line_width = 0.5
     line_opacity = 1
     return fill_color, fill_opacity, line_color, line_width, line_opacity
@@ -42,18 +42,7 @@ def get_style_pmtiles_drainage_year(all_drainage_years: dict[str, int] | None = 
         "#67000d",
     ]
     fill_opacity = 0.4
-    line_color = [
-        "interpolate",
-        ["linear"],
-        value_expr,
-        2017,
-        "#fff5f0",
-        2021,
-        "#f46d43",
-        2026,
-        "#67000d",
-    ]
-    # line_color = "#dddddd"
-    line_width = 3
+    line_color = fill_color
+    line_width = 0.5
     line_opacity = 1
     return fill_color, fill_opacity, line_color, line_width, line_opacity
