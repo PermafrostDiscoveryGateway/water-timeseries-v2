@@ -66,7 +66,7 @@ def get_style_pmtiles_drained_ids(drained_ids: list[str]):
         ["get", "id_geohash"],
         drained_ids,
         "#d73027",  # Red fill for drained
-        #ADD8E6,  # Default color ramp for non-drained
+        # ADD8E6,  # Default color ramp for non-drained
     ]
     fill_opacity = [
         "match",

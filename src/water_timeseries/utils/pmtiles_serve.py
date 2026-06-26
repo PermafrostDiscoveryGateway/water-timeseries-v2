@@ -164,7 +164,7 @@ class PmtilesServer:
             self.pmtiles_filename = self.pmtiles_path.name
         else:
             self.pmtiles_path = None
-            self.directory = _MAP_HTML.parent # Fallback map location
+            self.directory = _MAP_HTML.parent  # Fallback map location
             self.pmtiles_filename = None
 
         self.host = host

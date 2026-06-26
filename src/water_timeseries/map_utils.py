@@ -11,7 +11,6 @@ from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
     get_style_pmtiles_generic_water,
-    get_style_pmtiles_drained_ids,
 )
 from water_timeseries.utils.visualization import get_legend_html_date_drainage_year, get_legend_html_net_change
 
@@ -166,7 +165,7 @@ def build_pmtiles_map(
             ["get", "id_geohash"],
             drained_ids,
             "#d73027",  # Red fill for drained
-            '#ADD8E6',  # Default color ramp for non-drained
+            "#ADD8E6",  # Default color ramp for non-drained
         ]
         fill_opacity = [
             "match",
