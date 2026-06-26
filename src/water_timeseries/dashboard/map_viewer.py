@@ -2,7 +2,6 @@
 
 import os
 from datetime import datetime, timedelta
-from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
@@ -42,43 +41,6 @@ from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
 )
-
-# def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
-#     """Configure logging with verbosity control.
-
-#     Args:
-#         logfile: Path to log file. If not provided, logs to console only.
-#         verbose: Verbosity level (0=INFO, 1=DEBUG)
-
-#     Verbosity flags:
-#         - No flag or -v: INFO level (default)
-#         - -v: DEBUG level
-#     """
-#     # Determine log level based on verbosity count
-#     if verbose >= 1:
-#         log_level = "DEBUG"
-#     else:
-#         log_level = "INFO"
-
-#     # Generate default logfile name from subcommand and timestamp
-#     if logfile is None:
-#         try:
-#             # sys.argv[0] is the script name, sys.argv[1] is the subcommand
-#             if len(sys.argv) >= 2:
-#                 subcommand = sys.argv[1].replace("-", "_")
-#                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#                 logfile = f"{subcommand}_{timestamp}.log"
-#                 print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
-#         except Exception:
-#             pass
-#         # If no logfile set, log to console only
-#         if logfile is None:
-#             return
-
-#     logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
-#     print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
-#     return logfile
-
 
 # Initialize Earth Engine when credentials are available
 _ee_project = os.environ.get("EE_PROJECT") or None
@@ -301,11 +263,7 @@ class MapViewer:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
 
-        st.caption(
-            "Vector tiles (PMTiles): only visible map tiles are loaded. "
-            "Click a lake to load plots below. "
-            "Lakes are colored by net change (red = shrink, blue = grow)."
-        )
+        st.caption("Click a lake to show interactive water area timeseries plots below. \n")
         logger.info("PMTiles map view rendered")
 
         pmtiles_source = self.pmtiles_url or (str(self.pmtiles_file) if self.pmtiles_file else None)
@@ -405,7 +363,7 @@ class MapViewer:
                             # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
                             st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
                             st.session_state.zoom_level = 12
-                            logger.info(f"Clicked on lake {clicked_id} and coodinate {clicked_lat} {clicked_lon}")
+                            logger.info(f"Clicked on lake {clicked_id} and coordinate {clicked_lat} {clicked_lon}")
 
         # Update session state only if a NEW feature was clicked
         if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
@@ -573,7 +531,7 @@ class MapViewer:
                         fill_color="#d73027",
                         edge_color="#7f0000",
                         edge_weight=2,
-                        fill_opacity=0.7,
+                        fill_opacity=0.5,
                     ),
                     tooltip=folium.GeoJsonTooltip(
                         fields=drained_fields,
@@ -590,7 +548,7 @@ class MapViewer:
                     # Optional: Grab the lake ID for the tooltip
                     lake_id = row.get(self.id_column, "Unknown")
 
-                    folium.Marker(
+                    folium.CircleMarker(
                         location=[centroid.y, centroid.x],
                         icon=folium.Icon(color="red", icon="info-sign"),
                         tooltip=f"Drained Lake: {lake_id}",
@@ -605,6 +563,7 @@ class MapViewer:
         # Render the map and get click data
         # Note: returned_objects includes 'last_active_drawing' for click detection
         result = st_folium(m, height=600, width="100%", key="map_viewer", returned_objects=["last_active_drawing"])
+        st.session_state.zoom_level = 6
 
         # Extract id_geohash from clicked feature
         clicked_id = None
@@ -619,6 +578,7 @@ class MapViewer:
             st.query_params["selected_lake"] = clicked_id
             if clicked_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(clicked_id)
+
             st.rerun()
 
         return None
@@ -815,10 +775,23 @@ def _render_drain_heatmap(
             if not month_breaks.empty:
                 display_cols = [
                     col
-                    for col in ["id_geohash", "water_residual", "water_observed", "water_predicted", "date"]
+                    for col in [
+                        "id_geohash",
+                        "water_residual",
+                        "water_observed",
+                        "water_predicted",
+                        "date",
+                        "water_change_ha",
+                        "water_change_perc",
+                    ]
                     if col in month_breaks.columns
                 ]
-                c.dataframe(month_breaks[display_cols].reset_index(drop=True), use_container_width=True)
+                df_show = month_breaks[display_cols].reset_index(drop=True)
+                if "water_change_ha" in month_breaks.columns:
+                    df_show.sort_values("water_change_ha", ascending=True, inplace=True)
+                elif "water_residual" in month_breaks.columns:
+                    df_show.sort_values("water_residual", ascending=True, inplace=True)
+                c.dataframe(df_show, use_container_width=True)
 
         if c.button("✖ Clear selection", key="clear_heatmap_sel"):
             st.session_state.pop("heatmap_selected_cell", None)
@@ -854,7 +827,7 @@ def _load_precomputed_nrt(
         try:
             logger.info(f"Loading single pre-computed breaks file from {path_str}")
             breaks_df = pd.read_parquet(path_str)
-            
+
             # Ensure "analysis_month" column exists if missing
             if "analysis_month" not in breaks_df.columns:
                 if "date" in breaks_df.columns:
@@ -862,14 +835,14 @@ def _load_precomputed_nrt(
                 elif "date_break" in breaks_df.columns:
                     breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date_break"]).dt.strftime("%Y-%m")
                 else:
-                    breaks_df["analysis_month"] = "2026-06" # Default fallback
-            
+                    breaks_df["analysis_month"] = "2026-06"  # Default fallback
+
             if "id_geohash" not in breaks_df.columns and breaks_df.index.name == "id_geohash":
                 breaks_df = breaks_df.reset_index()
-            
+
             if "analysis_month" in breaks_df.columns:
                 counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
-            
+
             return counts_df, breaks_df
         except Exception as e:
             logger.error(f"Failed to load single pre-computed breaks file: {e}")
@@ -881,15 +854,15 @@ def _load_precomputed_nrt(
         try:
             counts_url = path_str.rstrip("/") + "/nrt_monthly_drain_counts.parquet"
             breaks_url = path_str.rstrip("/") + "/nrt_monthly_drain_breaks.parquet"
-            
+
             fs_counts, counts_path_fs = fsspec.core.url_to_fs(counts_url)
             if fs_counts.exists(counts_path_fs):
                 counts_df = pd.read_parquet(counts_url)
-                
+
             fs_breaks, breaks_path_fs = fsspec.core.url_to_fs(breaks_url)
             if fs_breaks.exists(breaks_path_fs):
                 breaks_df = pd.read_parquet(breaks_url)
-                
+
             if breaks_df is None:
                 # Try to list files in directory
                 fs_dir, dir_path_fs = fsspec.core.url_to_fs(path_str)
@@ -902,7 +875,7 @@ def _load_precomputed_nrt(
                         # Reconstruct full URL/path
                         full_path = path_str.rstrip("/") + "/" + name
                         monthly_files.append(full_path)
-                
+
                 monthly_files = sorted(monthly_files)
                 if monthly_files:
                     logger.info(f"Found {len(monthly_files)} remote NRT monthly files, aggregating...")
@@ -948,14 +921,14 @@ def _load_precomputed_nrt(
         # Standardize index
         if "id_geohash" not in breaks_df.columns and breaks_df.index.name == "id_geohash":
             breaks_df = breaks_df.reset_index()
-            
+
         # Ensure analysis_month exists
         if "analysis_month" not in breaks_df.columns:
             if "date" in breaks_df.columns:
                 breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date"]).dt.strftime("%Y-%m")
             elif "date_break" in breaks_df.columns:
                 breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date_break"]).dt.strftime("%Y-%m")
-                
+
         if "analysis_month" in breaks_df.columns:
             counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
 
@@ -1004,7 +977,7 @@ def create_app(
 
     st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
 
-    st.title("🗺️ Arctic Lake Drainage Explorer")
+    st.title("💧 Lost Lakes: Arctic Lake Drainage Explorer")
     st.markdown("""
     This dashboard displays drained lakes across the circum-arctic.
     - **Hover** over a feature to see its attributes
@@ -1019,21 +992,6 @@ def create_app(
         st.sidebar.warning(
             "⚠️ Offline mode: Data downloads, timelapse generation, and recent satellite data views are disabled."
         )
-
-    # Plotting mode selection (static vs dynamic/interactive) - defaults to interactive
-    # Persist the setting in query parameters so it survives iframe reloads/redirects when clicking features.
-    qp_interactive = st.query_params.get("interactive", "true").lower() == "true"
-    is_interactive = st.sidebar.toggle(
-        "Interactive Plotting",
-        value=qp_interactive,
-        key="is_interactive_toggle",
-        help="Enable interactive Plotly plots (hover for details, zoom, pan)",
-    )
-    st.query_params["interactive"] = str(is_interactive).lower()
-    if is_interactive:
-        st.sidebar.caption("🖱️ Interactive mode - hover to see values, zoom & pan available")
-    else:
-        st.sidebar.caption("📊 Static mode - matplotlib plots")
 
     use_pmtiles = bool(pmtiles_file or pmtiles_url)
     map_backend = "pmtiles" if use_pmtiles else "folium"
@@ -1096,16 +1054,19 @@ def create_app(
         counts_loaded, breaks_loaded = _load_precomputed_nrt(precomputed_nrt_dir)
         st.session_state.precomputed_nrt_counts = counts_loaded
         st.session_state.precomputed_nrt_breaks = breaks_loaded
+        default_activate_historical = True
+    else:
+        default_activate_historical = True
     precomputed_counts: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_counts
     precomputed_breaks: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_breaks
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
-    st.sidebar.subheader("Near-real-time drainage")
+    st.sidebar.subheader("Activate Historical drainage events")
     show_drained = st.sidebar.checkbox(
-        "Show lakes drained in the last month",
-        value=False,
-        help="Uses pre-computed NRT breakpoints (water_residual < -0.25).",
+        "Show temporal drainage statistics",
+        value=default_activate_historical,
+        help="Activates visualization of number of drained lakes per month.",
     )
     drained_breaks = None
     drained_label = None
@@ -1441,7 +1402,7 @@ def create_app(
                             st.session_state.dw_dataset,
                             current,
                             "dw",
-                            is_interactive,
+                            is_interactive=True,
                             show_success=True,
                             show_caption=True,
                         )
@@ -1454,7 +1415,7 @@ def create_app(
                                 st.session_state.jrc_dataset,
                                 current,
                                 "jrc",
-                                is_interactive,
+                                is_interactive=True,
                                 show_success=False,
                                 show_caption=True,
                             )
@@ -1756,39 +1717,18 @@ def create_app(
                 if st.session_state.dw_dataset is not None and id_available:
                     try:
                         # Use interactive or static plotting based on toggle
-                        if is_interactive:
-                            fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
-                            st.plotly_chart(fig, width="stretch")
+                        fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
+                        st.plotly_chart(fig, width="stretch")
 
-                            # Convert figure to HTML for download (only when requested)
-                            html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
-                            st.download_button(
-                                label="💾 Save Interactive Plot (HTML)",
-                                data=html_buffer,
-                                file_name=f"timeseries_{current}.html",
-                                mime="text/html",
-                            )
-                        else:
-                            fig = st.session_state.dw_dataset.plot_timeseries(current)
+                        # Convert figure to HTML for download (only when requested)
+                        html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
+                        st.download_button(
+                            label="💾 Save Interactive Plot (HTML)",
+                            data=html_buffer,
+                            file_name=f"timeseries_{current}.html",
+                            mime="text/html",
+                        )
 
-                            # Save figure to bytes buffer for download
-                            img_buffer = BytesIO()
-                            fig.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
-                            img_buffer.seek(0)
-
-                            # Display and offer download
-                            st.pyplot(fig)
-
-                            col1, col2 = st.columns([1, 4])
-                            with col1:
-                                st.download_button(
-                                    label="💾 Save Figure",
-                                    data=img_buffer,
-                                    file_name=f"timeseries_{current}.png",
-                                    mime="image/png",
-                                )
-
-                            plt.close(fig)  # Close matplotlib figure
                     except Exception as e:
                         st.error(f"Error plotting time series: {e}")
 
@@ -1796,39 +1736,17 @@ def create_app(
                 if st.session_state.jrc_dataset is not None and id_available_jrc:
                     try:
                         # Use interactive or static plotting based on toggle
-                        if is_interactive:
-                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
-                            st.plotly_chart(fig_jrc, width="stretch")
+                        fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
+                        st.plotly_chart(fig_jrc, width="stretch")
 
-                            # Convert figure to HTML for download (only when requested)
-                            html_buffer = fig_jrc.to_html(full_html=False, include_plotlyjs="cdn")
-                            st.download_button(
-                                label="💾 Save JRC Interactive Plot (HTML)",
-                                data=html_buffer,
-                                file_name=f"timeseries_jrc_{current}.html",
-                                mime="text/html",
-                            )
-                        else:
-                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries(current)
-
-                            # Save figure to bytes buffer for download
-                            img_buffer = BytesIO()
-                            fig_jrc.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
-                            img_buffer.seek(0)
-
-                            # Display and offer download
-                            st.pyplot(fig_jrc)
-
-                            col1, col2 = st.columns([1, 4])
-                            with col1:
-                                st.download_button(
-                                    label="💾 Save JRC Figure",
-                                    data=img_buffer,
-                                    file_name=f"timeseries_jrc_{current}.png",
-                                    mime="image/png",
-                                )
-
-                            plt.close(fig_jrc)  # Close matplotlib figure
+                        # Convert figure to HTML for download (only when requested)
+                        html_buffer = fig_jrc.to_html(full_html=False, include_plotlyjs="cdn")
+                        st.download_button(
+                            label="💾 Save JRC Interactive Plot (HTML)",
+                            data=html_buffer,
+                            file_name=f"timeseries_jrc_{current}.html",
+                            mime="text/html",
+                        )
                     except Exception as e:
                         st.error(f"Error plotting JRC time series: {e}")
                 else:
