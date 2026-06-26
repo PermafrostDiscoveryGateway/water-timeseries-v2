@@ -11,6 +11,7 @@ from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
     get_style_pmtiles_generic_water,
+    get_style_pmtiles_drained_ids,
 )
 from water_timeseries.utils.visualization import get_legend_html_date_drainage_year, get_legend_html_net_change
 
@@ -165,7 +166,7 @@ def build_pmtiles_map(
             ["get", "id_geohash"],
             drained_ids,
             "#d73027",  # Red fill for drained
-            fill_color,  # Default color ramp for non-drained
+            '#ADD8E6',  # Default color ramp for non-drained
         ]
         fill_opacity = [
             "match",
@@ -179,7 +180,7 @@ def build_pmtiles_map(
             ["get", "id_geohash"],
             drained_ids,
             "#7f0000",  # Dark red border for drained
-            "#333333",  # Default border color
+            "#eeeeee",  # Default border color
         ]
         line_width = [
             "match",
@@ -230,7 +231,6 @@ def build_pmtiles_map(
     m.add_child(lake_layer)
 
     if drained_ids:
-
         drained_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
         for gid in drained_ids:
             # Decode the geohash into latitude and longitude coordinates
