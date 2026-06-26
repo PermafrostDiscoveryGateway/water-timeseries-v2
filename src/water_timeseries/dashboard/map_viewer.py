@@ -43,7 +43,6 @@ from water_timeseries.utils.visualization import (
     get_legend_html_net_change,
 )
 
-
 # Initialize Earth Engine when credentials are available
 _ee_project = os.environ.get("EE_PROJECT") or None
 
@@ -265,9 +264,7 @@ class MapViewer:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
 
-        st.caption(
-            "Click a lake to show interactive water area timeseries plots below. \n"
-        )
+        st.caption("Click a lake to show interactive water area timeseries plots below. \n")
         logger.info("PMTiles map view rendered")
 
         pmtiles_source = self.pmtiles_url or (str(self.pmtiles_file) if self.pmtiles_file else None)
@@ -367,7 +364,7 @@ class MapViewer:
                             # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
                             st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
                             st.session_state.zoom_level = 12
-                            logger.info(f"Clicked on lake {clicked_id} and coodinate {clicked_lat} {clicked_lon}")
+                            logger.info(f"Clicked on lake {clicked_id} and coordinate {clicked_lat} {clicked_lon}")
 
         # Update session state only if a NEW feature was clicked
         if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
@@ -557,16 +554,6 @@ class MapViewer:
                         icon=folium.Icon(color="red", icon="info-sign"),
                         tooltip=f"Drained Lake: {lake_id}",
                     ).add_to(drained_markers)
-
-                    # folium.CircleMarker(
-                    #     location=[centroid.y, centroid.x],
-                    #     radius=8,
-                    #     color="red",
-                    #     fill=True,
-                    #     fillColor="red",
-                    #     fillOpacity=0.8,
-                    #     tooltip=f"Drained Lake: {lake_id}",
-                    # ).add_to(drained_markers)
                 drained_markers.add_to(m)
                 # -----------------------------------------------
 
@@ -592,10 +579,9 @@ class MapViewer:
             st.query_params["selected_lake"] = clicked_id
             if clicked_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(clicked_id)
-            
+
             st.rerun()
 
-        
         return None
 
     def get_selected_geohash(self) -> Optional[str]:
@@ -829,7 +815,7 @@ def _load_precomputed_nrt(
         try:
             logger.info(f"Loading single pre-computed breaks file from {path_str}")
             breaks_df = pd.read_parquet(path_str)
-            
+
             # Ensure "analysis_month" column exists if missing
             if "analysis_month" not in breaks_df.columns:
                 if "date" in breaks_df.columns:
@@ -837,14 +823,14 @@ def _load_precomputed_nrt(
                 elif "date_break" in breaks_df.columns:
                     breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date_break"]).dt.strftime("%Y-%m")
                 else:
-                    breaks_df["analysis_month"] = "2026-06" # Default fallback
-            
+                    breaks_df["analysis_month"] = "2026-06"  # Default fallback
+
             if "id_geohash" not in breaks_df.columns and breaks_df.index.name == "id_geohash":
                 breaks_df = breaks_df.reset_index()
-            
+
             if "analysis_month" in breaks_df.columns:
                 counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
-            
+
             return counts_df, breaks_df
         except Exception as e:
             logger.error(f"Failed to load single pre-computed breaks file: {e}")
@@ -856,15 +842,15 @@ def _load_precomputed_nrt(
         try:
             counts_url = path_str.rstrip("/") + "/nrt_monthly_drain_counts.parquet"
             breaks_url = path_str.rstrip("/") + "/nrt_monthly_drain_breaks.parquet"
-            
+
             fs_counts, counts_path_fs = fsspec.core.url_to_fs(counts_url)
             if fs_counts.exists(counts_path_fs):
                 counts_df = pd.read_parquet(counts_url)
-                
+
             fs_breaks, breaks_path_fs = fsspec.core.url_to_fs(breaks_url)
             if fs_breaks.exists(breaks_path_fs):
                 breaks_df = pd.read_parquet(breaks_url)
-                
+
             if breaks_df is None:
                 # Try to list files in directory
                 fs_dir, dir_path_fs = fsspec.core.url_to_fs(path_str)
@@ -877,7 +863,7 @@ def _load_precomputed_nrt(
                         # Reconstruct full URL/path
                         full_path = path_str.rstrip("/") + "/" + name
                         monthly_files.append(full_path)
-                
+
                 monthly_files = sorted(monthly_files)
                 if monthly_files:
                     logger.info(f"Found {len(monthly_files)} remote NRT monthly files, aggregating...")
@@ -923,14 +909,14 @@ def _load_precomputed_nrt(
         # Standardize index
         if "id_geohash" not in breaks_df.columns and breaks_df.index.name == "id_geohash":
             breaks_df = breaks_df.reset_index()
-            
+
         # Ensure analysis_month exists
         if "analysis_month" not in breaks_df.columns:
             if "date" in breaks_df.columns:
                 breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date"]).dt.strftime("%Y-%m")
             elif "date_break" in breaks_df.columns:
                 breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date_break"]).dt.strftime("%Y-%m")
-                
+
         if "analysis_month" in breaks_df.columns:
             counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
 
