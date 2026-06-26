@@ -10,6 +10,7 @@ from folium_pmtiles.vector import PMTilesMapLibreLayer
 from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
+    get_style_pmtiles_generic_water,
 )
 from water_timeseries.utils.visualization import get_legend_html_date_drainage_year, get_legend_html_net_change
 
@@ -113,7 +114,8 @@ def build_pmtiles_map(
         location=center,
         zoom_start=zoom_start,  # lightweight basemap
     )
-    print("running render pmtiles")
+    # m.clear_layers()
+    # logger.info("running render pmtiles")
     # Add background map types
     wms_url = "https://maps.awi.de/services/common/permafrost/ows"
     tcvis_tile_layer = folium.WmsTileLayer(
@@ -127,13 +129,8 @@ def build_pmtiles_map(
     tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
     tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
 
-    # # Add background tiles
-    # tile_layer_darkmatter.add_to(m)
-    # tile_layer_esriworld.add_to(m)
-    # tcvis_tile_layer.add_to(m)
-
     tooltip = PMTilesMapLibreTooltipWithRounding()
-    if viz_configuration_name == "colored_historical":
+    if viz_configuration_name == "colored_historical" and not drained_ids:
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
         # Use only one basemap to avoid overlap
@@ -141,7 +138,7 @@ def build_pmtiles_map(
         tile_layer_esriworld.add_to(m)
         tcvis_tile_layer.add_to(m)
 
-    elif viz_configuration_name == "drainage_year":
+    elif viz_configuration_name == "drainage_year" and not drained_ids:
         # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
         legend = get_legend_html_date_drainage_year()
@@ -153,8 +150,9 @@ def build_pmtiles_map(
 
     else:
         # Define default paint values
-        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
-        legend = get_legend_html_net_change()
+        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_generic_water()
+        # legend = get_legend_html_net_change()
+        legend = None
         # Add background tiles
         tile_layer_darkmatter.add_to(m)
         tcvis_tile_layer.add_to(m)
@@ -232,18 +230,34 @@ def build_pmtiles_map(
     m.add_child(lake_layer)
 
     if drained_ids:
-        drained_markers = folium.FeatureGroup(name="Drained Lake Markers")
+
+        drained_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
         for gid in drained_ids:
             # Decode the geohash into latitude and longitude coordinates
             lat, lon = pygeohash.decode(gid)
-            folium.Marker(
+            # set marker
+            marker = folium.CircleMarker(
                 location=[lat, lon],
-                icon=folium.Icon(color="red", icon="info-sign"),
-                tooltip=f"Drained Lake: {gid}",
-            ).add_to(drained_markers)
+                radius=6,
+                color="darkred",
+                fill=True,
+                fill_color="red",
+                fill_opacity=0.6,
+                border_width=0.5,
+                # tooltip=f"Drained Lake: {gid}",
+                icon=folium.Icon(color="red", icon="tint", prefix="fa"),
+            )
+            # add to group
+            marker.add_to(drained_markers)
+
+        # add marker to map
         drained_markers.add_to(m)
+        # get bounds of layer
+        ul, lr = drained_markers.get_bounds()
+        print(ul, lr)
     # -----------------------------------------------
 
+    # m.add_child(lake_layer)
     folium.LayerControl().add_to(m)
 
     m.get_root().html.add_child(folium.Element(legend))
