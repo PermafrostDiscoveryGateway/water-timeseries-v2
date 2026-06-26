@@ -2,7 +2,6 @@
 
 import os
 from datetime import datetime, timedelta
-from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
@@ -981,21 +980,6 @@ def create_app(
             "⚠️ Offline mode: Data downloads, timelapse generation, and recent satellite data views are disabled."
         )
 
-    # Plotting mode selection (static vs dynamic/interactive) - defaults to interactive
-    # Persist the setting in query parameters so it survives iframe reloads/redirects when clicking features.
-    qp_interactive = st.query_params.get("interactive", "true").lower() == "true"
-    is_interactive = st.sidebar.toggle(
-        "Interactive Plotting",
-        value=qp_interactive,
-        key="is_interactive_toggle",
-        help="Enable interactive Plotly plots (hover for details, zoom, pan)",
-    )
-    st.query_params["interactive"] = str(is_interactive).lower()
-    if is_interactive:
-        st.sidebar.caption("🖱️ Interactive mode - hover to see values, zoom & pan available")
-    else:
-        st.sidebar.caption("📊 Static mode - matplotlib plots")
-
     use_pmtiles = bool(pmtiles_file or pmtiles_url)
     map_backend = "pmtiles" if use_pmtiles else "folium"
 
@@ -1405,7 +1389,7 @@ def create_app(
                             st.session_state.dw_dataset,
                             current,
                             "dw",
-                            is_interactive,
+                            is_interactive=True,
                             show_success=True,
                             show_caption=True,
                         )
@@ -1418,7 +1402,7 @@ def create_app(
                                 st.session_state.jrc_dataset,
                                 current,
                                 "jrc",
-                                is_interactive,
+                                is_interactive=True,
                                 show_success=False,
                                 show_caption=True,
                             )
@@ -1720,39 +1704,18 @@ def create_app(
                 if st.session_state.dw_dataset is not None and id_available:
                     try:
                         # Use interactive or static plotting based on toggle
-                        if is_interactive:
-                            fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
-                            st.plotly_chart(fig, width="stretch")
+                        fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
+                        st.plotly_chart(fig, width="stretch")
 
-                            # Convert figure to HTML for download (only when requested)
-                            html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
-                            st.download_button(
-                                label="💾 Save Interactive Plot (HTML)",
-                                data=html_buffer,
-                                file_name=f"timeseries_{current}.html",
-                                mime="text/html",
-                            )
-                        else:
-                            fig = st.session_state.dw_dataset.plot_timeseries(current)
+                        # Convert figure to HTML for download (only when requested)
+                        html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
+                        st.download_button(
+                            label="💾 Save Interactive Plot (HTML)",
+                            data=html_buffer,
+                            file_name=f"timeseries_{current}.html",
+                            mime="text/html",
+                        )
 
-                            # Save figure to bytes buffer for download
-                            img_buffer = BytesIO()
-                            fig.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
-                            img_buffer.seek(0)
-
-                            # Display and offer download
-                            st.pyplot(fig)
-
-                            col1, col2 = st.columns([1, 4])
-                            with col1:
-                                st.download_button(
-                                    label="💾 Save Figure",
-                                    data=img_buffer,
-                                    file_name=f"timeseries_{current}.png",
-                                    mime="image/png",
-                                )
-
-                            plt.close(fig)  # Close matplotlib figure
                     except Exception as e:
                         st.error(f"Error plotting time series: {e}")
 
@@ -1760,39 +1723,17 @@ def create_app(
                 if st.session_state.jrc_dataset is not None and id_available_jrc:
                     try:
                         # Use interactive or static plotting based on toggle
-                        if is_interactive:
-                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
-                            st.plotly_chart(fig_jrc, width="stretch")
+                        fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
+                        st.plotly_chart(fig_jrc, width="stretch")
 
-                            # Convert figure to HTML for download (only when requested)
-                            html_buffer = fig_jrc.to_html(full_html=False, include_plotlyjs="cdn")
-                            st.download_button(
-                                label="💾 Save JRC Interactive Plot (HTML)",
-                                data=html_buffer,
-                                file_name=f"timeseries_jrc_{current}.html",
-                                mime="text/html",
-                            )
-                        else:
-                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries(current)
-
-                            # Save figure to bytes buffer for download
-                            img_buffer = BytesIO()
-                            fig_jrc.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
-                            img_buffer.seek(0)
-
-                            # Display and offer download
-                            st.pyplot(fig_jrc)
-
-                            col1, col2 = st.columns([1, 4])
-                            with col1:
-                                st.download_button(
-                                    label="💾 Save JRC Figure",
-                                    data=img_buffer,
-                                    file_name=f"timeseries_jrc_{current}.png",
-                                    mime="image/png",
-                                )
-
-                            plt.close(fig_jrc)  # Close matplotlib figure
+                        # Convert figure to HTML for download (only when requested)
+                        html_buffer = fig_jrc.to_html(full_html=False, include_plotlyjs="cdn")
+                        st.download_button(
+                            label="💾 Save JRC Interactive Plot (HTML)",
+                            data=html_buffer,
+                            file_name=f"timeseries_jrc_{current}.html",
+                            mime="text/html",
+                        )
                     except Exception as e:
                         st.error(f"Error plotting JRC time series: {e}")
                 else:
