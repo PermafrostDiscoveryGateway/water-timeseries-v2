@@ -246,12 +246,13 @@ def dashboard(
 
 @app.command(group="Visualization")
 def build_pmtiles(
-    vector_file: Path,
-    output_file: Path,
-    viz_configuration: str = "colored_historical",
-    keep_geojsonl: bool = False,
+    vector_file: Optional[Path] = None,
+    output_file: Optional[Path] = None,
+    viz_configuration: Optional[str] = None,
+    keep_geojsonl: Optional[bool] = None,
     logfile: Optional[str] = None,
     verbose: int = 0,
+    config_file: Optional[Path] = None,
 ):
     """Convert a lake GeoParquet file to a single .pmtiles archive for fast map rendering.
 
@@ -263,19 +264,49 @@ def build_pmtiles(
         water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
         water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
     """
-    if logfile:
-        logfile = setup_logging(logfile=logfile, verbose=verbose)
+    # Load config file if provided
+    config_dict = load_config(config_file) if config_file else {}
+
+    # Merge config with CLI args
+    config_dict = merge_config_with_args(
+        config_dict,
+        vector_file=str(vector_file) if vector_file else None,
+        output_file=str(output_file) if output_file else None,
+        viz_configuration=viz_configuration,
+        keep_geojsonl=keep_geojsonl,
+        logfile=logfile,
+        verbose=verbose,
+    )
+
+    vector_file_str = config_dict.get("vector_file")
+    output_file_str = config_dict.get("output_file")
+    
+    if not vector_file_str:
+        logger.error("vector_file is required. Provide via CLI arguments or config file.")
+        raise SystemExit(1)
+    if not output_file_str:
+        logger.error("output_file is required. Provide via CLI arguments or config file.")
+        raise SystemExit(1)
+
+    vector_file_path = Path(vector_file_str)
+    output_file_path = Path(output_file_str)
+    viz_config = config_dict.get("viz_configuration", "colored_historical")
+    keep_geojsonl_val = config_dict.get("keep_geojsonl", False)
+    logfile_val = config_dict.get("logfile")
+    verbose_val = config_dict.get("verbose", 0)
+
+    if logfile_val:
+        logfile_val = setup_logging(logfile=logfile_val, verbose=verbose_val)
 
     if not find_tippecanoe():
         raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
 
-    print(f"Building PMTiles from {vector_file} -> {output_file}")
-    if viz_configuration == "drainage_year":
-        build_pmtiles_drainage_year(vector_file, output_file, keep_geojsonl=keep_geojsonl)
+    print(f"Building PMTiles from {vector_file_path} -> {output_file_path}")
+    if viz_config == "drainage_year":
+        build_pmtiles_drainage_year(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
     else:
-        build_pmtiles_archive(vector_file, output_file, keep_geojsonl=keep_geojsonl)
-    print(f"Wrote PMTiles archive: {output_file}")
-
+        build_pmtiles_archive(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
+    print(f"Wrote PMTiles archive: {output_file_path}")
 
 @app.command(group="Visualization")
 def serve_tiles(
