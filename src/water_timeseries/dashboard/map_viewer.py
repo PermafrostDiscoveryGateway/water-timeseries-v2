@@ -775,10 +775,23 @@ def _render_drain_heatmap(
             if not month_breaks.empty:
                 display_cols = [
                     col
-                    for col in ["id_geohash", "water_residual", "water_observed", "water_predicted", "date"]
+                    for col in [
+                        "id_geohash",
+                        "water_residual",
+                        "water_observed",
+                        "water_predicted",
+                        "date",
+                        "water_change_ha",
+                        "water_change_perc",
+                    ]
                     if col in month_breaks.columns
                 ]
-                c.dataframe(month_breaks[display_cols].reset_index(drop=True), use_container_width=True)
+                df_show = month_breaks[display_cols].reset_index(drop=True)
+                if "water_change_ha" in month_breaks.columns:
+                    df_show.sort_values("water_change_ha", ascending=True, inplace=True)
+                elif "water_residual" in month_breaks.columns:
+                    df_show.sort_values("water_residual", ascending=True, inplace=True)
+                c.dataframe(df_show, use_container_width=True)
 
         if c.button("✖ Clear selection", key="clear_heatmap_sel"):
             st.session_state.pop("heatmap_selected_cell", None)
