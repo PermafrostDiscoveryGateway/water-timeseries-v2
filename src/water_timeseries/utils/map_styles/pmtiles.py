@@ -39,8 +39,8 @@ def get_style_pmtiles_drainage_year() -> tuple:
             ["==", ["to-string", ["get", "date_break_year"]], ""],
             ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
         ],
+        0.05,
         0.2,
-        0.4,
     ]
     line_color = [
         "interpolate",

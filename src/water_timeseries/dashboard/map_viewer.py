@@ -1054,16 +1054,16 @@ def create_app(
         counts_loaded, breaks_loaded = _load_precomputed_nrt(precomputed_nrt_dir)
         st.session_state.precomputed_nrt_counts = counts_loaded
         st.session_state.precomputed_nrt_breaks = breaks_loaded
-        default_activate_historical = True
+        default_activate_historical = False
     else:
-        default_activate_historical = True
+        default_activate_historical = False
     precomputed_counts: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_counts
     precomputed_breaks: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_breaks
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
     st.sidebar.subheader("Activate Historical drainage events")
-    show_drained = st.sidebar.checkbox(
+    show_drained = st.sidebar.toggle(
         "Show temporal drainage statistics",
         value=default_activate_historical,
         help="Activates visualization of number of drained lakes per month.",
