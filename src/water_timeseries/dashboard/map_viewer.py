@@ -1445,14 +1445,21 @@ def create_app(
                 today = datetime.now()
                 if viz_configuration_name == "drainage_year":
                     local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons["id_geohash"] == current]
-                    post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
-                    # break date (start of month after break)
-                    pre_break = post_break - timedelta(days=366)  # one year before
-                    print(today.strftime("%Y-%m-%d"))
-                    spinner_text = (
-                        "Pulling satellite image closest to the break + one year before... This may take a few seconds."
-                    )
-                    viz_dates = [pre_break, post_break, today]
+                    if pd.isna(local_gdf.iloc[0]["date_break"]):
+                        logger.info(f"No break available for lake {current}!")
+                        viz_dates = [datetime(2017,7,1), today]
+                        spinner_text = (
+                            "Pulling satellite 2017 + latest satellite image... This may take a few seconds."
+                        )
+                    else:    
+                        post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
+                        # break date (start of month after break)
+                        pre_break = post_break - timedelta(days=366)  # one year before
+                        print(today.strftime("%Y-%m-%d"))
+                        spinner_text = (
+                            "Pulling satellite image closest to the break + one year before... This may take a few seconds."
+                        )
+                        viz_dates = [pre_break, post_break, today]
 
                 else:
                     today = datetime.now()
