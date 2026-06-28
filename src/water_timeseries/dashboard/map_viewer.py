@@ -985,7 +985,7 @@ def create_app(
     """)
 
     # Create sidebar for controls
-    st.sidebar.header("Settings")
+    # st.sidebar.header("Settings")
 
     # Show offline mode indicator
     if offline_mode:
