@@ -1,2 +1,67 @@
 [server]
 enableStaticServing = true
+
+# rather intense green
+# [theme]
+# primaryColor = '#00b894'
+# backgroundColor = '#f9fffe'
+# secondaryBackgroundColor = '#e8f8f5'
+# textColor = '#2d3436'
+# font = "sans serif"
+
+# neutral white grey
+# [theme]
+# primaryColor = '#2e86ab'
+# backgroundColor = '#f8f9fa'
+# secondaryBackgroundColor = '#e8eef3'
+# textColor = '#2d3436'
+# font = "sans serif"
+
+# # light blue scheme
+# [theme]
+# primaryColor = '#0984e3'
+# backgroundColor = '#f0f9ff'
+# secondaryBackgroundColor = '#d6eaf8'
+# textColor = '#1e3a5f'
+# font = "sans serif"
+
+# # dark theme
+# [theme]
+# primaryColor = '#6c5ce7'
+# backgroundColor = '#0d1117'
+# secondaryBackgroundColor = '#161b22'
+# textColor = '#c9d1d9'
+# font = "sans serif"
+
+# midnight blue
+# [theme]
+# primaryColor = '#5c7cfa'
+# backgroundColor = '#1a1d23'
+# secondaryBackgroundColor = '#252a33'
+# textColor = '#e9ecef'
+# font = "sans serif"
+
+# ADC
+[theme]
+primaryColor = '#136682'
+backgroundColor = '#ffffff'
+secondaryBackgroundColor = '#0087b5'
+textColor = '#136682'
+font = "sans serif"
+
+[theme.sidebar]
+primaryColor = '#0087b5'
+textColor = '#ecf8fc'
+backgroundColor = '#136682'
+secondaryBackgroundColor = '#0087b5'
+font = "sans serif"
+
+
+# # ADC
+# [theme]
+# primaryColor = '#136682'
+# backgroundColor = '#ffffff'
+# secondaryBackgroundColor = '#ecf8fc'
+# # textColor = '#0087b5'
+# textColor = '#136682'
+# font = "sans serif"

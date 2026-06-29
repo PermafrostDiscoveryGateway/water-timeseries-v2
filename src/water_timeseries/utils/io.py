@@ -176,6 +176,7 @@ def load_xarray_dataset(
     elif format == "netcdf":
         if is_remote:
             import fsspec
+
             f = fsspec.open(target_path)
             return xr.open_dataset(f.open(), **kwargs)
         else:

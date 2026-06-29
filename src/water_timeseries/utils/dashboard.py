@@ -1,10 +1,8 @@
 """Dashboard helper functions to reduce code duplication in map_viewer.py."""
 
-from io import BytesIO
 from pathlib import Path
 from typing import Optional, Tuple
 
-import matplotlib.pyplot as plt
 import streamlit as st
 import xarray as xr
 
@@ -86,7 +84,7 @@ def plot_time_series_data(
     dataset: Optional[DWDataset | JRCDataset],
     id_geohash: str,
     dataset_type: str,
-    is_interactive: bool,
+    is_interactive: bool = True,
     show_success: bool = True,
     show_caption: bool = True,
 ) -> bool:
@@ -122,40 +120,20 @@ def plot_time_series_data(
     #     st.success("✅ Dynamic World data available")
 
     try:
-        if is_interactive:
-            # Plot interactive plotly chart
-            fig = dataset.plot_timeseries_interactive(id_geohash)
-            st.plotly_chart(fig, width="stretch")
+        # Plot interactive plotly chart
+        fig = dataset.plot_timeseries_interactive(id_geohash)
+        st.plotly_chart(fig, width="stretch")
 
-            # Save as HTML for download
-            html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
-            file_suffix = "jrc_" if dataset_type == "jrc" else ""
-            st.download_button(
-                label=f"💾 Save {file_suffix.upper()}Interactive Plot (HTML)",
-                data=html_buffer,
-                file_name=f"timeseries_{file_suffix}{id_geohash}.html",
-                mime="text/html",
-                key=f"download_{dataset_type}_interactive_{id_geohash}",
-            )
-        else:
-            # Plot static matplotlib figure
-            fig = dataset.plot_timeseries(id_geohash)
-            img_buffer = BytesIO()
-            fig.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
-            img_buffer.seek(0)
-
-            st.pyplot(fig)
-            plt.close(fig)
-
-            # Save as PNG for download
-            file_suffix = "jrc_" if dataset_type == "jrc" else ""
-            st.download_button(
-                label=f"💾 Save {file_suffix.upper()}Figure",
-                data=img_buffer,
-                file_name=f"timeseries_{file_suffix}{id_geohash}.png",
-                mime="image/png",
-                key=f"download_{dataset_type}_static_{id_geohash}",
-            )
+        # Save as HTML for download
+        html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
+        file_suffix = "jrc_" if dataset_type == "jrc" else ""
+        st.download_button(
+            label=f"💾 Save {file_suffix.upper()}Interactive Plot (HTML)",
+            data=html_buffer,
+            file_name=f"timeseries_{file_suffix}{id_geohash}.html",
+            mime="text/html",
+            key=f"download_{dataset_type}_interactive_{id_geohash}",
+        )
 
         return True
 
@@ -411,7 +389,7 @@ def plot_jrc_timeseries(
     id_geohash: str,
     zarr_path_jrc: str | Path,
     downloaded_dsjrc: Optional[object],
-    is_interactive: bool,
+    is_interactive: bool = True,
 ) -> bool:
     """
     Plot JRC time series with proper availability checking and fallback loading.
@@ -432,3 +410,17 @@ def plot_jrc_timeseries(
     if not id_available_jrc:
         st.caption("⚠️ JRC data not available for this feature")
         return False
+
+
+dw_tooltip_info = """
+    #### About Dynamic World (V1)
+    
+    Dynamic World is a near-real-time global 10m Land Use/Land Cover dataset derived from Sentinel-2 imagery using deep learning.
+    Where we aggregated the water, vegetation, bare, and Snow and Ice area per lake on a monthly basis.
+    The different vegetation classes were aggregated to a common vegetation class.
+    
+    ** Citation **
+    Brown, C.F., Brumby, S.P., Guzder-Williams, B. et al. Dynamic World, Near real-time global 10 m land use land cover mapping. *Sci Data* 9, 251 (2022). 
+
+    **DOI:** https://doi.org/10.1038/s41597-022-01307-4
+    """

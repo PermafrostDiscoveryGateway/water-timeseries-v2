@@ -161,11 +161,12 @@ def render_pmtiles_map(
         )
         map_url = server.map_iframe_url(config)
         _inject_selection_bridge()
-        
+
         if hasattr(st, "iframe"):
             st.iframe(map_url, height=height)
         else:
             import streamlit.components.v1 as components
+
             components.iframe(map_url, height=height)
         return
 

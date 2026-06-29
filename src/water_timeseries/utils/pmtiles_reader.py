@@ -48,7 +48,7 @@ def read_pmtiles_header_remote(url: str) -> dict[str, Any]:
     req = urllib.request.Request(url, headers={"Range": "bytes=0-126"})
     with urllib.request.urlopen(req) as resp:
         header = resp.read()
-        
+
     if len(header) < 127 or header[:7] != b"PMTiles":
         raise ValueError(f"Not a valid PMTiles v3 remote URL: {url}")
 

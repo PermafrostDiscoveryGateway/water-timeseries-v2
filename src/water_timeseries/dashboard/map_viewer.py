@@ -2,7 +2,6 @@
 
 import os
 from datetime import datetime, timedelta
-from io import BytesIO
 from pathlib import Path
 from typing import List, Optional
 
@@ -22,6 +21,7 @@ from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
     check_dataset_availability_ds_raw,
+    dw_tooltip_info,
     load_dataset,
     load_lake_polygons_cached,
     load_xarray_dataset_cached,
@@ -42,43 +42,6 @@ from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
 )
-
-# def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
-#     """Configure logging with verbosity control.
-
-#     Args:
-#         logfile: Path to log file. If not provided, logs to console only.
-#         verbose: Verbosity level (0=INFO, 1=DEBUG)
-
-#     Verbosity flags:
-#         - No flag or -v: INFO level (default)
-#         - -v: DEBUG level
-#     """
-#     # Determine log level based on verbosity count
-#     if verbose >= 1:
-#         log_level = "DEBUG"
-#     else:
-#         log_level = "INFO"
-
-#     # Generate default logfile name from subcommand and timestamp
-#     if logfile is None:
-#         try:
-#             # sys.argv[0] is the script name, sys.argv[1] is the subcommand
-#             if len(sys.argv) >= 2:
-#                 subcommand = sys.argv[1].replace("-", "_")
-#                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#                 logfile = f"{subcommand}_{timestamp}.log"
-#                 print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
-#         except Exception:
-#             pass
-#         # If no logfile set, log to console only
-#         if logfile is None:
-#             return
-
-#     logger.add(logfile, rotation="10 MB", retention="1 week", level=log_level)
-#     print(f"Logging to file: {logfile} with level: {log_level}")  # Use print to avoid circular logging
-#     return logfile
-
 
 # Initialize Earth Engine when credentials are available
 _ee_project = os.environ.get("EE_PROJECT") or None
@@ -301,11 +264,7 @@ class MapViewer:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
 
-        st.caption(
-            "Vector tiles (PMTiles): only visible map tiles are loaded. "
-            "Click a lake to load plots below. "
-            "Lakes are colored by net change (red = shrink, blue = grow)."
-        )
+        st.caption("Click a lake to show interactive water area timeseries plots below. \n")
         logger.info("PMTiles map view rendered")
 
         pmtiles_source = self.pmtiles_url or (str(self.pmtiles_file) if self.pmtiles_file else None)
@@ -405,7 +364,7 @@ class MapViewer:
                             # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
                             st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
                             st.session_state.zoom_level = 12
-                            logger.info(f"Clicked on lake {clicked_id} and coodinate {clicked_lat} {clicked_lon}")
+                            logger.info(f"Clicked on lake {clicked_id} and coordinate {clicked_lat} {clicked_lon}")
 
         # Update session state only if a NEW feature was clicked
         if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
@@ -573,7 +532,7 @@ class MapViewer:
                         fill_color="#d73027",
                         edge_color="#7f0000",
                         edge_weight=2,
-                        fill_opacity=0.7,
+                        fill_opacity=0.5,
                     ),
                     tooltip=folium.GeoJsonTooltip(
                         fields=drained_fields,
@@ -590,7 +549,7 @@ class MapViewer:
                     # Optional: Grab the lake ID for the tooltip
                     lake_id = row.get(self.id_column, "Unknown")
 
-                    folium.Marker(
+                    folium.CircleMarker(
                         location=[centroid.y, centroid.x],
                         icon=folium.Icon(color="red", icon="info-sign"),
                         tooltip=f"Drained Lake: {lake_id}",
@@ -605,6 +564,7 @@ class MapViewer:
         # Render the map and get click data
         # Note: returned_objects includes 'last_active_drawing' for click detection
         result = st_folium(m, height=600, width="100%", key="map_viewer", returned_objects=["last_active_drawing"])
+        # st.session_state.zoom_level = 6
 
         # Extract id_geohash from clicked feature
         clicked_id = None
@@ -619,6 +579,7 @@ class MapViewer:
             st.query_params["selected_lake"] = clicked_id
             if clicked_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(clicked_id)
+
             st.rerun()
 
         return None
@@ -645,10 +606,11 @@ class MapViewer:
         Removes the currently selected geohash from the session state,
         allowing the user to make a new selection.
         """
+        if "selected_lake" in st.query_params.keys():
+            logger.info(f"Dropping ID {st.session_state.selected_geohash} from selection")
+            del st.query_params["selected_lake"]
         st.session_state.selected_geohash = None
         st.session_state.pop("_pmtiles_last_rerun", None)
-        if "selected_lake" in st.query_params:
-            del st.query_params["selected_lake"]
 
 
 def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -815,10 +777,23 @@ def _render_drain_heatmap(
             if not month_breaks.empty:
                 display_cols = [
                     col
-                    for col in ["id_geohash", "water_residual", "water_observed", "water_predicted", "date"]
+                    for col in [
+                        "id_geohash",
+                        "water_residual",
+                        "water_observed",
+                        "water_predicted",
+                        "date",
+                        "water_change_ha",
+                        "water_change_perc",
+                    ]
                     if col in month_breaks.columns
                 ]
-                c.dataframe(month_breaks[display_cols].reset_index(drop=True), use_container_width=True)
+                df_show = month_breaks[display_cols].reset_index(drop=True)
+                if "water_change_ha" in month_breaks.columns:
+                    df_show.sort_values("water_change_ha", ascending=True, inplace=True)
+                elif "water_residual" in month_breaks.columns:
+                    df_show.sort_values("water_residual", ascending=True, inplace=True)
+                c.dataframe(df_show, use_container_width=True)
 
         if c.button("✖ Clear selection", key="clear_heatmap_sel"):
             st.session_state.pop("heatmap_selected_cell", None)
@@ -854,7 +829,7 @@ def _load_precomputed_nrt(
         try:
             logger.info(f"Loading single pre-computed breaks file from {path_str}")
             breaks_df = pd.read_parquet(path_str)
-            
+
             # Ensure "analysis_month" column exists if missing
             if "analysis_month" not in breaks_df.columns:
                 if "date" in breaks_df.columns:
@@ -862,14 +837,14 @@ def _load_precomputed_nrt(
                 elif "date_break" in breaks_df.columns:
                     breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date_break"]).dt.strftime("%Y-%m")
                 else:
-                    breaks_df["analysis_month"] = "2026-06" # Default fallback
-            
+                    breaks_df["analysis_month"] = "2026-06"  # Default fallback
+
             if "id_geohash" not in breaks_df.columns and breaks_df.index.name == "id_geohash":
                 breaks_df = breaks_df.reset_index()
-            
+
             if "analysis_month" in breaks_df.columns:
                 counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
-            
+
             return counts_df, breaks_df
         except Exception as e:
             logger.error(f"Failed to load single pre-computed breaks file: {e}")
@@ -881,15 +856,15 @@ def _load_precomputed_nrt(
         try:
             counts_url = path_str.rstrip("/") + "/nrt_monthly_drain_counts.parquet"
             breaks_url = path_str.rstrip("/") + "/nrt_monthly_drain_breaks.parquet"
-            
+
             fs_counts, counts_path_fs = fsspec.core.url_to_fs(counts_url)
             if fs_counts.exists(counts_path_fs):
                 counts_df = pd.read_parquet(counts_url)
-                
+
             fs_breaks, breaks_path_fs = fsspec.core.url_to_fs(breaks_url)
             if fs_breaks.exists(breaks_path_fs):
                 breaks_df = pd.read_parquet(breaks_url)
-                
+
             if breaks_df is None:
                 # Try to list files in directory
                 fs_dir, dir_path_fs = fsspec.core.url_to_fs(path_str)
@@ -902,7 +877,7 @@ def _load_precomputed_nrt(
                         # Reconstruct full URL/path
                         full_path = path_str.rstrip("/") + "/" + name
                         monthly_files.append(full_path)
-                
+
                 monthly_files = sorted(monthly_files)
                 if monthly_files:
                     logger.info(f"Found {len(monthly_files)} remote NRT monthly files, aggregating...")
@@ -948,14 +923,14 @@ def _load_precomputed_nrt(
         # Standardize index
         if "id_geohash" not in breaks_df.columns and breaks_df.index.name == "id_geohash":
             breaks_df = breaks_df.reset_index()
-            
+
         # Ensure analysis_month exists
         if "analysis_month" not in breaks_df.columns:
             if "date" in breaks_df.columns:
                 breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date"]).dt.strftime("%Y-%m")
             elif "date_break" in breaks_df.columns:
                 breaks_df["analysis_month"] = pd.to_datetime(breaks_df["date_break"]).dt.strftime("%Y-%m")
-                
+
         if "analysis_month" in breaks_df.columns:
             counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
 
@@ -999,12 +974,22 @@ def create_app(
         pmtiles_file: Path to a ``.pmtiles`` archive (enables fast vector-tile map).
         pmtiles_url: HTTP(S) URL to a hosted ``.pmtiles`` file (e.g. on S3).
     """
+    # Disable/Enable JRC data. True to disable
+    st.session_state.disable_jrc = True
+    if st.session_state.disable_jrc:
+        logger.warning("JRC data loading is disabled!")
+
+    # Disable/Enable JRC data. True to disable
+    st.session_state.disable_popup_plot = True
+    if st.session_state.disable_popup_plot:
+        logger.warning("Plot popup disabled!")
+
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
 
     st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
 
-    st.title("🗺️ Arctic Lake Drainage Explorer")
+    st.title("💧 Lost Lakes: Arctic Lake Drainage Explorer")
     st.markdown("""
     This dashboard displays drained lakes across the circum-arctic.
     - **Hover** over a feature to see its attributes
@@ -1012,28 +997,13 @@ def create_app(
     """)
 
     # Create sidebar for controls
-    st.sidebar.header("Settings")
+    # st.sidebar.header("Settings")
 
     # Show offline mode indicator
     if offline_mode:
         st.sidebar.warning(
             "⚠️ Offline mode: Data downloads, timelapse generation, and recent satellite data views are disabled."
         )
-
-    # Plotting mode selection (static vs dynamic/interactive) - defaults to interactive
-    # Persist the setting in query parameters so it survives iframe reloads/redirects when clicking features.
-    qp_interactive = st.query_params.get("interactive", "true").lower() == "true"
-    is_interactive = st.sidebar.toggle(
-        "Interactive Plotting",
-        value=qp_interactive,
-        key="is_interactive_toggle",
-        help="Enable interactive Plotly plots (hover for details, zoom, pan)",
-    )
-    st.query_params["interactive"] = str(is_interactive).lower()
-    if is_interactive:
-        st.sidebar.caption("🖱️ Interactive mode - hover to see values, zoom & pan available")
-    else:
-        st.sidebar.caption("📊 Static mode - matplotlib plots")
 
     use_pmtiles = bool(pmtiles_file or pmtiles_url)
     map_backend = "pmtiles" if use_pmtiles else "folium"
@@ -1074,38 +1044,42 @@ def create_app(
             st.session_state.dw_dataset_raw = load_xarray_dataset_cached(zarr_path)
         else:
             st.session_state.dw_dataset_raw = None
-    if "jrc_dataset" not in st.session_state:
-        st.session_state.jrc_dataset = None
-    if "jrc_dataset_raw" not in st.session_state:
-        if zarr_path_jrc:
-            st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc)
-        else:
-            st.session_state.jrc_dataset_raw = None
+    if "downloaded_dsdw" not in st.session_state:
+        st.session_state.downloaded_dsdw = None
+    if not st.session_state.disable_jrc:
+        if "jrc_dataset" not in st.session_state:
+            st.session_state.jrc_dataset = None
+        if "jrc_dataset_raw" not in st.session_state:
+            if zarr_path_jrc:
+                st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc)
+            else:
+                st.session_state.jrc_dataset_raw = None
+        if "downloaded_dsjrc" not in st.session_state:
+            st.session_state.downloaded_dsjrc = None
     if "lake_polygons" not in st.session_state:
         st.session_state.lake_polygons = load_lake_polygons_cached(data_path_input)
         # st.session_state.lake_polygons = None
     if "show_ts_popup" not in st.session_state:
         st.session_state.show_ts_popup = False
-    if "downloaded_dsdw" not in st.session_state:
-        st.session_state.downloaded_dsdw = None
-    if "downloaded_dsjrc" not in st.session_state:
-        st.session_state.downloaded_dsjrc = None
 
     # Load pre-computed NRT results (once per session)
     if "precomputed_nrt_counts" not in st.session_state:
         counts_loaded, breaks_loaded = _load_precomputed_nrt(precomputed_nrt_dir)
         st.session_state.precomputed_nrt_counts = counts_loaded
         st.session_state.precomputed_nrt_breaks = breaks_loaded
+        default_activate_historical = False
+    else:
+        default_activate_historical = False
     precomputed_counts: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_counts
     precomputed_breaks: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_breaks
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
-    st.sidebar.subheader("Near-real-time drainage")
-    show_drained = st.sidebar.checkbox(
-        "Show lakes drained in the last month",
-        value=False,
-        help="Uses pre-computed NRT breakpoints (water_residual < -0.25).",
+    st.sidebar.subheader("Activate Historical drainage events")
+    show_drained = st.sidebar.toggle(
+        "Show temporal drainage statistics",
+        value=default_activate_historical,
+        help="Activates visualization of number of drained lakes per month.",
     )
     drained_breaks = None
     drained_label = None
@@ -1170,9 +1144,12 @@ def create_app(
                 if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
                     month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
                     if not month_slice.empty:
+                        logger.info(f"Clicked on month in Heatmap {selected_analysis_month}")
                         drained_breaks = (
                             month_slice.set_index("id_geohash") if "id_geohash" in month_slice.columns else month_slice
                         )
+                        # st.session_state.selected_geohash = None
+                        st.session_state.zoom_level = 6
                     else:
                         pass  # caption shown via annotated label above
                 else:
@@ -1180,7 +1157,11 @@ def create_app(
 
     # Create map viewer
     logger.info(map_backend)
+
     try:
+        if show_drained and drained_breaks is not None and st.session_state.selected_geohash is None:
+            logger.info("Setting zoom level to 6")
+            st.session_state.zoom_level = 6
         viewer = MapViewer(
             parquet_path=data_path_input,
             id_column=id_column,
@@ -1269,28 +1250,35 @@ def create_app(
         # Clear button
         if st.sidebar.button("Clear Selection"):
             viewer.clear_selection()
+            current = None
             st.rerun()
 
         # Time Series Plot Section
         if current:
             logger.info(f"Map click event: id_geohash={current} - Opening time series section")
             st.divider()
-            st.subheader(f"📈 Time Series: {current}")
+            st.subheader(
+                f"📈 Time Series Plot of Lake: {current}",
+                anchor="time-series-header",
+                help="In this section time-series of surface water area are shown.",
+            )
 
-            # Button to open time series in popup
-            if st.button("📊 Open Time Series in Popup", key="open_ts_popup"):
-                st.session_state.show_ts_popup = True
-
-            # Show inline preview
-            logger.info(f"Time series section opened for lake: {current}")
-            st.caption("Preview - click button above for full view")
+            if not st.session_state.disable_popup_plot:
+                # Button to open time series in popup
+                if st.button("📊 Open Time Series in Popup", key="open_ts_popup"):
+                    st.session_state.show_ts_popup = True
+                # Show inline preview
+                logger.info(f"Time series section opened for lake: {current}")
+                st.caption("Preview - click button above for full view")
 
             # Load datasets using unified helper function
             dw_dataset = st.session_state.get("dw_dataset")
-            jrc_dataset = st.session_state.get("jrc_dataset")
+            if not st.session_state.disable_jrc:
+                jrc_dataset = st.session_state.get("jrc_dataset")
 
             id_available_dw_raw = check_dataset_availability_ds_raw(st.session_state.dw_dataset_raw, current)
-            id_available_jrc_raw = check_dataset_availability_ds_raw(st.session_state.jrc_dataset_raw, current)
+            if not st.session_state.disable_jrc:
+                id_available_jrc_raw = check_dataset_availability_ds_raw(st.session_state.jrc_dataset_raw, current)
             logger.info(f"Lake {current} available from Dynamic world database file: {id_available_dw_raw}")
             # Load DW dataset if needed
             if id_available_dw_raw:
@@ -1307,22 +1295,26 @@ def create_app(
                 st.session_state.dw_dataset = dw_dataset
 
             # Load JRC dataset if needed
-            if id_available_jrc_raw:
-                logger.info(f"Lake {current} is available from the JRC database file")
-                jrc_dataset = JRCDataset(st.session_state.jrc_dataset_raw.sel(id_geohash=[current]))
-                success = True
+            if not st.session_state.disable_jrc:
+                if id_available_jrc_raw:
+                    logger.info(f"Lake {current} is available from the JRC database file")
+                    jrc_dataset = JRCDataset(st.session_state.jrc_dataset_raw.sel(id_geohash=[current]))
+                    success = True
 
-            else:
-                logger.info(f"Lake {current} is not available from the JRC database file")
-                # elif jrc_dataset is None and st.session_state.jrc_dataset_raw is None:
-                jrc_dataset, success = load_dataset("jrc", zarr_path_jrc_input, st.session_state.downloaded_dsjrc)
+                else:
+                    logger.info(f"Lake {current} is not available from the JRC database file")
+                    # elif jrc_dataset is None and st.session_state.jrc_dataset_raw is None:
+                    jrc_dataset, success = load_dataset("jrc", zarr_path_jrc_input, st.session_state.downloaded_dsjrc)
 
-            if success and jrc_dataset is not None:
-                st.session_state.jrc_dataset = jrc_dataset
+                if success and jrc_dataset is not None:
+                    st.session_state.jrc_dataset = jrc_dataset
 
             # Re-check availability after loading
             id_available_dw = check_dataset_availability(st.session_state.dw_dataset, current)
-            id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
+            if not st.session_state.disable_jrc:
+                id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
+            else:
+                id_available_jrc = False
             # st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
 
             # Automatically download if not available
@@ -1380,88 +1372,104 @@ def create_app(
                             st.rerun()
                         else:
                             st.error("Download returned no data.")
+                    if not st.session_state.disable_jrc:
+                        if not id_available_jrc:
+                            # JRC Download
+                            logger.info(f"Downloading JRC data for lake: {current}")
+                            st.caption("Downloading JRC data ...")
+                            dsjrc_downloaded = downloader.download_jrc_annual(
+                                vector_dataset=data_path_input,
+                                name_attribute=id_column,
+                                id_list=[current],
+                                years=range(1984, 2022),
+                            )
 
-                    if not id_available_jrc:
-                        # JRC Download
-                        logger.info(f"Downloading JRC data for lake: {current}")
-                        st.caption("Downloading JRC data ...")
-                        dsjrc_downloaded = downloader.download_jrc_annual(
-                            vector_dataset=data_path_input,
-                            name_attribute=id_column,
-                            id_list=[current],
-                            years=range(1984, 2022),
-                        )
+                            # add dw dataset to session state
+                            if dsjrc_downloaded is not None:
+                                # Convert downloaded data to JRCDataset
+                                downloaded_dataset_jrc = JRCDataset(dsjrc_downloaded)
 
-                        # add dw dataset to session state
-                        if dsjrc_downloaded is not None:
-                            # Convert downloaded data to JRCDataset
-                            downloaded_dataset_jrc = JRCDataset(dsjrc_downloaded)
-
-                            # Merge with existing cached data if available
-                            if st.session_state.jrc_dataset is not None:
-                                try:
-                                    st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
-                                        downloaded_dataset_jrc, how="id_geohash"
-                                    )
-                                except Exception as merge_e:
-                                    # If merge fails, use downloaded data only
-                                    logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
-                                    st.sidebar.warning(f"Could not merge data: {merge_e}")
+                                # Merge with existing cached data if available
+                                if st.session_state.jrc_dataset is not None:
+                                    try:
+                                        st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
+                                            downloaded_dataset_jrc, how="id_geohash"
+                                        )
+                                    except Exception as merge_e:
+                                        # If merge fails, use downloaded data only
+                                        logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
+                                        st.sidebar.warning(f"Could not merge data: {merge_e}")
+                                        st.session_state.jrc_dataset = downloaded_dataset_jrc
+                                else:
                                     st.session_state.jrc_dataset = downloaded_dataset_jrc
+
+                                st.session_state.downloaded_dsjrc = dsjrc_downloaded
+                                id_available_jrc = True
+
+                                # Also set id_available_dw = True since DW data was also downloaded
+                                id_available_dw = True
+
+                                logger.info(f"Successfully downloaded DW and JRC data for lake: {current}")
+                                st.caption("Both DW and JRC data downloaded successfully!")
+                                st.rerun()
                             else:
-                                st.session_state.jrc_dataset = downloaded_dataset_jrc
-
-                            st.session_state.downloaded_dsjrc = dsjrc_downloaded
-                            id_available_jrc = True
-
-                            # Also set id_available_dw = True since DW data was also downloaded
-                            id_available_dw = True
-
-                            logger.info(f"Successfully downloaded DW and JRC data for lake: {current}")
-                            st.caption("Both DW and JRC data downloaded successfully!")
-                            st.rerun()
-                        else:
-                            st.error("Download returned no data.")
+                                st.error("Download returned no data.")
                 except Exception as e:
                     logger.error(f"Failed to download data for lake {current}: {e}")
                     st.error(f"Error downloading data: {e}")
                     st.info("Make sure you have Google Earth Engine authentication configured.")
+
+            # scroll down to timeseries plot automatically
+            st.html(
+                """
+                <script>
+                    window.location.hash = 'time-series-header';
+                </script>
+                """,
+                unsafe_allow_javascript=True,
+            )
+
+            # Custom markdown text block formatting the description and citation
 
             # Plot time series if available
             if st.session_state.dw_dataset is not None and id_available_dw:
                 try:
                     logger.info(f"Plotting time series for lake: {current}")
                     # Create container with one row and two columns for time series plots
-                    ts_col1, ts_col2 = st.columns(2)
+                    if st.session_state.disable_jrc:
+                        ts_col1, ts_col2 = st.columns(spec=[0.99, 0.01])  # hacky way to have 2 cols with left/only 99%
+                    else:
+                        ts_col1, ts_col2 = st.columns(2)
 
                     # Plot Dynamic World time series in first column
                     with ts_col1:
-                        st.subheader("Dynamic World")
+                        st.subheader("Dynamic World", help=dw_tooltip_info)
                         plot_time_series_data(
                             st.session_state.dw_dataset,
                             current,
                             "dw",
-                            is_interactive,
+                            is_interactive=True,
                             show_success=True,
                             show_caption=True,
                         )
 
                     # Plot JRC time series in second column if available
-                    if st.session_state.jrc_dataset is not None and id_available_jrc:
-                        with ts_col2:
-                            st.subheader("JRC")
-                            plot_time_series_data(
-                                st.session_state.jrc_dataset,
-                                current,
-                                "jrc",
-                                is_interactive,
-                                show_success=False,
-                                show_caption=True,
-                            )
-                    else:
-                        with ts_col2:
-                            logger.info(f"JRC data not available for lake: {current}")
-                            st.caption("JRC data not available for this feature")
+                    if not st.session_state.disable_jrc:
+                        if st.session_state.jrc_dataset is not None and id_available_jrc:
+                            with ts_col2:
+                                st.subheader("JRC")
+                                plot_time_series_data(
+                                    st.session_state.jrc_dataset,
+                                    current,
+                                    "jrc",
+                                    is_interactive=True,
+                                    show_success=False,
+                                    show_caption=True,
+                                )
+                        else:
+                            with ts_col2:
+                                logger.info(f"JRC data not available for lake: {current}")
+                                st.caption("JRC data not available for this feature")
                 except Exception as e:
                     logger.error(f"Error plotting time series for lake {current}: {e}")
                     st.error(f"Error plotting time series: {e}")
@@ -1484,14 +1492,17 @@ def create_app(
                 today = datetime.now()
                 if viz_configuration_name == "drainage_year":
                     local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons["id_geohash"] == current]
-                    post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
-                    # break date (start of month after break)
-                    pre_break = post_break - timedelta(days=366)  # one year before
-                    print(today.strftime("%Y-%m-%d"))
-                    spinner_text = (
-                        "Pulling satellite image closest to the break + one year before... This may take a few seconds."
-                    )
-                    viz_dates = [pre_break, post_break, today]
+                    if pd.isna(local_gdf.iloc[0]["date_break"]):
+                        logger.info(f"No break available for lake {current}!")
+                        viz_dates = [datetime(2017, 7, 1), today]
+                        spinner_text = "Pulling satellite 2017 + latest satellite image... This may take a few seconds."
+                    else:
+                        post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
+                        # break date (start of month after break)
+                        pre_break = post_break - timedelta(days=366)  # one year before
+                        print(today.strftime("%Y-%m-%d"))
+                        spinner_text = "Pulling satellite image closest to the break + one year before... This may take a few seconds."
+                        viz_dates = [pre_break, post_break, today]
 
                 else:
                     today = datetime.now()
@@ -1698,29 +1709,30 @@ def create_app(
                         st.error(f"Error loading time series data: {e}")
 
                 # Load JRC dataset if not already loaded
-                # Prioritize downloaded data over cached zarr
-                if st.session_state.jrc_dataset is None and st.session_state.downloaded_dsjrc is not None:
-                    try:
-                        st.session_state.jrc_dataset = JRCDataset(st.session_state.downloaded_dsjrc)
-                    except Exception as e:
-                        st.error(f"Error processing downloaded JRC data: {e}")
-                elif st.session_state.jrc_dataset is None:
-                    try:
-                        ds_jrc = load_xarray_dataset(zarr_path_jrc_input)
-                        st.session_state.jrc_dataset = JRCDataset(ds_jrc)
-                    except Exception as e:
-                        st.error(f"Error loading JRC time series data: {e}")
+                if not st.session_state.disable_jrc:
+                    # Prioritize downloaded data over cached zarr
+                    if st.session_state.jrc_dataset is None and st.session_state.downloaded_dsjrc is not None:
+                        try:
+                            st.session_state.jrc_dataset = JRCDataset(st.session_state.downloaded_dsjrc)
+                        except Exception as e:
+                            st.error(f"Error processing downloaded JRC data: {e}")
+                    elif st.session_state.jrc_dataset is None:
+                        try:
+                            ds_jrc = load_xarray_dataset(zarr_path_jrc_input)
+                            st.session_state.jrc_dataset = JRCDataset(ds_jrc)
+                        except Exception as e:
+                            st.error(f"Error loading JRC time series data: {e}")
 
                 # Check if ids are available
                 id_available = False
                 if st.session_state.dw_dataset is not None:
                     available_ids = st.session_state.dw_dataset.object_ids_
                     id_available = current in available_ids
-
-                id_available_jrc = False
-                if st.session_state.jrc_dataset is not None:
-                    available_ids_jrc = st.session_state.jrc_dataset.object_ids_
-                    id_available_jrc = current in available_ids_jrc
+                if not st.session_state.disable_jrc:
+                    id_available_jrc = False
+                    if st.session_state.jrc_dataset is not None:
+                        available_ids_jrc = st.session_state.jrc_dataset.object_ids_
+                        id_available_jrc = current in available_ids_jrc
 
                 # Automatically download if not available
                 if not id_available:
@@ -1756,47 +1768,26 @@ def create_app(
                 if st.session_state.dw_dataset is not None and id_available:
                     try:
                         # Use interactive or static plotting based on toggle
-                        if is_interactive:
-                            fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
-                            st.plotly_chart(fig, width="stretch")
+                        fig = st.session_state.dw_dataset.plot_timeseries_interactive(current)
+                        st.plotly_chart(fig, width="stretch")
 
-                            # Convert figure to HTML for download (only when requested)
-                            html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
-                            st.download_button(
-                                label="💾 Save Interactive Plot (HTML)",
-                                data=html_buffer,
-                                file_name=f"timeseries_{current}.html",
-                                mime="text/html",
-                            )
-                        else:
-                            fig = st.session_state.dw_dataset.plot_timeseries(current)
+                        # Convert figure to HTML for download (only when requested)
+                        html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
+                        st.download_button(
+                            label="💾 Save Interactive Plot (HTML)",
+                            data=html_buffer,
+                            file_name=f"timeseries_{current}.html",
+                            mime="text/html",
+                        )
 
-                            # Save figure to bytes buffer for download
-                            img_buffer = BytesIO()
-                            fig.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
-                            img_buffer.seek(0)
-
-                            # Display and offer download
-                            st.pyplot(fig)
-
-                            col1, col2 = st.columns([1, 4])
-                            with col1:
-                                st.download_button(
-                                    label="💾 Save Figure",
-                                    data=img_buffer,
-                                    file_name=f"timeseries_{current}.png",
-                                    mime="image/png",
-                                )
-
-                            plt.close(fig)  # Close matplotlib figure
                     except Exception as e:
                         st.error(f"Error plotting time series: {e}")
 
                 # Plot JRC time series if available
-                if st.session_state.jrc_dataset is not None and id_available_jrc:
-                    try:
-                        # Use interactive or static plotting based on toggle
-                        if is_interactive:
+                if not st.session_state.disable_jrc:
+                    if st.session_state.jrc_dataset is not None and id_available_jrc:
+                        try:
+                            # Use interactive or static plotting based on toggle
                             fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
                             st.plotly_chart(fig_jrc, width="stretch")
 
@@ -1808,31 +1799,10 @@ def create_app(
                                 file_name=f"timeseries_jrc_{current}.html",
                                 mime="text/html",
                             )
-                        else:
-                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries(current)
-
-                            # Save figure to bytes buffer for download
-                            img_buffer = BytesIO()
-                            fig_jrc.savefig(img_buffer, format="png", dpi=150, bbox_inches="tight")
-                            img_buffer.seek(0)
-
-                            # Display and offer download
-                            st.pyplot(fig_jrc)
-
-                            col1, col2 = st.columns([1, 4])
-                            with col1:
-                                st.download_button(
-                                    label="💾 Save JRC Figure",
-                                    data=img_buffer,
-                                    file_name=f"timeseries_jrc_{current}.png",
-                                    mime="image/png",
-                                )
-
-                            plt.close(fig_jrc)  # Close matplotlib figure
-                    except Exception as e:
-                        st.error(f"Error plotting JRC time series: {e}")
-                else:
-                    st.caption("⚠️ JRC data not available for this feature")
+                        except Exception as e:
+                            st.error(f"Error plotting JRC time series: {e}")
+                    else:
+                        st.caption("⚠️ JRC data not available for this feature")
 
                 if st.button("Close", key="close_ts_popup"):
                     st.session_state.show_ts_popup = False
