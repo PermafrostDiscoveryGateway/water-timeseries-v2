@@ -975,6 +975,8 @@ def create_app(
     """
     # Disable/Enable JRC data. True to disable
     st.session_state.disable_jrc = True
+    if st.session_state.disable_jrc:
+        logger.warning("JRC data loading is disabled!")
 
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
