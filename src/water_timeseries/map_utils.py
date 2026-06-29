@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import json
 import branca.element
 import folium
 import folium.elements

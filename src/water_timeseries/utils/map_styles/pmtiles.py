@@ -32,10 +32,11 @@ def get_style_pmtiles_drainage_year() -> tuple:
         2025.0,
         "#67000d",
     ]
-    fill_color_no_date = "#ADD8E6"
+    # fill_color_no_date = "#ADD8E6"
     fill_opacity = [
         "case",
-        ["any",
+        [
+            "any",
             ["==", ["to-string", ["get", "date_break_year"]], ""],
             ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
         ],
@@ -56,7 +57,8 @@ def get_style_pmtiles_drainage_year() -> tuple:
     line_opacity = 1
     line_width = [
         "case",
-        ["any",
+        [
+            "any",
             ["==", ["to-string", ["get", "date_break_year"]], ""],
             ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
         ],

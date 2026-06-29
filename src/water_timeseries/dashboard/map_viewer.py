@@ -21,11 +21,11 @@ from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
     check_dataset_availability_ds_raw,
+    dw_tooltip_info,
     load_dataset,
     load_lake_polygons_cached,
     load_xarray_dataset_cached,
     plot_time_series_data,
-    dw_tooltip_info,
 )
 from water_timeseries.utils.earthengine import (
     get_rioxarray_ds_from_lake,
@@ -1062,8 +1062,6 @@ def create_app(
     if "show_ts_popup" not in st.session_state:
         st.session_state.show_ts_popup = False
 
-
-
     # Load pre-computed NRT results (once per session)
     if "precomputed_nrt_counts" not in st.session_state:
         counts_loaded, breaks_loaded = _load_precomputed_nrt(precomputed_nrt_dir)
@@ -1085,7 +1083,7 @@ def create_app(
     )
     drained_breaks = None
     drained_label = None
-    
+
     if show_drained:
         if precomputed_counts is None and precomputed_breaks is None:
             st.sidebar.warning(
@@ -1255,14 +1253,15 @@ def create_app(
             current = None
             st.rerun()
 
-
         # Time Series Plot Section
         if current:
             logger.info(f"Map click event: id_geohash={current} - Opening time series section")
             st.divider()
-            st.subheader(f"📈 Time Series Plot of Lake: {current}", 
-                         anchor="time-series-header", 
-                         help="In this section time-series of surface water area are shown.")
+            st.subheader(
+                f"📈 Time Series Plot of Lake: {current}",
+                anchor="time-series-header",
+                help="In this section time-series of surface water area are shown.",
+            )
 
             if not st.session_state.disable_popup_plot:
                 # Button to open time series in popup
@@ -1317,7 +1316,6 @@ def create_app(
             else:
                 id_available_jrc = False
             # st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
-
 
             # Automatically download if not available
             if not id_available_dw or not id_available_jrc:
@@ -1428,11 +1426,10 @@ def create_app(
                     window.location.hash = 'time-series-header';
                 </script>
                 """,
-                unsafe_allow_javascript=True
+                unsafe_allow_javascript=True,
             )
 
-
-            # Custom markdown text block formatting the description and citation 
+            # Custom markdown text block formatting the description and citation
 
             # Plot time series if available
             if st.session_state.dw_dataset is not None and id_available_dw:
@@ -1440,7 +1437,7 @@ def create_app(
                     logger.info(f"Plotting time series for lake: {current}")
                     # Create container with one row and two columns for time series plots
                     if st.session_state.disable_jrc:
-                        ts_col1, ts_col2 = st.columns(spec=[0.99,0.01]) # hacky way to have 2 cols with left/only 99%
+                        ts_col1, ts_col2 = st.columns(spec=[0.99, 0.01])  # hacky way to have 2 cols with left/only 99%
                     else:
                         ts_col1, ts_col2 = st.columns(2)
 
@@ -1497,18 +1494,14 @@ def create_app(
                     local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons["id_geohash"] == current]
                     if pd.isna(local_gdf.iloc[0]["date_break"]):
                         logger.info(f"No break available for lake {current}!")
-                        viz_dates = [datetime(2017,7,1), today]
-                        spinner_text = (
-                            "Pulling satellite 2017 + latest satellite image... This may take a few seconds."
-                        )
-                    else:    
+                        viz_dates = [datetime(2017, 7, 1), today]
+                        spinner_text = "Pulling satellite 2017 + latest satellite image... This may take a few seconds."
+                    else:
                         post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
                         # break date (start of month after break)
                         pre_break = post_break - timedelta(days=366)  # one year before
                         print(today.strftime("%Y-%m-%d"))
-                        spinner_text = (
-                            "Pulling satellite image closest to the break + one year before... This may take a few seconds."
-                        )
+                        spinner_text = "Pulling satellite image closest to the break + one year before... This may take a few seconds."
                         viz_dates = [pre_break, post_break, today]
 
                 else:
