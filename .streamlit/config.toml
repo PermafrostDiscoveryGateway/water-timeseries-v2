@@ -10,12 +10,12 @@ enableStaticServing = true
 # font = "sans serif"
 
 # neutral white grey
-[theme]
-primaryColor = '#2e86ab'
-backgroundColor = '#f8f9fa'
-secondaryBackgroundColor = '#e8eef3'
-textColor = '#2d3436'
-font = "sans serif"
+# [theme]
+# primaryColor = '#2e86ab'
+# backgroundColor = '#f8f9fa'
+# secondaryBackgroundColor = '#e8eef3'
+# textColor = '#2d3436'
+# font = "sans serif"
 
 # # light blue scheme
 # [theme]
@@ -39,4 +39,29 @@ font = "sans serif"
 # backgroundColor = '#1a1d23'
 # secondaryBackgroundColor = '#252a33'
 # textColor = '#e9ecef'
+# font = "sans serif"
+
+# ADC
+[theme]
+primaryColor = '#136682'
+backgroundColor = '#ffffff'
+secondaryBackgroundColor = '#0087b5'
+textColor = '#136682'
+font = "sans serif"
+
+[theme.sidebar]
+primaryColor = '#0087b5'
+textColor = '#ecf8fc'
+backgroundColor = '#136682'
+secondaryBackgroundColor = '#0087b5'
+font = "sans serif"
+
+
+# # ADC
+# [theme]
+# primaryColor = '#136682'
+# backgroundColor = '#ffffff'
+# secondaryBackgroundColor = '#ecf8fc'
+# # textColor = '#0087b5'
+# textColor = '#136682'
 # font = "sans serif"
