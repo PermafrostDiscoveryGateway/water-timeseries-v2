@@ -973,6 +973,9 @@ def create_app(
         pmtiles_file: Path to a ``.pmtiles`` archive (enables fast vector-tile map).
         pmtiles_url: HTTP(S) URL to a hosted ``.pmtiles`` file (e.g. on S3).
     """
+    # Disable/Enable JRC data. True to disable
+    st.session_state.disable_jrc = True
+
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
 
@@ -1033,22 +1036,25 @@ def create_app(
             st.session_state.dw_dataset_raw = load_xarray_dataset_cached(zarr_path)
         else:
             st.session_state.dw_dataset_raw = None
-    if "jrc_dataset" not in st.session_state:
-        st.session_state.jrc_dataset = None
-    if "jrc_dataset_raw" not in st.session_state:
-        if zarr_path_jrc:
-            st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc)
-        else:
-            st.session_state.jrc_dataset_raw = None
+    if "downloaded_dsdw" not in st.session_state:
+        st.session_state.downloaded_dsdw = None
+    if not st.session_state.disable_jrc:
+        if "jrc_dataset" not in st.session_state:
+            st.session_state.jrc_dataset = None
+        if "jrc_dataset_raw" not in st.session_state:
+            if zarr_path_jrc:
+                st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc)
+            else:
+                st.session_state.jrc_dataset_raw = None
+        if "downloaded_dsjrc" not in st.session_state:
+            st.session_state.downloaded_dsjrc = None
     if "lake_polygons" not in st.session_state:
         st.session_state.lake_polygons = load_lake_polygons_cached(data_path_input)
         # st.session_state.lake_polygons = None
     if "show_ts_popup" not in st.session_state:
         st.session_state.show_ts_popup = False
-    if "downloaded_dsdw" not in st.session_state:
-        st.session_state.downloaded_dsdw = None
-    if "downloaded_dsjrc" not in st.session_state:
-        st.session_state.downloaded_dsjrc = None
+
+
 
     # Load pre-computed NRT results (once per session)
     if "precomputed_nrt_counts" not in st.session_state:
@@ -1258,10 +1264,12 @@ def create_app(
 
             # Load datasets using unified helper function
             dw_dataset = st.session_state.get("dw_dataset")
-            jrc_dataset = st.session_state.get("jrc_dataset")
+            if not st.session_state.disable_jrc:
+                jrc_dataset = st.session_state.get("jrc_dataset")
 
             id_available_dw_raw = check_dataset_availability_ds_raw(st.session_state.dw_dataset_raw, current)
-            id_available_jrc_raw = check_dataset_availability_ds_raw(st.session_state.jrc_dataset_raw, current)
+            if not st.session_state.disable_jrc:
+                id_available_jrc_raw = check_dataset_availability_ds_raw(st.session_state.jrc_dataset_raw, current)
             logger.info(f"Lake {current} available from Dynamic world database file: {id_available_dw_raw}")
             # Load DW dataset if needed
             if id_available_dw_raw:
@@ -1278,22 +1286,26 @@ def create_app(
                 st.session_state.dw_dataset = dw_dataset
 
             # Load JRC dataset if needed
-            if id_available_jrc_raw:
-                logger.info(f"Lake {current} is available from the JRC database file")
-                jrc_dataset = JRCDataset(st.session_state.jrc_dataset_raw.sel(id_geohash=[current]))
-                success = True
+            if not st.session_state.disable_jrc:
+                if id_available_jrc_raw:
+                    logger.info(f"Lake {current} is available from the JRC database file")
+                    jrc_dataset = JRCDataset(st.session_state.jrc_dataset_raw.sel(id_geohash=[current]))
+                    success = True
 
-            else:
-                logger.info(f"Lake {current} is not available from the JRC database file")
-                # elif jrc_dataset is None and st.session_state.jrc_dataset_raw is None:
-                jrc_dataset, success = load_dataset("jrc", zarr_path_jrc_input, st.session_state.downloaded_dsjrc)
+                else:
+                    logger.info(f"Lake {current} is not available from the JRC database file")
+                    # elif jrc_dataset is None and st.session_state.jrc_dataset_raw is None:
+                    jrc_dataset, success = load_dataset("jrc", zarr_path_jrc_input, st.session_state.downloaded_dsjrc)
 
-            if success and jrc_dataset is not None:
-                st.session_state.jrc_dataset = jrc_dataset
+                if success and jrc_dataset is not None:
+                    st.session_state.jrc_dataset = jrc_dataset
 
             # Re-check availability after loading
             id_available_dw = check_dataset_availability(st.session_state.dw_dataset, current)
-            id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
+            if not st.session_state.disable_jrc:
+                id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
+            else:
+                id_available_jrc = False
             # st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
 
 
@@ -1352,48 +1364,48 @@ def create_app(
                             st.rerun()
                         else:
                             st.error("Download returned no data.")
+                    if not st.session_state.disable_jrc:
+                        if not id_available_jrc:
+                            # JRC Download
+                            logger.info(f"Downloading JRC data for lake: {current}")
+                            st.caption("Downloading JRC data ...")
+                            dsjrc_downloaded = downloader.download_jrc_annual(
+                                vector_dataset=data_path_input,
+                                name_attribute=id_column,
+                                id_list=[current],
+                                years=range(1984, 2022),
+                            )
 
-                    if not id_available_jrc:
-                        # JRC Download
-                        logger.info(f"Downloading JRC data for lake: {current}")
-                        st.caption("Downloading JRC data ...")
-                        dsjrc_downloaded = downloader.download_jrc_annual(
-                            vector_dataset=data_path_input,
-                            name_attribute=id_column,
-                            id_list=[current],
-                            years=range(1984, 2022),
-                        )
+                            # add dw dataset to session state
+                            if dsjrc_downloaded is not None:
+                                # Convert downloaded data to JRCDataset
+                                downloaded_dataset_jrc = JRCDataset(dsjrc_downloaded)
 
-                        # add dw dataset to session state
-                        if dsjrc_downloaded is not None:
-                            # Convert downloaded data to JRCDataset
-                            downloaded_dataset_jrc = JRCDataset(dsjrc_downloaded)
-
-                            # Merge with existing cached data if available
-                            if st.session_state.jrc_dataset is not None:
-                                try:
-                                    st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
-                                        downloaded_dataset_jrc, how="id_geohash"
-                                    )
-                                except Exception as merge_e:
-                                    # If merge fails, use downloaded data only
-                                    logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
-                                    st.sidebar.warning(f"Could not merge data: {merge_e}")
+                                # Merge with existing cached data if available
+                                if st.session_state.jrc_dataset is not None:
+                                    try:
+                                        st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
+                                            downloaded_dataset_jrc, how="id_geohash"
+                                        )
+                                    except Exception as merge_e:
+                                        # If merge fails, use downloaded data only
+                                        logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
+                                        st.sidebar.warning(f"Could not merge data: {merge_e}")
+                                        st.session_state.jrc_dataset = downloaded_dataset_jrc
+                                else:
                                     st.session_state.jrc_dataset = downloaded_dataset_jrc
+
+                                st.session_state.downloaded_dsjrc = dsjrc_downloaded
+                                id_available_jrc = True
+
+                                # Also set id_available_dw = True since DW data was also downloaded
+                                id_available_dw = True
+
+                                logger.info(f"Successfully downloaded DW and JRC data for lake: {current}")
+                                st.caption("Both DW and JRC data downloaded successfully!")
+                                st.rerun()
                             else:
-                                st.session_state.jrc_dataset = downloaded_dataset_jrc
-
-                            st.session_state.downloaded_dsjrc = dsjrc_downloaded
-                            id_available_jrc = True
-
-                            # Also set id_available_dw = True since DW data was also downloaded
-                            id_available_dw = True
-
-                            logger.info(f"Successfully downloaded DW and JRC data for lake: {current}")
-                            st.caption("Both DW and JRC data downloaded successfully!")
-                            st.rerun()
-                        else:
-                            st.error("Download returned no data.")
+                                st.error("Download returned no data.")
                 except Exception as e:
                     logger.error(f"Failed to download data for lake {current}: {e}")
                     st.error(f"Error downloading data: {e}")
@@ -1414,7 +1426,10 @@ def create_app(
                 try:
                     logger.info(f"Plotting time series for lake: {current}")
                     # Create container with one row and two columns for time series plots
-                    ts_col1, ts_col2 = st.columns(2)
+                    if st.session_state.disable_jrc:
+                        ts_col1, ts_col2 = st.columns(spec=[0.99,0.01]) # hacky way to have 2 cols with left/only 99%
+                    else:
+                        ts_col1, ts_col2 = st.columns(2)
 
                     # Plot Dynamic World time series in first column
                     with ts_col1:
@@ -1429,21 +1444,22 @@ def create_app(
                         )
 
                     # Plot JRC time series in second column if available
-                    if st.session_state.jrc_dataset is not None and id_available_jrc:
-                        with ts_col2:
-                            st.subheader("JRC")
-                            plot_time_series_data(
-                                st.session_state.jrc_dataset,
-                                current,
-                                "jrc",
-                                is_interactive=True,
-                                show_success=False,
-                                show_caption=True,
-                            )
-                    else:
-                        with ts_col2:
-                            logger.info(f"JRC data not available for lake: {current}")
-                            st.caption("JRC data not available for this feature")
+                    if not st.session_state.disable_jrc:
+                        if st.session_state.jrc_dataset is not None and id_available_jrc:
+                            with ts_col2:
+                                st.subheader("JRC")
+                                plot_time_series_data(
+                                    st.session_state.jrc_dataset,
+                                    current,
+                                    "jrc",
+                                    is_interactive=True,
+                                    show_success=False,
+                                    show_caption=True,
+                                )
+                        else:
+                            with ts_col2:
+                                logger.info(f"JRC data not available for lake: {current}")
+                                st.caption("JRC data not available for this feature")
                 except Exception as e:
                     logger.error(f"Error plotting time series for lake {current}: {e}")
                     st.error(f"Error plotting time series: {e}")
@@ -1687,29 +1703,30 @@ def create_app(
                         st.error(f"Error loading time series data: {e}")
 
                 # Load JRC dataset if not already loaded
-                # Prioritize downloaded data over cached zarr
-                if st.session_state.jrc_dataset is None and st.session_state.downloaded_dsjrc is not None:
-                    try:
-                        st.session_state.jrc_dataset = JRCDataset(st.session_state.downloaded_dsjrc)
-                    except Exception as e:
-                        st.error(f"Error processing downloaded JRC data: {e}")
-                elif st.session_state.jrc_dataset is None:
-                    try:
-                        ds_jrc = load_xarray_dataset(zarr_path_jrc_input)
-                        st.session_state.jrc_dataset = JRCDataset(ds_jrc)
-                    except Exception as e:
-                        st.error(f"Error loading JRC time series data: {e}")
+                if not st.session_state.disable_jrc:
+                    # Prioritize downloaded data over cached zarr
+                    if st.session_state.jrc_dataset is None and st.session_state.downloaded_dsjrc is not None:
+                        try:
+                            st.session_state.jrc_dataset = JRCDataset(st.session_state.downloaded_dsjrc)
+                        except Exception as e:
+                            st.error(f"Error processing downloaded JRC data: {e}")
+                    elif st.session_state.jrc_dataset is None:
+                        try:
+                            ds_jrc = load_xarray_dataset(zarr_path_jrc_input)
+                            st.session_state.jrc_dataset = JRCDataset(ds_jrc)
+                        except Exception as e:
+                            st.error(f"Error loading JRC time series data: {e}")
 
                 # Check if ids are available
                 id_available = False
                 if st.session_state.dw_dataset is not None:
                     available_ids = st.session_state.dw_dataset.object_ids_
                     id_available = current in available_ids
-
-                id_available_jrc = False
-                if st.session_state.jrc_dataset is not None:
-                    available_ids_jrc = st.session_state.jrc_dataset.object_ids_
-                    id_available_jrc = current in available_ids_jrc
+                if not st.session_state.disable_jrc:
+                    id_available_jrc = False
+                    if st.session_state.jrc_dataset is not None:
+                        available_ids_jrc = st.session_state.jrc_dataset.object_ids_
+                        id_available_jrc = current in available_ids_jrc
 
                 # Automatically download if not available
                 if not id_available:
@@ -1761,24 +1778,25 @@ def create_app(
                         st.error(f"Error plotting time series: {e}")
 
                 # Plot JRC time series if available
-                if st.session_state.jrc_dataset is not None and id_available_jrc:
-                    try:
-                        # Use interactive or static plotting based on toggle
-                        fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
-                        st.plotly_chart(fig_jrc, width="stretch")
+                if not st.session_state.disable_jrc:
+                    if st.session_state.jrc_dataset is not None and id_available_jrc:
+                        try:
+                            # Use interactive or static plotting based on toggle
+                            fig_jrc = st.session_state.jrc_dataset.plot_timeseries_interactive(current)
+                            st.plotly_chart(fig_jrc, width="stretch")
 
-                        # Convert figure to HTML for download (only when requested)
-                        html_buffer = fig_jrc.to_html(full_html=False, include_plotlyjs="cdn")
-                        st.download_button(
-                            label="💾 Save JRC Interactive Plot (HTML)",
-                            data=html_buffer,
-                            file_name=f"timeseries_jrc_{current}.html",
-                            mime="text/html",
-                        )
-                    except Exception as e:
-                        st.error(f"Error plotting JRC time series: {e}")
-                else:
-                    st.caption("⚠️ JRC data not available for this feature")
+                            # Convert figure to HTML for download (only when requested)
+                            html_buffer = fig_jrc.to_html(full_html=False, include_plotlyjs="cdn")
+                            st.download_button(
+                                label="💾 Save JRC Interactive Plot (HTML)",
+                                data=html_buffer,
+                                file_name=f"timeseries_jrc_{current}.html",
+                                mime="text/html",
+                            )
+                        except Exception as e:
+                            st.error(f"Error plotting JRC time series: {e}")
+                    else:
+                        st.caption("⚠️ JRC data not available for this feature")
 
                 if st.button("Close", key="close_ts_popup"):
                     st.session_state.show_ts_popup = False
