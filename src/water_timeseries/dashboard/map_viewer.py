@@ -334,6 +334,15 @@ class MapViewer:
             drained_ids = list(self.drained_data.keys())
             logger.info(f"Drained data overlay: {len(drained_ids) if drained_ids else 0} lakes")
             logger.info("Setting up map")
+            
+        all_drainage_years = None
+        if viz_configuration_name == "drainage_year":
+            nrt_breaks = st.session_state.get("precomputed_nrt_breaks")
+            if nrt_breaks is not None and "analysis_month" in nrt_breaks.columns and "id_geohash" in nrt_breaks.columns:
+                years_df = nrt_breaks[["id_geohash", "analysis_month"]].copy()
+                years_df["year"] = years_df["analysis_month"].str[:4].astype(int)
+                all_drainage_years = years_df.groupby("id_geohash")["year"].max().to_dict()
+
         tooltip = None
         m = build_pmtiles_map(
             pmtiles_url,
@@ -342,6 +351,7 @@ class MapViewer:
             drained_ids=drained_ids,
             viz_configuration_name=viz_configuration_name,
             tooltip=tooltip,
+            all_drainage_years=all_drainage_years,
         )
 
         # Render the map and get click data
@@ -973,7 +983,6 @@ def create_app(
     dw_end_year: int = 2025,
     dw_start_month: int = 6,
     dw_end_month: int = 9,
-    viz_configuration_name: Optional[str] = "colored_historical",
     pmtiles_file: Optional[str | Path] = None,
     pmtiles_url: Optional[str] = None,
     logfile: Optional[str] = None,
@@ -995,7 +1004,6 @@ def create_app(
         dw_end_year: End year for Dynamic World time series (inclusive).
         dw_start_month: Start month for Dynamic World time series (1-12).
         dw_end_month: End month for Dynamic World time series (1-12).
-        viz_configuration_name: Map styling preset.
         pmtiles_file: Path to a ``.pmtiles`` archive (enables fast vector-tile map).
         pmtiles_url: HTTP(S) URL to a hosted ``.pmtiles`` file (e.g. on S3).
     """
@@ -1034,6 +1042,21 @@ def create_app(
         st.sidebar.caption("🖱️ Interactive mode - hover to see values, zoom & pan available")
     else:
         st.sidebar.caption("📊 Static mode - matplotlib plots")
+
+    st.sidebar.divider()
+    st.sidebar.subheader("Map Styling")
+    viz_style_options = {
+        "Net Change %": "colored_historical",
+        "Year Drainage": "drainage_year"
+    }
+    
+    selected_viz_label = st.sidebar.selectbox(
+        "Visualization Style",
+        options=list(viz_style_options.keys()),
+        index=0,
+        help="Select the visualization style for the map"
+    )
+    viz_configuration_name = viz_style_options[selected_viz_label]
 
     use_pmtiles = bool(pmtiles_file or pmtiles_url)
     map_backend = "pmtiles" if use_pmtiles else "folium"

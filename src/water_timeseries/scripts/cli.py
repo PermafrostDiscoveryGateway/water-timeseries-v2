@@ -91,7 +91,6 @@ def dashboard(
     dw_end_year: Optional[int] = None,
     dw_start_month: Optional[int] = None,
     dw_end_month: Optional[int] = None,
-    viz_configuration: Optional[str] = None,
     pmtiles_file: Optional[str] = None,
     pmtiles_url: Optional[str] = None,
     port: Optional[int] = None,
@@ -156,7 +155,6 @@ def dashboard(
         dw_end_year=dw_end_year,
         dw_start_month=dw_start_month,
         dw_end_month=dw_end_month,
-        viz_configuration=viz_configuration,
         pmtiles_file=pmtiles_file,
         pmtiles_url=pmtiles_url,
         port=port,
@@ -176,7 +174,6 @@ def dashboard(
     dw_end_year = config_dict.get("dw_end_year", 2025)
     dw_start_month = config_dict.get("dw_start_month", 6)
     dw_end_month = config_dict.get("dw_end_month", 9)
-    viz_configuration = config_dict.get("viz_configuration", "colored_historical")
     pmtiles_file = config_dict.get("pmtiles_file")
     pmtiles_url = config_dict.get("pmtiles_url")
     port = config_dict.get("port", 8501)
@@ -220,8 +217,6 @@ def dashboard(
         script_args.extend(["--dw-start-month", str(dw_start_month)])
     if dw_end_month is not None:
         script_args.extend(["--dw-end-month", str(dw_end_month)])
-    if viz_configuration:
-        script_args.extend(["--viz-configuration", viz_configuration])
     if pmtiles_file:
         script_args.extend(["--pmtiles-file", pmtiles_file])
     if pmtiles_url:
@@ -236,7 +231,7 @@ def dashboard(
         f"Dashboard config: port={port}, vector_file={vector_file}, "
         f"dw_dataset_file={dw_dataset_file}, jrc_dataset_file={jrc_dataset_file}, "
         f"precomputed_nrt_dir={precomputed_nrt_dir}, offline_mode={offline_mode}, "
-        f"ee_project={ee_project}, viz_configuration={viz_configuration}, "
+        f"ee_project={ee_project}, "
         f"dw_start_year={dw_start_year}, dw_end_year={dw_end_year}, "
         f"dw_start_month={dw_start_month}, dw_end_month={dw_end_month}, "
         f"logfile={logfile}"
