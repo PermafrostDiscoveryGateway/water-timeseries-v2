@@ -563,7 +563,7 @@ class MapViewer:
         # Render the map and get click data
         # Note: returned_objects includes 'last_active_drawing' for click detection
         result = st_folium(m, height=600, width="100%", key="map_viewer", returned_objects=["last_active_drawing"])
-        st.session_state.zoom_level = 6
+        # st.session_state.zoom_level = 6
 
         # Extract id_geohash from clicked feature
         clicked_id = None
@@ -607,7 +607,8 @@ class MapViewer:
         """
         st.session_state.selected_geohash = None
         st.session_state.pop("_pmtiles_last_rerun", None)
-        if "selected_lake" in st.query_params:
+        if "selected_lake" in st.query_params.keys():
+            logger.info(f"Dropping ID {st.query_params["selected_lake"]} from selection")
             del st.query_params["selected_lake"]
 
 
@@ -1070,7 +1071,7 @@ def create_app(
     )
     drained_breaks = None
     drained_label = None
-
+    
     if show_drained:
         if precomputed_counts is None and precomputed_breaks is None:
             st.sidebar.warning(
@@ -1131,9 +1132,12 @@ def create_app(
                 if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
                     month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
                     if not month_slice.empty:
+                        logger.info(f"Clicked on month in Heatmap {selected_analysis_month}")
                         drained_breaks = (
                             month_slice.set_index("id_geohash") if "id_geohash" in month_slice.columns else month_slice
                         )
+                        # st.session_state.selected_geohash = None
+                        st.session_state.zoom_level = 6
                     else:
                         pass  # caption shown via annotated label above
                 else:
@@ -1141,7 +1145,11 @@ def create_app(
 
     # Create map viewer
     logger.info(map_backend)
+
     try:
+        if show_drained and drained_breaks is not None and st.session_state.selected_geohash is None:
+            logger.info("Setting zoom level to 6")
+            st.session_state.zoom_level = 6
         viewer = MapViewer(
             parquet_path=data_path_input,
             id_column=id_column,
@@ -1230,6 +1238,7 @@ def create_app(
         # Clear button
         if st.sidebar.button("Clear Selection"):
             viewer.clear_selection()
+            current = None
             st.rerun()
 
         # Time Series Plot Section
