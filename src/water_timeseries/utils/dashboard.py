@@ -410,3 +410,16 @@ def plot_jrc_timeseries(
     if not id_available_jrc:
         st.caption("⚠️ JRC data not available for this feature")
         return False
+
+dw_tooltip_info = """
+    #### About Dynamic World (V1)
+    
+    Dynamic World is a near-real-time global 10m Land Use/Land Cover dataset derived from Sentinel-2 imagery using deep learning. <br>
+    Where we aggregated the water, vegetation, bare, and Snow and Ice area per lake on a monthly basis.<br>
+    The different vegetation classes were aggregated to a common vegetation class.
+    
+    ** Citation **
+    Brown, C.F., Brumby, S.P., Guzder-Williams, B. et al. Dynamic World, Near real-time global 10 m land use land cover mapping. *Sci Data* 9, 251 (2022). 
+
+    **DOI:** https://doi.org/10.1038/s41597-022-01307-4
+    """

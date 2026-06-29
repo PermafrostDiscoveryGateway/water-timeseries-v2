@@ -25,6 +25,7 @@ from water_timeseries.utils.dashboard import (
     load_lake_polygons_cached,
     load_xarray_dataset_cached,
     plot_time_series_data,
+    dw_tooltip_info,
 )
 from water_timeseries.utils.earthengine import (
     get_rioxarray_ds_from_lake,
@@ -978,6 +979,11 @@ def create_app(
     if st.session_state.disable_jrc:
         logger.warning("JRC data loading is disabled!")
 
+    # Disable/Enable JRC data. True to disable
+    st.session_state.disable_popup_plot = True
+    if st.session_state.disable_popup_plot:
+        logger.warning("Plot popup disabled!")
+
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
 
@@ -1254,15 +1260,17 @@ def create_app(
         if current:
             logger.info(f"Map click event: id_geohash={current} - Opening time series section")
             st.divider()
-            st.subheader(f"📈 Time Series: {current}", anchor="time-series-header")
+            st.subheader(f"📈 Time Series Plot of Lake: {current}", 
+                         anchor="time-series-header", 
+                         help="In this section time-series of surface water area are shown.")
 
-            # Button to open time series in popup
-            if st.button("📊 Open Time Series in Popup", key="open_ts_popup"):
-                st.session_state.show_ts_popup = True
-
-            # Show inline preview
-            logger.info(f"Time series section opened for lake: {current}")
-            st.caption("Preview - click button above for full view")
+            if not st.session_state.disable_popup_plot:
+                # Button to open time series in popup
+                if st.button("📊 Open Time Series in Popup", key="open_ts_popup"):
+                    st.session_state.show_ts_popup = True
+                # Show inline preview
+                logger.info(f"Time series section opened for lake: {current}")
+                st.caption("Preview - click button above for full view")
 
             # Load datasets using unified helper function
             dw_dataset = st.session_state.get("dw_dataset")
@@ -1423,6 +1431,9 @@ def create_app(
                 unsafe_allow_javascript=True
             )
 
+
+            # Custom markdown text block formatting the description and citation 
+
             # Plot time series if available
             if st.session_state.dw_dataset is not None and id_available_dw:
                 try:
@@ -1435,7 +1446,7 @@ def create_app(
 
                     # Plot Dynamic World time series in first column
                     with ts_col1:
-                        st.subheader("Dynamic World")
+                        st.subheader("Dynamic World", help=dw_tooltip_info)
                         plot_time_series_data(
                             st.session_state.dw_dataset,
                             current,
