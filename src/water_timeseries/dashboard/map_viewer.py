@@ -605,11 +605,11 @@ class MapViewer:
         Removes the currently selected geohash from the session state,
         allowing the user to make a new selection.
         """
+        if "selected_lake" in st.query_params.keys():
+            logger.info(f"Dropping ID {st.session_state.selected_geohash} from selection")
+            del st.query_params["selected_lake"]
         st.session_state.selected_geohash = None
         st.session_state.pop("_pmtiles_last_rerun", None)
-        if "selected_lake" in st.query_params.keys():
-            logger.info(f"Dropping ID {st.query_params["selected_lake"]} from selection")
-            del st.query_params["selected_lake"]
 
 
 def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
@@ -1241,11 +1241,12 @@ def create_app(
             current = None
             st.rerun()
 
+
         # Time Series Plot Section
         if current:
             logger.info(f"Map click event: id_geohash={current} - Opening time series section")
             st.divider()
-            st.subheader(f"📈 Time Series: {current}")
+            st.subheader(f"📈 Time Series: {current}", anchor="time-series-header")
 
             # Button to open time series in popup
             if st.button("📊 Open Time Series in Popup", key="open_ts_popup"):
@@ -1294,6 +1295,7 @@ def create_app(
             id_available_dw = check_dataset_availability(st.session_state.dw_dataset, current)
             id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
             # st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
+
 
             # Automatically download if not available
             if not id_available_dw or not id_available_jrc:
@@ -1396,6 +1398,16 @@ def create_app(
                     logger.error(f"Failed to download data for lake {current}: {e}")
                     st.error(f"Error downloading data: {e}")
                     st.info("Make sure you have Google Earth Engine authentication configured.")
+
+            # scroll down to timeseries plot automatically
+            st.html(
+                """
+                <script>
+                    window.location.hash = 'time-series-header';
+                </script>
+                """,
+                unsafe_allow_javascript=True
+            )
 
             # Plot time series if available
             if st.session_state.dw_dataset is not None and id_available_dw:
