@@ -18,86 +18,161 @@ from water_timeseries.utils.visualization import get_legend_html_date_drainage_y
 class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.element.MacroElement):
     _template = branca.element.Template(
         """
-            {% macro header(this, kwargs) %}
-            <style>
-            .maplibregl-popup {
-                font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
-                z-index: 651;
-            }
-            .feature-row{
-                margin-bottom: 0.5em;
-                &:not(:last-of-type) {
-                    border-bottom: 1px solid black;
-                }
-            }
-            </style>
-            {% endmacro %}
-            {% macro script(this, kwargs) -%}
-                var {{ this.get_name() }} = {{ this._parent.get_name() }}.getMaplibreMap();
-                const popup_{{ this.get_name() }} = new maplibregl.Popup({
-                    closeButton: false,
-                    closeOnClick: false
-                });
-
-                function setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}(maplibreLayer) {
-                    var mlMap = maplibreLayer.getMaplibreMap();
-                    var popup = popup_{{ this.get_name() }};
-
-                    mlMap.on('mousemove', (e) => {
-                        mlMap.getCanvas().style.cursor = 'pointer';
-                        const { x, y } = e.point;
-                        const r = 2; // radius around the point
-                        const features = mlMap.queryRenderedFeatures([
-                            [x - r, y - r],
-                            [x + r, y + r],
-                        ]);
-
-                        const {lng, lat}  = e.lngLat;
-                        const coordinates = [lng, lat]
-                        const html = features.map(f=>`
-                        <div class="feature-row">
-                            <span>
-                                <strong>${f.layer['source-layer']}</strong>
-                                <span style="fontSize: 0.8em" }> (${f.geometry.type})</span>
-                            </span>
-                            <table>
-                                ${Object.entries(f.properties).map(([key, value]) => {
-                                    let displayVal = value;
-                                    if (typeof value === 'number') {
-                                        displayVal = value.toFixed(2);
-                                    } else if (typeof value === 'string' && !isNaN(value) && value.includes('.')) {
-                                        displayVal = parseFloat(value).toFixed(2);
-                                    }
-                                    return `<tr><td>${key}</td><td style="text-align: right">${displayVal}</td></tr>`;
-                                }).join("")}
-                            </table>
-                        </div>
-                        `).join("")
-                        if(features.length){
-                            popup.setLngLat(e.lngLat).setHTML(html).addTo(mlMap);
-                        } else {
-                            popup.remove();
-                        }
-                    });
-                    mlMap.on('mouseleave', () => {popup.remove();});
-                }
-
-                // maplibre map object
-                {{ this.get_name() }}.on("load", (e) => {
-                    setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}({{ this._parent.get_name() }});
-                })
-
-                // leaflet map object
-                {{ this._parent._parent.get_name() }}.on("layeradd", (e) => {
-                    setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}({{ this._parent.get_name() }});
-                });
-            {%- endmacro %}
-            """
+    {% macro header(this, kwargs) %}
+    <style>
+    .maplibregl-popup {
+    font: 11px/16px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    z-index: 651;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .maplibregl-popup .maplibregl-popup-content {
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    overflow: visible;
+    }
+    .maplibregl-popup .maplibregl-popup-tip {
+    display: none;
+    }
+    .lakes-tooltip {
+    max-width: none;
+    }
+    .feature-row{
+    background: white;
+    border-radius: 6px;
+    overflow: hidden;
+    }
+    .feature-row table {
+    border-collapse: collapse;
+    width: 100%;
+    }
+    .feature-row table tr:nth-child(even) {
+    background-color: #f8f8f8;
+    }
+    .feature-row table tr:last-child td {
+    border-bottom: none;
+    }
+    .feature-row table td {
+    padding: 4px 8px;
+    }
+    .feature-row table td:first-child {
+    font-weight: 500;
+    color: #555;
+    }
+    .feature-row table td:last-child {
+    text-align: right;
+    }
+    </style>
+    {% endmacro %}
+    {% macro script(this, kwargs) -%}
+    var {{ this.get_name() }} = {{ this._parent.get_name() }}.getMaplibreMap();
+    const popup_{{ this.get_name() }} = new maplibregl.Popup({
+    closeButton: false,
+    closeOnClick: false,
+    offset: 20,
+    autoPan: true,
+    autoPanPadding: [50, 50]
+    });
+    var columnAliases_{{ this.get_name() }} = {{ this.column_aliases_json }};
+    var filterLayers_{{ this.get_name() }} = {{ this.filter_layers_json }};
+    var minZoom_{{ this.get_name() }} = {{ this.min_zoom_json }};
+    var maxZoom_{{ this.get_name() }} = {{ this.max_zoom_json }};
+    function setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}(maplibreLayer) {
+    var mlMap = maplibreLayer.getMaplibreMap();
+    var popup = popup_{{ this.get_name() }};
+    mlMap.on('mousemove', (e) => {
+    var zoom = mlMap.getZoom();
+    if (minZoom_{{ this.get_name() }} !== null && zoom < minZoom_{{ this.get_name() }}) { popup.remove(); return; }
+    if (maxZoom_{{ this.get_name() }} !== null && zoom > maxZoom_{{ this.get_name() }}) { popup.remove(); return; }
+    mlMap.getCanvas().style.cursor = 'pointer';
+    const { x, y } = e.point;
+    const r = 2; // radius around the point
+    var features = mlMap.queryRenderedFeatures([
+    [x - r, y - r],
+    [x + r, y + r],
+    ]);
+    // Filter by layer if filterLayers is set
+    var filterLayers = filterLayers_{{ this.get_name() }};
+    if (filterLayers && filterLayers.length > 0) {
+    features = features.filter(f => filterLayers.includes(f.layer.id));
+    }
+    const {lng, lat}  = e.lngLat;
+    const coordinates = [lng, lat]
+    const aliases = columnAliases_{{ this.get_name() }};
+    const html = features.map(f=>`
+    <div class="feature-row">
+    <table>
+    ${Object.entries(f.properties).map(([key, value]) => {
+    let displayKey = aliases[key] || key;
+    let displayVal = value;
+    if (typeof value === 'number') {
+    displayVal = value.toFixed(2);
+    } else if (typeof value === 'string' && !isNaN(value) && value.includes('.')) {
+    displayVal = parseFloat(value).toFixed(2);
+    }
+    return `<tr><td>${displayKey}</td><td style="text-align: right">${displayVal}</td></tr>`;
+    }).join("")}
+    </table>
+    </div>
+    `).join("")
+    if(features.length){
+    popup.setLngLat(e.lngLat).setHTML(html).addTo(mlMap);
+    } else {
+    popup.remove();
+    }
+    });
+    mlMap.on('mouseleave', () => {popup.remove();});
+    }
+    // maplibre map object
+    {{ this.get_name() }}.on("load", (e) => {
+    setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}({{ this._parent.get_name() }});
+    })
+    // leaflet map object
+    {{ this._parent._parent.get_name() }}.on("layeradd", (e) => {
+    setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}({{ this._parent.get_name() }});
+    });
+    {%- endmacro %}
+    """
     )
 
-    def __init__(self, name=None, **kwargs):
+    def __init__(self, name=None, column_aliases=None, filter_layers=None, min_zoom=None, max_zoom=None, **kwargs):
+        # Pop custom kwargs before passing to parent
+        kwargs.pop("column_aliases", None)
+        kwargs.pop("filter_layers", None)
+        kwargs.pop("min_zoom", None)
+        kwargs.pop("max_zoom", None)
         super().__init__(**kwargs)
         self._name = name if name else "PMTilesTooltip"
+        self.column_aliases = column_aliases if column_aliases else {}
+        self.filter_layers = filter_layers if filter_layers else []
+        self.min_zoom = min_zoom
+        self.max_zoom = max_zoom
+
+    @property
+    def column_aliases_json(self):
+        import json
+
+        return json.dumps(self.column_aliases)
+
+    @property
+    def filter_layers_json(self):
+        import json
+
+        return json.dumps(self.filter_layers)
+
+    @property
+    def min_zoom_json(self):
+        import json
+
+        return json.dumps(self.min_zoom)
+
+    @property
+    def max_zoom_json(self):
+        import json
+
+        return json.dumps(self.max_zoom)
 
 
 def build_pmtiles_map(
@@ -129,8 +204,17 @@ def build_pmtiles_map(
     tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
     tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
 
-    tooltip = PMTilesMapLibreTooltipWithRounding()
     if viz_configuration_name == "colored_historical" and not drained_ids:
+        aliases = {
+            "NetChange_perc": "Net Change (%)",
+            "NetChange_ha": "Net Change (ha)",
+            "Area_start_ha": "Lake Area year 2000 (ha)",
+            "Area_end_ha": "Lake Area year 2020 (ha)",
+            "date_break_year": "Drainage Year",
+        }
+        tooltip = PMTilesMapLibreTooltipWithRounding(
+            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
+        )
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
         # Use only one basemap to avoid overlap
@@ -139,6 +223,18 @@ def build_pmtiles_map(
         tcvis_tile_layer.add_to(m)
 
     elif viz_configuration_name == "drainage_year" and not drained_ids:
+        aliases = {
+            "id_geohash": "Lake ID",
+            "date_break": "Break date [YYYY-MM]",
+            "date_break_year": "Year of change",
+            "pre_break_median": "Lake area before break [ha]",
+            "post_break_median": "Lake area after break [ha]",
+            "water_change_ha": "Change of water area [ha]",
+            "water_change_perc": "Change of water area [%]",
+        }
+        tooltip = PMTilesMapLibreTooltipWithRounding(
+            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
+        )
         # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
         legend = get_legend_html_date_drainage_year()
@@ -149,6 +245,7 @@ def build_pmtiles_map(
         tile_layer_esriworld.add_to(m)
 
     else:
+        tooltip = PMTilesMapLibreTooltipWithRounding(filter_layers=["lakes-fill"])
         # Define default paint values
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_generic_water()
         # legend = get_legend_html_net_change()
@@ -189,6 +286,7 @@ def build_pmtiles_map(
             0.5,  # Default border width
         ]
 
+    # setup PMTiles Layer
     lake_layer = PMTilesMapLibreLayer(
         pmtiles_url,
         "Lakes",

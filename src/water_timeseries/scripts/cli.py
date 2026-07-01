@@ -280,7 +280,7 @@ def build_pmtiles(
 
     vector_file_str = config_dict.get("vector_file")
     output_file_str = config_dict.get("output_file")
-    
+
     if not vector_file_str:
         logger.error("vector_file is required. Provide via CLI arguments or config file.")
         raise SystemExit(1)
@@ -307,6 +307,7 @@ def build_pmtiles(
     else:
         build_pmtiles_archive(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
     print(f"Wrote PMTiles archive: {output_file_path}")
+
 
 @app.command(group="Visualization")
 def serve_tiles(
