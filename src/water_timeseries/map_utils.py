@@ -39,6 +39,7 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     closeOnClick: false
     });
     var columnAliases_{{ this.get_name() }} = {{ this.column_aliases_json }};
+    var filterLayers_{{ this.get_name() }} = {{ this.filter_layers_json }};
     function setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}(maplibreLayer) {
     var mlMap = maplibreLayer.getMaplibreMap();
     var popup = popup_{{ this.get_name() }};
@@ -46,10 +47,15 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     mlMap.getCanvas().style.cursor = 'pointer';
     const { x, y } = e.point;
     const r = 2; // radius around the point
-    const features = mlMap.queryRenderedFeatures([
+    var features = mlMap.queryRenderedFeatures([
     [x - r, y - r],
     [x + r, y + r],
     ]);
+    // Filter by layer if filterLayers is set
+    var filterLayers = filterLayers_{{ this.get_name() }};
+    if (filterLayers && filterLayers.length > 0) {
+    features = features.filter(f => filterLayers.includes(f.layer.id));
+    }
     const {lng, lat}  = e.lngLat;
     const coordinates = [lng, lat]
     const aliases = columnAliases_{{ this.get_name() }};
@@ -61,7 +67,7 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     </span>
     <table>
     ${Object.entries(f.properties).map(([key, value]) => {
-    let displayKey = aliases[key] || key;  // Use alias if available
+    let displayKey = aliases[key] || key;
     let displayVal = value;
     if (typeof value === 'number') {
     displayVal = value.toFixed(2);
@@ -93,16 +99,26 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     """
     )
 
-    def __init__(self, name=None, column_aliases=None, **kwargs):
+    def __init__(self, name=None, column_aliases=None, filter_layers=None, **kwargs):
+        # Pop custom kwargs before passing to parent
+        kwargs.pop("column_aliases", None)
+        kwargs.pop("filter_layers", None)
         super().__init__(**kwargs)
         self._name = name if name else "PMTilesTooltip"
         self.column_aliases = column_aliases if column_aliases else {}
+        self.filter_layers = filter_layers if filter_layers else []
 
     @property
     def column_aliases_json(self):
         import json
 
         return json.dumps(self.column_aliases)
+
+    @property
+    def filter_layers_json(self):
+        import json
+
+        return json.dumps(self.filter_layers)
 
 
 def build_pmtiles_map(
@@ -142,7 +158,7 @@ def build_pmtiles_map(
             "Area_end_ha": "Lake Area year 2020 (ha)",
             "date_break_year": "Drainage Year",
         }
-        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases)
+        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases, filter_layers=["lakes-fill"])
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
         # Use only one basemap to avoid overlap
@@ -160,7 +176,7 @@ def build_pmtiles_map(
             "water_change_ha": "Change of water area [ha]",
             "water_change_perc": "Change of water area [%]",
         }
-        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases)
+        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases, filter_layers=["lakes-fill"])
         # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
         legend = get_legend_html_date_drainage_year()
@@ -171,7 +187,7 @@ def build_pmtiles_map(
         tile_layer_esriworld.add_to(m)
 
     else:
-        tooltip = PMTilesMapLibreTooltipWithRounding()
+        tooltip = PMTilesMapLibreTooltipWithRounding(filter_layers=["lakes-fill"])
         # Define default paint values
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_generic_water()
         # legend = get_legend_html_net_change()
