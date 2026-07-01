@@ -31,9 +31,13 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     padding: 0;
     margin: 0;
     background: transparent;
+    overflow: visible;
     }
     .maplibregl-popup .maplibregl-popup-tip {
     display: none;
+    }
+    .lakes-tooltip {
+    max-width: none;
     }
     .feature-row{
     background: white;
@@ -66,7 +70,10 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     var {{ this.get_name() }} = {{ this._parent.get_name() }}.getMaplibreMap();
     const popup_{{ this.get_name() }} = new maplibregl.Popup({
     closeButton: false,
-    closeOnClick: false
+    closeOnClick: false,
+    offset: 20,
+    autoPan: true,
+    autoPanPadding: [50, 50]
     });
     var columnAliases_{{ this.get_name() }} = {{ this.column_aliases_json }};
     var filterLayers_{{ this.get_name() }} = {{ this.filter_layers_json }};
