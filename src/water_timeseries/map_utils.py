@@ -40,10 +40,15 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     });
     var columnAliases_{{ this.get_name() }} = {{ this.column_aliases_json }};
     var filterLayers_{{ this.get_name() }} = {{ this.filter_layers_json }};
+    var minZoom_{{ this.get_name() }} = {{ this.min_zoom_json }};
+    var maxZoom_{{ this.get_name() }} = {{ this.max_zoom_json }};
     function setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}(maplibreLayer) {
     var mlMap = maplibreLayer.getMaplibreMap();
     var popup = popup_{{ this.get_name() }};
     mlMap.on('mousemove', (e) => {
+    var zoom = mlMap.getZoom();
+    if (minZoom_{{ this.get_name() }} !== null && zoom < minZoom_{{ this.get_name() }}) { popup.remove(); return; }
+    if (maxZoom_{{ this.get_name() }} !== null && zoom > maxZoom_{{ this.get_name() }}) { popup.remove(); return; }
     mlMap.getCanvas().style.cursor = 'pointer';
     const { x, y } = e.point;
     const r = 2; // radius around the point
@@ -99,14 +104,18 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     """
     )
 
-    def __init__(self, name=None, column_aliases=None, filter_layers=None, **kwargs):
+    def __init__(self, name=None, column_aliases=None, filter_layers=None, min_zoom=None, max_zoom=None, **kwargs):
         # Pop custom kwargs before passing to parent
         kwargs.pop("column_aliases", None)
         kwargs.pop("filter_layers", None)
+        kwargs.pop("min_zoom", None)
+        kwargs.pop("max_zoom", None)
         super().__init__(**kwargs)
         self._name = name if name else "PMTilesTooltip"
         self.column_aliases = column_aliases if column_aliases else {}
         self.filter_layers = filter_layers if filter_layers else []
+        self.min_zoom = min_zoom
+        self.max_zoom = max_zoom
 
     @property
     def column_aliases_json(self):
@@ -119,6 +128,18 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
         import json
 
         return json.dumps(self.filter_layers)
+
+    @property
+    def min_zoom_json(self):
+        import json
+
+        return json.dumps(self.min_zoom)
+
+    @property
+    def max_zoom_json(self):
+        import json
+
+        return json.dumps(self.max_zoom)
 
 
 def build_pmtiles_map(
@@ -158,7 +179,7 @@ def build_pmtiles_map(
             "Area_end_ha": "Lake Area year 2020 (ha)",
             "date_break_year": "Drainage Year",
         }
-        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases, filter_layers=["lakes-fill"])
+        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8)
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
         # Use only one basemap to avoid overlap
@@ -176,7 +197,7 @@ def build_pmtiles_map(
             "water_change_ha": "Change of water area [ha]",
             "water_change_perc": "Change of water area [%]",
         }
-        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases, filter_layers=["lakes-fill"])
+        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8)
         # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
         legend = get_legend_html_date_drainage_year()
