@@ -66,10 +66,6 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     const aliases = columnAliases_{{ this.get_name() }};
     const html = features.map(f=>`
     <div class="feature-row">
-    <span>
-    <strong>${f.layer['source-layer']}</strong>
-    <span style="fontSize: 0.8em" }> (${f.geometry.type})</span>
-    </span>
     <table>
     ${Object.entries(f.properties).map(([key, value]) => {
     let displayKey = aliases[key] || key;
@@ -179,7 +175,9 @@ def build_pmtiles_map(
             "Area_end_ha": "Lake Area year 2020 (ha)",
             "date_break_year": "Drainage Year",
         }
-        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14)
+        tooltip = PMTilesMapLibreTooltipWithRounding(
+            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
+        )
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
         # Use only one basemap to avoid overlap
@@ -197,7 +195,9 @@ def build_pmtiles_map(
             "water_change_ha": "Change of water area [ha]",
             "water_change_perc": "Change of water area [%]",
         }
-        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14)
+        tooltip = PMTilesMapLibreTooltipWithRounding(
+            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
+        )
         # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
         legend = get_legend_html_date_drainage_year()
