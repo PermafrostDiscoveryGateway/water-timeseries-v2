@@ -21,14 +21,44 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     {% macro header(this, kwargs) %}
     <style>
     .maplibregl-popup {
-    font: 12px/20px 'Helvetica Neue', Arial, Helvetica, sans-serif;
+    font: 11px/16px 'Helvetica Neue', Arial, Helvetica, sans-serif;
     z-index: 651;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .maplibregl-popup .maplibregl-popup-content {
+    padding: 0;
+    margin: 0;
+    background: transparent;
+    }
+    .maplibregl-popup .maplibregl-popup-tip {
+    display: none;
     }
     .feature-row{
-    margin-bottom: 0.5em;
-    &:not(:last-of-type) {
-    border-bottom: 1px solid black;
+    background: white;
+    border-radius: 6px;
+    overflow: hidden;
     }
+    .feature-row table {
+    border-collapse: collapse;
+    width: 100%;
+    }
+    .feature-row table tr:nth-child(even) {
+    background-color: #f8f8f8;
+    }
+    .feature-row table tr:last-child td {
+    border-bottom: none;
+    }
+    .feature-row table td {
+    padding: 4px 8px;
+    }
+    .feature-row table td:first-child {
+    font-weight: 500;
+    color: #555;
+    }
+    .feature-row table td:last-child {
+    text-align: right;
     }
     </style>
     {% endmacro %}
