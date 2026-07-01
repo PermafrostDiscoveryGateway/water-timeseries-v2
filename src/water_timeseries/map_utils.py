@@ -135,7 +135,14 @@ def build_pmtiles_map(
     tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
 
     if viz_configuration_name == "colored_historical" and not drained_ids:
-        tooltip = PMTilesMapLibreTooltipWithRounding()
+        aliases = {
+            "NetChange_perc": "Net Change (%)",
+            "NetChange_ha": "Net Change (ha)",
+            "Area_start_ha": "Lake Area year 2000 (ha)",
+            "Area_end_ha": "Lake Area year 2020 (ha)",
+            "date_break_year": "Drainage Year",
+        }
+        tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases)
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
         # Use only one basemap to avoid overlap
@@ -146,12 +153,12 @@ def build_pmtiles_map(
     elif viz_configuration_name == "drainage_year" and not drained_ids:
         aliases = {
             "id_geohash": "Lake ID",
-            "date_break": "Break date (YYYY-MM)",
+            "date_break": "Break date [YYYY-MM]",
             "date_break_year": "Year of change",
-            "pre_break_median": "Lake area before break (ha)",
-            "post_break_median": "Lake area after break (ha)",
-            "water_change_ha": "Change of water area (ha)",
-            "water_change_perc": "Change of water area (%)",
+            "pre_break_median": "Lake area before break [ha]",
+            "post_break_median": "Lake area after break [ha]",
+            "water_change_ha": "Change of water area [ha]",
+            "water_change_perc": "Change of water area [%]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(column_aliases=aliases)
         # Convert to number to handle string values in PMTiles
