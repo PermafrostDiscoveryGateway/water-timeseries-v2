@@ -1172,59 +1172,72 @@ def create_app(
     logger.info(map_backend)
     st.subheader("Interactive Map Viewer")
     try:
-        if show_drained and drained_breaks is not None and st.session_state.selected_geohash is None:
-            logger.info("Setting zoom level to 6")
-            st.session_state.zoom_level = 6
-        if viz_configuration_name == "drainage_year":
-            hide_stable_lakes = st.toggle(
-                "Hide stable lakes",
-                value=False,
-                help="Hides lakes that have not been drained.",
-            )
 
-        else:
-            hide_stable_lakes = False
-        viewer = MapViewer(
-            parquet_path=data_path_input,
-            id_column=id_column,
-            zoom=st.session_state.zoom_level,
-            map_center=st.session_state.map_center,
-            map_backend=map_backend,
-            max_features=max_features,
-            viz_configuration_name=viz_configuration_name,
-            pmtiles_file=pmtiles_file,
-            pmtiles_url=pmtiles_url,
-            logger=logger,
-            hide_stable_lakes=hide_stable_lakes,
-        )
-        if show_drained and drained_breaks is not None and not drained_breaks.empty:
-            drained_ids = drained_breaks.index.unique().tolist()
-            if map_backend == "pmtiles":
-                # Convert the breaks dataframe directly to a dictionary of properties
-                # We format datetime to string to ensure JSON serialization
-                breaks_df = drained_breaks.copy()
-                if "date" in breaks_df.columns:
-                    breaks_df["date"] = breaks_df["date"].astype(str)
-                viewer.drained_data = breaks_df.to_dict(orient="index")
-                viewer.drained_label = drained_label
-                viewer.show_main_layer = True
-            else:
-                drained_gdf = viewer.load_drained_gdf(drained_ids).merge(
-                    drained_breaks.reset_index(),
-                    on=id_column,
-                    how="inner",
+        @st.fragment
+        def map_viewer_section():
+
+            try:
+                # st.write(f"DEBUG: fragment running, hide_stable_lakes={st.session_state.get('toggle_hide_stable_lakes')}")
+                if show_drained and drained_breaks is not None and st.session_state.selected_geohash is None:
+                    logger.info("Setting zoom level to 6")
+                    st.session_state.zoom_level = 6
+
+                if viz_configuration_name == "drainage_year":
+                    hide_stable_lakes = st.toggle(
+                        "Hide stable lakes",
+                        value=st.session_state.get("hide_stable_lakes", False),
+                        key="toggle_hide_stable_lakes",
+                    )
+                else:
+                    hide_stable_lakes = False
+
+                viewer = MapViewer(
+                    parquet_path=data_path_input,
+                    id_column=id_column,
+                    zoom=st.session_state.zoom_level,
+                    map_center=st.session_state.map_center,
+                    map_backend=map_backend,
+                    max_features=max_features,
+                    viz_configuration_name=viz_configuration_name,
+                    pmtiles_file=pmtiles_file,
+                    pmtiles_url=pmtiles_url,
+                    logger=logger,
+                    hide_stable_lakes=hide_stable_lakes,
                 )
-                viewer.drained_gdf = drained_gdf
-                viewer.drained_label = drained_label
-                viewer.show_main_layer = True
-        elif show_drained:
-            viewer.drained_gdf = None
-            viewer.drained_data = None
-            viewer.drained_label = drained_label
-            viewer.show_main_layer = True
 
-        # Render the map
-        selected = viewer.render()  # noqa: F841
+                if show_drained and drained_breaks is not None and not drained_breaks.empty:
+                    drained_ids = drained_breaks.index.unique().tolist()
+                    if map_backend == "pmtiles":
+                        breaks_df = drained_breaks.copy()
+                        if "date" in breaks_df.columns:
+                            breaks_df["date"] = breaks_df["date"].astype(str)
+                        viewer.drained_data = breaks_df.to_dict(orient="index")
+                        viewer.drained_label = drained_label
+                        viewer.show_main_layer = True
+                    else:
+                        drained_gdf = viewer.load_drained_gdf(drained_ids).merge(
+                            drained_breaks.reset_index(),
+                            on=id_column,
+                            how="inner",
+                        )
+                        viewer.drained_gdf = drained_gdf
+                        viewer.drained_label = drained_label
+                        viewer.show_main_layer = True
+                elif show_drained:
+                    viewer.drained_gdf = None
+                    viewer.drained_data = None
+                    viewer.drained_label = drained_label
+                    viewer.show_main_layer = True
+
+                # Render the map INSIDE the fragment
+                selected = viewer.render()
+
+                return viewer, selected
+            except Exception as e:
+                st.error(f"Error loading data: {str(e)}")
+                return None, None
+
+        viewer, selected = map_viewer_section()
 
         # Display selected features in sidebar
         st.sidebar.divider()
