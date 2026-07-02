@@ -18,6 +18,7 @@ from streamlit_folium import st_folium
 
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
+from water_timeseries.map_utils import geohash_to_human_readable_name
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
     check_dataset_availability_ds_raw,
@@ -159,6 +160,8 @@ class MapViewer:
         # Initialize session state for storing selected id_geohash
         if "selected_geohash" not in st.session_state:
             st.session_state.selected_geohash = None
+        if "selected_geohash_readable" not in st.session_state:
+            st.session_state.selected_geohash_readable = None
         if "clicked_features" not in st.session_state:
             st.session_state.clicked_features = []
 
@@ -173,6 +176,8 @@ class MapViewer:
         """
         logger.info(f"Loading GeoDataFrame from parquet: {path}")
         # Use the utility function to load the vector dataset
+
+        # TODO: perhaps with caching for performance
         gdf = load_vector_dataset(path)
 
         # Ensure the geometry column is properly set
@@ -613,6 +618,7 @@ class MapViewer:
             logger.info(f"Dropping ID {st.session_state.selected_geohash} from selection")
             del st.query_params["selected_lake"]
         st.session_state.selected_geohash = None
+        st.session_state.selected_geohash_readable = None
         st.session_state.pop("_pmtiles_last_rerun", None)
 
     def _fix_current_view(self) -> None:
@@ -1263,6 +1269,7 @@ def create_app(
                 index=default_idx,
                 label_visibility="collapsed",
                 help="Select a previously clicked lake",
+                format_func=lambda x: geohash_to_human_readable_name(x),
             )
 
             # Update selection based on dropdown choice
@@ -1281,7 +1288,7 @@ def create_app(
         # Current selection
         current = viewer.get_selected_geohash()
         if current:
-            st.sidebar.write(f"**Current selection:** {current}")
+            st.sidebar.write(f"**Current selection:** {geohash_to_human_readable_name(current)}")
 
         # Clear button
         if st.sidebar.button("Clear Selection"):
@@ -1294,7 +1301,7 @@ def create_app(
             logger.info(f"Map click event: id_geohash={current} - Opening time series section")
             st.divider()
             st.subheader(
-                f"📈 Time Series Plot of Lake: {current}",
+                f"📈 Time Series Plot of Lake: {geohash_to_human_readable_name(current)}",
                 anchor="time-series-header",
                 help="In this section time-series of surface water area are shown.",
             )

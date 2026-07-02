@@ -416,3 +416,16 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
         st.session_state[server_key] = server
 
     return server.url_for(pmtiles_path.name)
+
+
+def geohash_to_human_readable_name(geohash: str) -> str:
+    """Convert a geohash to a human-readable name."""
+    lat, lon = pygeohash.decode(geohash)
+    return f"{geohash} | {lat:.3f} : {lon:.3f}"
+
+
+def human_readable_name_to_geohash(human_readable_name: str) -> str:
+    """Convert a human-readable name to a geohash."""
+    # Extract the geohash from the human-readable name
+    geohash = human_readable_name.split(" | ")[0]
+    return geohash
