@@ -100,6 +100,7 @@ class MapViewer:
         drained_label: Optional[str] = None,
         show_main_layer: bool = True,
         viz_configuration_name: Optional[str] = "colored_historical",
+        hide_stable_lakes: bool = False,
         logger=None,
     ):
         """Initialize the MapViewer.
@@ -137,6 +138,7 @@ class MapViewer:
         self.show_main_layer = show_main_layer
         self.drained_data = None
         self.viz_configuration_name = viz_configuration_name
+        self.hide_stable_lakes = hide_stable_lakes
 
         use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
         if use_pmtiles and map_backend != "pmtiles":
@@ -223,7 +225,7 @@ class MapViewer:
         Returns:
             The selected id_geohash value if a feature was clicked, None otherwise.
         """
-        st.subheader("Interactive Map Viewer")
+        # st.subheader("Interactive Map Viewer")
 
         logger.info(f"Map Backend: {self.map_backend}")
         if self.map_backend == "pmtiles":
@@ -301,6 +303,7 @@ class MapViewer:
             drained_ids=drained_ids,
             viz_configuration_name=viz_configuration_name,
             tooltip=tooltip,
+            hide_stable_lakes=self.hide_stable_lakes,
         )
 
         # Render the map and get click data
@@ -1157,11 +1160,19 @@ def create_app(
 
     # Create map viewer
     logger.info(map_backend)
-
+    st.subheader("Interactive Map Viewer")
     try:
         if show_drained and drained_breaks is not None and st.session_state.selected_geohash is None:
             logger.info("Setting zoom level to 6")
             st.session_state.zoom_level = 6
+        if viz_configuration_name == "drainage_year":
+            hide_stable_lakes = st.toggle(
+                "Hide stable lakes",
+                value=False,
+                help="Hides lakes that have not been drained.",
+            )
+        else:
+            hide_stable_lakes = False
         viewer = MapViewer(
             parquet_path=data_path_input,
             id_column=id_column,
@@ -1173,6 +1184,7 @@ def create_app(
             pmtiles_file=pmtiles_file,
             pmtiles_url=pmtiles_url,
             logger=logger,
+            hide_stable_lakes=hide_stable_lakes,
         )
         if show_drained and drained_breaks is not None and not drained_breaks.empty:
             drained_ids = drained_breaks.index.unique().tolist()

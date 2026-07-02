@@ -22,7 +22,7 @@ def get_style_pmtiles_colored_historical() -> tuple:
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
-def get_style_pmtiles_drainage_year() -> tuple:
+def get_style_pmtiles_drainage_year(hide_stable_lakes: bool = False) -> tuple:
     fill_color = [
         "interpolate",
         ["linear"],
@@ -44,27 +44,49 @@ def get_style_pmtiles_drainage_year() -> tuple:
         0.2,
     ]
     line_color = [
-        "interpolate",
-        ["linear"],
-        ["to-number", ["get", "date_break_year"]],
-        2017,
-        "#fff5f0",
-        2021,
-        "#f46d43",
-        2025,
-        "#67000d",
-    ]
-    line_opacity = 1
-    line_width = [
         "case",
         [
             "any",
             ["==", ["to-string", ["get", "date_break_year"]], ""],
             ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
         ],
-        1,
-        3,
+        "#ADD8E6",  # default line color for stable lakes
+        [
+            "interpolate",
+            ["linear"],
+            ["to-number", ["get", "date_break_year"]],
+            2017,
+            "#fff5f0",
+            2021,
+            "#f46d43",
+            2025,
+            "#67000d",
+        ],
     ]
+    line_opacity = 1
+    # switch to disable non drained lakes (stable lakes) from being displayed on the map
+    if hide_stable_lakes:
+        line_width = [
+            "case",
+            [
+                "any",
+                ["==", ["to-string", ["get", "date_break_year"]], ""],
+                ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
+            ],
+            0,
+            3,
+        ]
+    else:
+        line_width = [
+            "case",
+            [
+                "any",
+                ["==", ["to-string", ["get", "date_break_year"]], ""],
+                ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
+            ],
+            0.6,
+            3,
+        ]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 

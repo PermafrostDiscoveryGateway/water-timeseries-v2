@@ -185,6 +185,7 @@ def build_pmtiles_map(
     tooltip=None,
     min_zoom=4,
     max_zoom=15,
+    hide_stable_lakes: bool = False,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
 
@@ -247,7 +248,9 @@ def build_pmtiles_map(
             column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
         )
         # Convert to number to handle string values in PMTiles
-        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
+        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year(
+            hide_stable_lakes=hide_stable_lakes
+        )
         legend = get_legend_html_date_drainage_year()
 
         # Use only one basemap to avoid overlap
