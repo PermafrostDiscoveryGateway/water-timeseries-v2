@@ -183,11 +183,16 @@ def build_pmtiles_map(
     drained_ids: list[str] | None = None,
     viz_configuration_name: str = "colored_historical",
     tooltip=None,
+    min_zoom=4,
+    max_zoom=15,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
+
     m = leafmap.Map(
         location=center,
-        zoom_start=zoom_start,  # lightweight basemap
+        zoom_start=zoom_start,
+        min_zoom=min_zoom,
+        max_zoom=max_zoom,
     )
     # m.clear_layers()
     # logger.info("running render pmtiles")
@@ -200,9 +205,15 @@ def build_pmtiles_map(
         transparent=True,
         overlay=False,
         layers="tcvis",
+        min_zoom=min_zoom,
+        max_zoom=max_zoom,
     )
-    tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
-    tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
+    tile_layer_darkmatter = folium.TileLayer(
+        "CartoDB.DarkMatter", name="Dark Matter (CartoDB)", min_zoom=min_zoom, max_zoom=max_zoom
+    )
+    tile_layer_esriworld = folium.TileLayer(
+        "Esri.WorldImagery", name="ESRI World Imagery", min_zoom=min_zoom, max_zoom=max_zoom
+    )
 
     if viz_configuration_name == "colored_historical" and not drained_ids:
         aliases = {
