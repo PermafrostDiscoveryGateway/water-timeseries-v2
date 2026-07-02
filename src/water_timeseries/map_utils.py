@@ -300,6 +300,40 @@ def build_pmtiles_map(
             0.5,  # Default border width
         ]
 
+    # Build layer definitions
+    lakes_fill_layer = {
+        "id": "lakes-fill",
+        "source": "lakes_pmtiles",
+        "source-layer": source_layer,
+        "type": "fill",
+        "paint": {
+            "fill-color": fill_color,
+            "fill-opacity": fill_opacity,
+        },
+    }
+    lakes_line_layer = {
+        "id": "lakes-line",
+        "source": "lakes_pmtiles",
+        "source-layer": source_layer,
+        "type": "line",
+        "paint": {
+            "line-color": line_color,
+            "line-width": line_width,
+            "line-opacity": line_opacity,
+        },
+    }
+
+    # Apply filter for drainage_year viz to hide stable lakes
+    if viz_configuration_name == "drainage_year" and hide_stable_lakes:
+        nan_filter = [
+            "all",
+            ["!=", ["get", "date_break_year"], None],
+            ["!=", ["to-string", ["get", "date_break_year"]], "NaN"],
+            ["!=", ["to-string", ["get", "date_break_year"]], ""],
+        ]
+        lakes_fill_layer["filter"] = nan_filter
+        lakes_line_layer["filter"] = nan_filter
+
     # setup PMTiles Layer
     lake_layer = PMTilesMapLibreLayer(
         pmtiles_url,
@@ -313,29 +347,7 @@ def build_pmtiles_map(
                     "url": "pmtiles://" + pmtiles_url,
                 }
             },
-            "layers": [
-                {
-                    "id": "lakes-fill",
-                    "source": "lakes_pmtiles",
-                    "source-layer": source_layer,
-                    "type": "fill",
-                    "paint": {
-                        "fill-color": fill_color,
-                        "fill-opacity": fill_opacity,
-                    },
-                },
-                {
-                    "id": "lakes-line",
-                    "source": "lakes_pmtiles",
-                    "source-layer": source_layer,
-                    "type": "line",
-                    "paint": {
-                        "line-color": line_color,
-                        "line-width": line_width,
-                        "line-opacity": line_opacity,
-                    },
-                },
-            ],
+            "layers": [lakes_fill_layer, lakes_line_layer],
         },
         tooltip=tooltip,
     )

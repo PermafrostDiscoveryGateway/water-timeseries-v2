@@ -615,6 +615,16 @@ class MapViewer:
         st.session_state.selected_geohash = None
         st.session_state.pop("_pmtiles_last_rerun", None)
 
+    def _fix_current_view(self) -> None:
+        """Fix the current map view (center and zoom) in session state.
+
+        This is useful for preserving the map view across reruns.
+        """
+        if "map_center" not in st.session_state:
+            st.session_state.map_center = self.map_center or {"lat": 66.5, "lon": -164.1}
+        if "zoom_level" not in st.session_state:
+            st.session_state.zoom_level = self.zoom
+
 
 def _sanitize_geojson_properties(gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """Convert non-JSON-serializable values (e.g., Timestamp) to strings."""
@@ -1171,6 +1181,7 @@ def create_app(
                 value=False,
                 help="Hides lakes that have not been drained.",
             )
+
         else:
             hide_stable_lakes = False
         viewer = MapViewer(
