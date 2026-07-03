@@ -662,6 +662,7 @@ def _render_drain_heatmap(
     precomputed_counts: pd.DataFrame,
     precomputed_breaks: Optional[pd.DataFrame],
     container=None,
+    selected_month: str=None, #'YYYY-MM'
 ) -> None:
     """Render an interactive month × year heatmap of drained lake counts.
 
@@ -708,7 +709,7 @@ def _render_drain_heatmap(
             scatter_text.append(str(count) if count > 0 else "")
 
     fig = go.Figure()
-
+    
     # Layer 1: heatmap for colour fill and axis labels
     fig.add_trace(
         go.Heatmap(
@@ -753,6 +754,27 @@ def _render_drain_heatmap(
         margin=dict(l=40, r=40, t=10, b=30),
         plot_bgcolor="rgba(0,0,0,0)",
     )
+
+    # highlighting of month
+    if selected_month:
+        target_year, target_month_num = selected_month.split("-")
+        if int(target_month_num) in months_in_data and int(target_year) in years:
+            x_index = months_in_data.index(int(target_month_num))
+            y_index = years.index(int(target_year))
+            fig.add_shape(
+                    type="rect",
+                    xref="x",
+                    yref="y",
+                    # -0.5 and +0.5 offsets expand the shape from the center index to the cell boundaries
+                    x0=x_index - 0.5,
+                    x1=x_index + 0.5,
+                    y0=y_index - 0.5,
+                    y1=y_index + 0.5,
+                    line=dict(color="orange", width=2),
+                    fillcolor="rgba(0,0,0,0)",  # Keep it fully transparent inside
+                )
+        else:
+            logger.warning(f"Selected month {selected_month} not found in heatmap data.")
 
     # Key is versioned so that incrementing it remounts the widget with no selection state
     heatmap_key = f"drain_heatmap_{st.session_state.get('heatmap_version', 0)}"
@@ -1117,6 +1139,7 @@ def create_app(
             if not available_months:
                 st.sidebar.warning("Pre-computed NRT files are empty.")
             else:
+                selectable_months = available_months
                 # Build a counts lookup so we can annotate each month with its drain count
                 counts_lookup: dict = {}
                 if precomputed_counts is not None and "drained_lake_count" in precomputed_counts.columns:
@@ -1126,23 +1149,21 @@ def create_app(
                             precomputed_counts["drained_lake_count"],
                         )
                     )
-
-                # Heatmap in sidebar – click a cell to pre-select the month dropdown
-                _render_drain_heatmap(precomputed_counts, precomputed_breaks, container=st.sidebar)
-
-                selectable_months = available_months
-
                 # Build display labels that include the drain count
                 def _month_label(m: str) -> str:
                     n = counts_lookup.get(m, 0)
                     return f"{m}  ·  {n} drained" if n != 1 else f"{m}  ·  1 drained"
 
                 month_labels = [_month_label(m) for m in selectable_months]
-
-                # Initialize session state for the selectbox so it defaults to the last month
+                                # Initialize session state for the selectbox so it defaults to the last month
                 if "nrt_month_selector" not in st.session_state:
                     st.session_state["nrt_month_selector"] = month_labels[-1]
+                if "heatmap_selected_cell" not in st.session_state:
+                    st.session_state["heatmap_selected_cell"] = selectable_months[-1]
 
+
+                # Heatmap in sidebar – click a cell to pre-select the month dropdown
+                _render_drain_heatmap(precomputed_counts, precomputed_breaks, container=st.sidebar, selected_month=st.session_state.get("heatmap_selected_cell", None))
                 # Sync dropdown with heatmap click: consume the one-shot flag and write
                 # directly to the selectbox session-state key so Streamlit picks it up.
                 heatmap_pick = st.session_state.get("heatmap_selected_cell")
@@ -1172,7 +1193,7 @@ def create_app(
                     else:
                         pass  # caption shown via annotated label above
                 else:
-                    st.sidebar.caption(f"No per-lake break data available for {drained_label}")
+                    st.sidebar.caption(f"No per-lake break data available for {selected_analysis_month}")
 
     # Create map viewer
     logger.info(map_backend)
