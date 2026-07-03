@@ -1172,15 +1172,16 @@ def create_app(
                     if heatmap_pick and heatmap_pick in selectable_months:
                         st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
 
-                selected_label = st.sidebar.selectbox(
-                    "NRT analysis month",
-                    month_labels,
-                    key="nrt_month_selector",
-                    help="Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
-                )
+                # selected_label = st.sidebar.selectbox(
+                #     "NRT analysis month",
+                #     month_labels,
+                #     key="nrt_month_selector",
+                #     help="Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
+                # )
                 # Map label back to raw month string
-                selected_analysis_month = selectable_months[month_labels.index(selected_label)]
-                drained_label = selected_analysis_month
+                # selected_analysis_month = selectable_months[month_labels.index(selected_label)]
+                # drained_label = selected_analysis_month
+                selected_analysis_month = heatmap_pick
 
                 if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
                     month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
