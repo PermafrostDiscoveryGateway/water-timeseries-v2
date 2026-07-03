@@ -797,6 +797,7 @@ def _render_drain_heatmap(
         st.session_state["heatmap_selected_cell"] = selected_analysis_month
         if selected_analysis_month != prev_cell:
             st.session_state["heatmap_sync_dropdown"] = True
+            st.rerun()
     selected_analysis_month = st.session_state.get("heatmap_selected_cell")
 
     if selected_analysis_month:
