@@ -836,10 +836,17 @@ def _render_drain_heatmap(
                 ]
                 df_show = month_breaks[display_cols].reset_index(drop=True)
                 if "water_change_ha" in month_breaks.columns:
-                    df_show.sort_values("water_change_ha", ascending=True, inplace=True)
+                    df_show = df_show.sort_values("water_change_ha", ascending=True).rename(columns={
+                        "water_change_ha": "Water Change [ha]",
+                        "water_change_perc": "Water Change [%]"
+                    })
                 elif "water_residual" in month_breaks.columns:
-                    df_show.sort_values("water_residual", ascending=True, inplace=True)
-                c.dataframe(df_show, use_container_width=True)
+                    df_show = df_show.sort_values("water_residual", ascending=True).rename(columns={"water_residual": "Water Residual [%]"})
+                # reset index to start rank
+                df_show.reset_index(drop=True, inplace=True)
+                df_show.index += 1
+                # show df
+                c.dataframe(df_show.rename(columns={'id_geohash': 'Lake ID'}), width='content')
 
         if c.button("✖ Clear selection", key="clear_heatmap_sel"):
             st.session_state.pop("heatmap_selected_cell", None)
