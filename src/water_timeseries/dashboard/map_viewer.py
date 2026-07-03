@@ -287,13 +287,15 @@ class MapViewer:
         pmtiles_url = resolve_pmtiles_url(pmtiles_source)
         logger.info(f"PMTiles url: {pmtiles_url}")
 
-        # Determine center of map (lat, lon)
-        if self.map_center is None:
-            center = [66.5, -164.1]  # Default fallback center
-            logger.info("Using default map center")
-        else:
-            center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
-            logger.info(f"Using provided map center: lat={center[0]}, lon={center[1]}")
+        # # Determine center of map (lat, lon)
+        # if self.map_center is None:
+        #     center = [66.5, -164.1]  # Default fallback center
+        #     logger.info("Using default map center")
+        # else:
+        #     center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
+        #     logger.info(f"Using provided map center: lat={center[0]}, lon={center[1]}")
+        center = [self.map_center.get("lat", 65.5), self.map_center.get("lon", -164.1)]
+        logger.info(f"Using provided map center: lat={center[0]}, lon={center[1]}")
 
         drained_ids = None
         if getattr(self, "drained_data", None) is not None:
@@ -616,9 +618,9 @@ class MapViewer:
         """
         if "selected_lake" in st.query_params.keys():
             logger.info(f"Dropping ID {st.session_state.selected_geohash} from selection")
-            del st.query_params["selected_lake"]
-        st.session_state.selected_geohash = None
-        st.session_state.selected_geohash_readable = None
+            st.query_params.pop("selected_lake", None)
+        st.session_state.pop("selected_geohash", None)
+        st.session_state.pop("selected_geohash_readable", None)
         st.session_state.pop("_pmtiles_last_rerun", None)
 
     def _fix_current_view(self) -> None:
@@ -836,21 +838,33 @@ def _render_drain_heatmap(
                 ]
                 df_show = month_breaks[display_cols].reset_index(drop=True)
                 if "water_change_ha" in month_breaks.columns:
-                    df_show = df_show.sort_values("water_change_ha", ascending=True).rename(columns={
-                        "water_change_ha": "Water Change [ha]",
-                        "water_change_perc": "Water Change [%]"
-                    })
+                    df_show = df_show.sort_values("water_change_ha", ascending=True).rename(
+                        columns={"water_change_ha": "Water Change [ha]", "water_change_perc": "Water Change [%]"}
+                    )
                 elif "water_residual" in month_breaks.columns:
-                    df_show = df_show.sort_values("water_residual", ascending=True).rename(columns={"water_residual": "Water Residual [%]"})
+                    df_show = df_show.sort_values("water_residual", ascending=True).rename(
+                        columns={"water_residual": "Water Residual [%]"}
+                    )
                 # reset index to start rank
                 df_show.reset_index(drop=True, inplace=True)
                 df_show.index += 1
                 # show df
-                dataframe_selection = c.dataframe(df_show.rename(columns={'id_geohash': 'Lake ID'}), width='content', on_select="rerun", selection_mode="single-row")
+                dataframe_selection = c.dataframe(
+                    df_show.rename(columns={"id_geohash": "Lake ID"}),
+                    width="content",
+                    on_select="rerun",
+                    selection_mode="single-row",
+                )
                 if dataframe_selection:
-                    selection_row_index = dataframe_selection['selection']['rows'][0] if dataframe_selection['selection']['rows'] else None
-                    drained_id = df_show.iloc[selection_row_index]['id_geohash'] if selection_row_index is not None else None
-                    
+                    selection_row_index = (
+                        dataframe_selection["selection"]["rows"][0]
+                        if dataframe_selection["selection"]["rows"]
+                        else None
+                    )
+                    drained_id = (
+                        df_show.iloc[selection_row_index]["id_geohash"] if selection_row_index is not None else None
+                    )
+
                     # extract the lake id and set params
                     if drained_id:
                         logger.info(f"Selected row from heatmap table: {dataframe_selection}")
@@ -859,12 +873,14 @@ def _render_drain_heatmap(
                         st.session_state.clicked_features.append(drained_id)
                         st.query_params["selected_lake"] = drained_id
 
-        if c.button("✖ Clear selection", key="clear_heatmap_sel"):
-            st.session_state.pop("heatmap_selected_cell", None)
-            st.session_state.pop("heatmap_sync_dropdown", None)
-            # Bump version so the chart remounts with no internal selection state
-            st.session_state["heatmap_version"] = st.session_state.get("heatmap_version", 0) + 1
-            st.rerun()
+        # dummy deactivate clear selection button
+        if False:
+            if c.button("✖ Clear selection", key="clear_heatmap_sel"):
+                st.session_state.pop("heatmap_selected_cell", None)
+                st.session_state.pop("heatmap_sync_dropdown", None)
+                # Bump version so the chart remounts with no internal selection state
+                st.session_state["heatmap_version"] = st.session_state.get("heatmap_version", 0) + 1
+                st.rerun()
 
 
 def _load_precomputed_nrt(
@@ -1038,6 +1054,22 @@ def create_app(
         pmtiles_file: Path to a ``.pmtiles`` archive (enables fast vector-tile map).
         pmtiles_url: HTTP(S) URL to a hosted ``.pmtiles`` file (e.g. on S3).
     """
+
+    def _set_center_to_selected():
+        """Set the map center to the selected lake's centroid if available."""
+        selected_option = st.session_state.get("selected_geohash")
+        clicked_lat, clicked_lon = pygeohash.decode(selected_option)
+        logger.info(
+            f"Setting center map to match lake id: {selected_option} at location ({clicked_lat}, {clicked_lon})"
+        )
+        st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
+        st.session_state.zoom_level = 12
+
+    def _clear_selection():
+        st.session_state.pop("selected_geohash", None)
+        st.query_params.pop("selected_lake", None)
+        st.rerun()
+
     # Disable/Enable JRC data. True to disable
     st.session_state.disable_jrc = True
     if st.session_state.disable_jrc:
@@ -1047,6 +1079,10 @@ def create_app(
     st.session_state.disable_popup_plot = True
     if st.session_state.disable_popup_plot:
         logger.warning("Plot popup disabled!")
+
+    # check if there is a selected lake and jump to it if available
+    if st.session_state.get("selected_geohash", None):
+        _set_center_to_selected()
 
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
@@ -1218,7 +1254,7 @@ def create_app(
                             month_slice.set_index("id_geohash") if "id_geohash" in month_slice.columns else month_slice
                         )
                         # st.session_state.selected_geohash = None
-                        st.session_state.zoom_level = 6
+                        # st.session_state.zoom_level = 6
                     else:
                         pass  # caption shown via annotated label above
                 else:
@@ -1330,7 +1366,6 @@ def create_app(
                 clicked_lat, clicked_lon = pygeohash.decode(selected_option)
                 st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
                 st.session_state.zoom_level = 12
-
                 st.rerun()
         else:
             st.sidebar.info("No features clicked yet. Click on a feature to select it.")
@@ -1338,13 +1373,18 @@ def create_app(
         # Current selection
         current = viewer.get_selected_geohash()
         if current:
-            st.sidebar.write(f"**Current selection:** {geohash_to_human_readable_name(current)}")
+            st.sidebar.write(
+                f"**Current selection:** {geohash_to_human_readable_name(st.session_state.get('selected_geohash'))}"
+            )
 
-        # Clear button
-        if st.sidebar.button("Clear Selection"):
-            viewer.clear_selection()
-            current = None
-            st.rerun()
+        # Dummy deactivate Button
+        if False:
+            # Clear button
+            if st.sidebar.button("Clear Selection"):
+                # _clear_selection()
+                viewer.clear_selection()
+                current = None
+                st.rerun()
 
         # Time Series Plot Section
         if current:
