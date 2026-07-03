@@ -29,9 +29,9 @@ from water_timeseries.utils.dashboard import (
     plot_time_series_data,
 )
 from water_timeseries.utils.earthengine import (
+    cached_visualize_cube,
     get_rioxarray_ds_from_lake,
     initialize_earth_engine,
-    visualize_s2_xee_cube,
 )
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.map_styling import (
@@ -1652,7 +1652,7 @@ def create_app(
                         start_date="2016-06-01",
                         end_date=today.strftime("%Y-%m-%d"),
                     )
-                    fig = visualize_s2_xee_cube(ds, dates=viz_dates)
+                    fig = cached_visualize_cube(ds, dates=viz_dates, style="rgb")
                     # plot figure
                     st.pyplot(fig, width="content")
                     logger.info("Loaded Satellite image previews finished")
