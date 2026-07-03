@@ -287,13 +287,15 @@ class MapViewer:
         pmtiles_url = resolve_pmtiles_url(pmtiles_source)
         logger.info(f"PMTiles url: {pmtiles_url}")
 
-        # Determine center of map (lat, lon)
-        if self.map_center is None:
-            center = [66.5, -164.1]  # Default fallback center
-            logger.info("Using default map center")
-        else:
-            center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
-            logger.info(f"Using provided map center: lat={center[0]}, lon={center[1]}")
+        # # Determine center of map (lat, lon)
+        # if self.map_center is None:
+        #     center = [66.5, -164.1]  # Default fallback center
+        #     logger.info("Using default map center")
+        # else:
+        #     center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
+        #     logger.info(f"Using provided map center: lat={center[0]}, lon={center[1]}")
+        center = [self.map_center.get("lat", 65.5), self.map_center.get("lon", -164.1)]
+        logger.info(f"Using provided map center: lat={center[0]}, lon={center[1]}")
 
         drained_ids = None
         if getattr(self, "drained_data", None) is not None:
@@ -616,9 +618,9 @@ class MapViewer:
         """
         if "selected_lake" in st.query_params.keys():
             logger.info(f"Dropping ID {st.session_state.selected_geohash} from selection")
-            del st.query_params["selected_lake"]
-        st.session_state.selected_geohash = None
-        st.session_state.selected_geohash_readable = None
+            st.query_params.pop("selected_lake", None)
+        st.session_state.pop("selected_geohash", None)
+        st.session_state.pop("selected_geohash_readable", None)
         st.session_state.pop("_pmtiles_last_rerun", None)
 
     def _fix_current_view(self) -> None:
@@ -662,6 +664,7 @@ def _render_drain_heatmap(
     precomputed_counts: pd.DataFrame,
     precomputed_breaks: Optional[pd.DataFrame],
     container=None,
+    selected_month: str = None,  #'YYYY-MM'
 ) -> None:
     """Render an interactive month × year heatmap of drained lake counts.
 
@@ -752,11 +755,36 @@ def _render_drain_heatmap(
         height=max(200, len(years) * 28 + 80),
         margin=dict(l=40, r=40, t=10, b=30),
         plot_bgcolor="rgba(0,0,0,0)",
+        dragmode=False,
+        # modebar=dict(remove=["toImage", "sendDataToCloud", "editInChartStudio", "hoverCompare", "hoverClosest", "toggleSpikelines", "autoScale2d", "resetScale2d", "zoomIn2d", "zoomOut2d", "pan2d", "select2d", "lasso2d"]),
     )
+
+    # highlighting of month
+    if selected_month:
+        target_year, target_month_num = selected_month.split("-")
+        if int(target_month_num) in months_in_data and int(target_year) in years:
+            x_index = months_in_data.index(int(target_month_num))
+            y_index = years.index(int(target_year))
+            fig.add_shape(
+                type="rect",
+                xref="x",
+                yref="y",
+                # -0.5 and +0.5 offsets expand the shape from the center index to the cell boundaries
+                x0=x_index - 0.5,
+                x1=x_index + 0.5,
+                y0=y_index - 0.5,
+                y1=y_index + 0.5,
+                line=dict(color="orange", width=2),
+                fillcolor="rgba(0,0,0,0)",  # Keep it fully transparent inside
+            )
+        else:
+            logger.warning(f"Selected month {selected_month} not found in heatmap data.")
 
     # Key is versioned so that incrementing it remounts the widget with no selection state
     heatmap_key = f"drain_heatmap_{st.session_state.get('heatmap_version', 0)}"
-    event = c.plotly_chart(fig, use_container_width=True, on_select="rerun", key=heatmap_key)
+    event = c.plotly_chart(
+        fig, use_container_width=True, on_select="rerun", key=heatmap_key, config={"displayModeBar": False}
+    )
 
     # Decode click – scatter overlay points carry analysis_month in customdata
     selected_analysis_month: Optional[str] = None
@@ -775,6 +803,7 @@ def _render_drain_heatmap(
         st.session_state["heatmap_selected_cell"] = selected_analysis_month
         if selected_analysis_month != prev_cell:
             st.session_state["heatmap_sync_dropdown"] = True
+            st.rerun()
     selected_analysis_month = st.session_state.get("heatmap_selected_cell")
 
     if selected_analysis_month:
@@ -809,17 +838,49 @@ def _render_drain_heatmap(
                 ]
                 df_show = month_breaks[display_cols].reset_index(drop=True)
                 if "water_change_ha" in month_breaks.columns:
-                    df_show.sort_values("water_change_ha", ascending=True, inplace=True)
+                    df_show = df_show.sort_values("water_change_ha", ascending=True).rename(
+                        columns={"water_change_ha": "Water Change [ha]", "water_change_perc": "Water Change [%]"}
+                    )
                 elif "water_residual" in month_breaks.columns:
-                    df_show.sort_values("water_residual", ascending=True, inplace=True)
-                c.dataframe(df_show, use_container_width=True)
+                    df_show = df_show.sort_values("water_residual", ascending=True).rename(
+                        columns={"water_residual": "Water Residual [%]"}
+                    )
+                # reset index to start rank
+                df_show.reset_index(drop=True, inplace=True)
+                df_show.index += 1
+                # show df
+                dataframe_selection = c.dataframe(
+                    df_show.rename(columns={"id_geohash": "Lake ID"}),
+                    width="content",
+                    on_select="rerun",
+                    selection_mode="single-row",
+                )
+                if dataframe_selection:
+                    selection_row_index = (
+                        dataframe_selection["selection"]["rows"][0]
+                        if dataframe_selection["selection"]["rows"]
+                        else None
+                    )
+                    drained_id = (
+                        df_show.iloc[selection_row_index]["id_geohash"] if selection_row_index is not None else None
+                    )
 
-        if c.button("✖ Clear selection", key="clear_heatmap_sel"):
-            st.session_state.pop("heatmap_selected_cell", None)
-            st.session_state.pop("heatmap_sync_dropdown", None)
-            # Bump version so the chart remounts with no internal selection state
-            st.session_state["heatmap_version"] = st.session_state.get("heatmap_version", 0) + 1
-            st.rerun()
+                    # extract the lake id and set params
+                    if drained_id:
+                        logger.info(f"Selected row from heatmap table: {dataframe_selection}")
+                        logger.info(f"Selected Lake ID: {drained_id}. Jumping to selected lake!")
+                        st.session_state.selected_geohash = drained_id
+                        st.session_state.clicked_features.append(drained_id)
+                        st.query_params["selected_lake"] = drained_id
+
+        # dummy deactivate clear selection button
+        if False:
+            if c.button("✖ Clear selection", key="clear_heatmap_sel"):
+                st.session_state.pop("heatmap_selected_cell", None)
+                st.session_state.pop("heatmap_sync_dropdown", None)
+                # Bump version so the chart remounts with no internal selection state
+                st.session_state["heatmap_version"] = st.session_state.get("heatmap_version", 0) + 1
+                st.rerun()
 
 
 def _load_precomputed_nrt(
@@ -993,6 +1054,22 @@ def create_app(
         pmtiles_file: Path to a ``.pmtiles`` archive (enables fast vector-tile map).
         pmtiles_url: HTTP(S) URL to a hosted ``.pmtiles`` file (e.g. on S3).
     """
+
+    def _set_center_to_selected():
+        """Set the map center to the selected lake's centroid if available."""
+        selected_option = st.session_state.get("selected_geohash")
+        clicked_lat, clicked_lon = pygeohash.decode(selected_option)
+        logger.info(
+            f"Setting center map to match lake id: {selected_option} at location ({clicked_lat}, {clicked_lon})"
+        )
+        st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
+        st.session_state.zoom_level = 12
+
+    def _clear_selection():
+        st.session_state.pop("selected_geohash", None)
+        st.query_params.pop("selected_lake", None)
+        st.rerun()
+
     # Disable/Enable JRC data. True to disable
     st.session_state.disable_jrc = True
     if st.session_state.disable_jrc:
@@ -1002,6 +1079,10 @@ def create_app(
     st.session_state.disable_popup_plot = True
     if st.session_state.disable_popup_plot:
         logger.warning("Plot popup disabled!")
+
+    # check if there is a selected lake and jump to it if available
+    if st.session_state.get("selected_geohash", None):
+        _set_center_to_selected()
 
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
@@ -1117,6 +1198,7 @@ def create_app(
             if not available_months:
                 st.sidebar.warning("Pre-computed NRT files are empty.")
             else:
+                selectable_months = available_months
                 # Build a counts lookup so we can annotate each month with its drain count
                 counts_lookup: dict = {}
                 if precomputed_counts is not None and "drained_lake_count" in precomputed_counts.columns:
@@ -1127,22 +1209,25 @@ def create_app(
                         )
                     )
 
-                # Heatmap in sidebar – click a cell to pre-select the month dropdown
-                _render_drain_heatmap(precomputed_counts, precomputed_breaks, container=st.sidebar)
-
-                selectable_months = available_months
-
                 # Build display labels that include the drain count
                 def _month_label(m: str) -> str:
                     n = counts_lookup.get(m, 0)
                     return f"{m}  ·  {n} drained" if n != 1 else f"{m}  ·  1 drained"
 
                 month_labels = [_month_label(m) for m in selectable_months]
-
                 # Initialize session state for the selectbox so it defaults to the last month
                 if "nrt_month_selector" not in st.session_state:
                     st.session_state["nrt_month_selector"] = month_labels[-1]
+                if "heatmap_selected_cell" not in st.session_state:
+                    st.session_state["heatmap_selected_cell"] = selectable_months[-1]
 
+                # Heatmap in sidebar – click a cell to pre-select the month dropdown
+                _render_drain_heatmap(
+                    precomputed_counts,
+                    precomputed_breaks,
+                    container=st.sidebar,
+                    selected_month=st.session_state.get("heatmap_selected_cell", None),
+                )
                 # Sync dropdown with heatmap click: consume the one-shot flag and write
                 # directly to the selectbox session-state key so Streamlit picks it up.
                 heatmap_pick = st.session_state.get("heatmap_selected_cell")
@@ -1150,15 +1235,16 @@ def create_app(
                     if heatmap_pick and heatmap_pick in selectable_months:
                         st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
 
-                selected_label = st.sidebar.selectbox(
-                    "NRT analysis month",
-                    month_labels,
-                    key="nrt_month_selector",
-                    help="Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
-                )
+                # selected_label = st.sidebar.selectbox(
+                #     "NRT analysis month",
+                #     month_labels,
+                #     key="nrt_month_selector",
+                #     help="Select a month to view pre-computed drained lakes. Count shows lakes with water_residual < -0.25.",
+                # )
                 # Map label back to raw month string
-                selected_analysis_month = selectable_months[month_labels.index(selected_label)]
-                drained_label = selected_analysis_month
+                # selected_analysis_month = selectable_months[month_labels.index(selected_label)]
+                # drained_label = selected_analysis_month
+                selected_analysis_month = heatmap_pick
 
                 if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
                     month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
@@ -1168,11 +1254,11 @@ def create_app(
                             month_slice.set_index("id_geohash") if "id_geohash" in month_slice.columns else month_slice
                         )
                         # st.session_state.selected_geohash = None
-                        st.session_state.zoom_level = 6
+                        # st.session_state.zoom_level = 6
                     else:
                         pass  # caption shown via annotated label above
                 else:
-                    st.sidebar.caption(f"No per-lake break data available for {drained_label}")
+                    st.sidebar.caption(f"No per-lake break data available for {selected_analysis_month}")
 
     # Create map viewer
     logger.info(map_backend)
@@ -1280,7 +1366,6 @@ def create_app(
                 clicked_lat, clicked_lon = pygeohash.decode(selected_option)
                 st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
                 st.session_state.zoom_level = 12
-
                 st.rerun()
         else:
             st.sidebar.info("No features clicked yet. Click on a feature to select it.")
@@ -1288,13 +1373,18 @@ def create_app(
         # Current selection
         current = viewer.get_selected_geohash()
         if current:
-            st.sidebar.write(f"**Current selection:** {geohash_to_human_readable_name(current)}")
+            st.sidebar.write(
+                f"**Current selection:** {geohash_to_human_readable_name(st.session_state.get('selected_geohash'))}"
+            )
 
-        # Clear button
-        if st.sidebar.button("Clear Selection"):
-            viewer.clear_selection()
-            current = None
-            st.rerun()
+        # Dummy deactivate Button
+        if False:
+            # Clear button
+            if st.sidebar.button("Clear Selection"):
+                # _clear_selection()
+                viewer.clear_selection()
+                current = None
+                st.rerun()
 
         # Time Series Plot Section
         if current:
