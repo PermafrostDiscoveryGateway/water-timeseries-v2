@@ -662,7 +662,7 @@ def _render_drain_heatmap(
     precomputed_counts: pd.DataFrame,
     precomputed_breaks: Optional[pd.DataFrame],
     container=None,
-    selected_month: str=None, #'YYYY-MM'
+    selected_month: str = None,  #'YYYY-MM'
 ) -> None:
     """Render an interactive month × year heatmap of drained lake counts.
 
@@ -709,7 +709,7 @@ def _render_drain_heatmap(
             scatter_text.append(str(count) if count > 0 else "")
 
     fig = go.Figure()
-    
+
     # Layer 1: heatmap for colour fill and axis labels
     fig.add_trace(
         go.Heatmap(
@@ -753,6 +753,8 @@ def _render_drain_heatmap(
         height=max(200, len(years) * 28 + 80),
         margin=dict(l=40, r=40, t=10, b=30),
         plot_bgcolor="rgba(0,0,0,0)",
+        dragmode=False,
+        # modebar=dict(remove=["toImage", "sendDataToCloud", "editInChartStudio", "hoverCompare", "hoverClosest", "toggleSpikelines", "autoScale2d", "resetScale2d", "zoomIn2d", "zoomOut2d", "pan2d", "select2d", "lasso2d"]),
     )
 
     # highlighting of month
@@ -762,23 +764,25 @@ def _render_drain_heatmap(
             x_index = months_in_data.index(int(target_month_num))
             y_index = years.index(int(target_year))
             fig.add_shape(
-                    type="rect",
-                    xref="x",
-                    yref="y",
-                    # -0.5 and +0.5 offsets expand the shape from the center index to the cell boundaries
-                    x0=x_index - 0.5,
-                    x1=x_index + 0.5,
-                    y0=y_index - 0.5,
-                    y1=y_index + 0.5,
-                    line=dict(color="orange", width=2),
-                    fillcolor="rgba(0,0,0,0)",  # Keep it fully transparent inside
-                )
+                type="rect",
+                xref="x",
+                yref="y",
+                # -0.5 and +0.5 offsets expand the shape from the center index to the cell boundaries
+                x0=x_index - 0.5,
+                x1=x_index + 0.5,
+                y0=y_index - 0.5,
+                y1=y_index + 0.5,
+                line=dict(color="orange", width=2),
+                fillcolor="rgba(0,0,0,0)",  # Keep it fully transparent inside
+            )
         else:
             logger.warning(f"Selected month {selected_month} not found in heatmap data.")
 
     # Key is versioned so that incrementing it remounts the widget with no selection state
     heatmap_key = f"drain_heatmap_{st.session_state.get('heatmap_version', 0)}"
-    event = c.plotly_chart(fig, use_container_width=True, on_select="rerun", key=heatmap_key)
+    event = c.plotly_chart(
+        fig, use_container_width=True, on_select="rerun", key=heatmap_key, config={"displayModeBar": False}
+    )
 
     # Decode click – scatter overlay points carry analysis_month in customdata
     selected_analysis_month: Optional[str] = None
@@ -1150,21 +1154,26 @@ def create_app(
                             precomputed_counts["drained_lake_count"],
                         )
                     )
+
                 # Build display labels that include the drain count
                 def _month_label(m: str) -> str:
                     n = counts_lookup.get(m, 0)
                     return f"{m}  ·  {n} drained" if n != 1 else f"{m}  ·  1 drained"
 
                 month_labels = [_month_label(m) for m in selectable_months]
-                                # Initialize session state for the selectbox so it defaults to the last month
+                # Initialize session state for the selectbox so it defaults to the last month
                 if "nrt_month_selector" not in st.session_state:
                     st.session_state["nrt_month_selector"] = month_labels[-1]
                 if "heatmap_selected_cell" not in st.session_state:
                     st.session_state["heatmap_selected_cell"] = selectable_months[-1]
 
-
                 # Heatmap in sidebar – click a cell to pre-select the month dropdown
-                _render_drain_heatmap(precomputed_counts, precomputed_breaks, container=st.sidebar, selected_month=st.session_state.get("heatmap_selected_cell", None))
+                _render_drain_heatmap(
+                    precomputed_counts,
+                    precomputed_breaks,
+                    container=st.sidebar,
+                    selected_month=st.session_state.get("heatmap_selected_cell", None),
+                )
                 # Sync dropdown with heatmap click: consume the one-shot flag and write
                 # directly to the selectbox session-state key so Streamlit picks it up.
                 heatmap_pick = st.session_state.get("heatmap_selected_cell")
