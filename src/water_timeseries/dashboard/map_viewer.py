@@ -846,7 +846,18 @@ def _render_drain_heatmap(
                 df_show.reset_index(drop=True, inplace=True)
                 df_show.index += 1
                 # show df
-                c.dataframe(df_show.rename(columns={'id_geohash': 'Lake ID'}), width='content')
+                dataframe_selection = c.dataframe(df_show.rename(columns={'id_geohash': 'Lake ID'}), width='content', on_select="rerun", selection_mode="single-row")
+                if dataframe_selection:
+                    selection_row_index = dataframe_selection['selection']['rows'][0] if dataframe_selection['selection']['rows'] else None
+                    drained_id = df_show.iloc[selection_row_index]['id_geohash'] if selection_row_index is not None else None
+                    
+                    # extract the lake id and set params
+                    if drained_id:
+                        logger.info(f"Selected row from heatmap table: {dataframe_selection}")
+                        logger.info(f"Selected Lake ID: {drained_id}. Jumping to selected lake!")
+                        st.session_state.selected_geohash = drained_id
+                        st.session_state.clicked_features.append(drained_id)
+                        st.query_params["selected_lake"] = drained_id
 
         if c.button("✖ Clear selection", key="clear_heatmap_sel"):
             st.session_state.pop("heatmap_selected_cell", None)
