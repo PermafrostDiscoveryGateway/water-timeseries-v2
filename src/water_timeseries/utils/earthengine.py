@@ -975,14 +975,18 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: List[str], style: str = "rgb") 
     fig, axes = plt.subplots(ncols=len(dates))
     i = 0
     for date in dates:
+        date_string = date.strftime("%Y-%m-%d") if isinstance(date, datetime) else str(date)
         ax = axes[i]
-        ds_rio = ds.sel(time=date, method="nearest")  # .rio.write_crs("EPSG:32604")
+        # check initial date and extract nearest date
+        ds_init = ds.sel(time=date, method="nearest")  # .rio.write_crs("EPSG:32604")
+        # check if there are more images for the same date and pull all from the date
+        ds_rio = ds.sel(time=ds_init.time.dt.date.astype(str))
         if style == "rgb":
-            (ds_rio[["B4", "B3", "B2"]].to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
+            (ds_rio[["B4", "B3", "B2"]].median(dim="time", skipna=True).to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
         else:
-            (ds_rio[["B8", "B4", "B3"]].to_array() / 3000).clip(0, 1).plot.imshow(ax=ax)
+            (ds_rio[["B8", "B4", "B3"]].median(dim="time", skipna=True).to_array() / 3000).clip(0, 1).plot.imshow(ax=ax)
         ax.set_aspect("equal")
-        ax.set_title(str(ds_rio.time.dt.strftime("%Y-%m-%d").data))
+        ax.set_title(date_string)
         ax.set_ylabel("")
         ax.set_xlabel("")
         ax.set_xticklabels([])
