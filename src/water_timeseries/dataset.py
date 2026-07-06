@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Optional
 import geopandas as gpd
 import matplotlib.pyplot as plt
 import pandas as pd
+import plotly.graph_objects as go
 import xarray as xr
 
 from water_timeseries.utils.data import dw_bandnames, jrc_bandnames
@@ -432,7 +433,8 @@ class DWDataset(LakeDataset):
 
         Creates a static matplotlib figure showing the Dynamic World land cover
         time series for a single lake/location, with an optional vertical line
-        indicating a breakpoint or specific date.
+        indicating a breakpoint or specific date. The figure includes a 'Breakpoint'
+        entry in the legend when a breakpoint is provided.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
@@ -486,19 +488,36 @@ class DWDataset(LakeDataset):
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
         save_path: Optional[str | Path] = None,
-    ):
+    ) -> go.Figure:
         """Plot the interactive time series for a specific geohash using Plotly.
+
+        Creates an interactive Plotly figure showing the Dynamic World land cover
+        time series for a single lake/location, with an optional vertical line
+        indicating a breakpoint or specific date. Includes a 'Breakpoint' entry in
+        the legend when a breakpoint is provided.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod | pd.Timestamp | str | list, optional):
                 Breakpoint detection method to use, or a single date (pd.Timestamp or
                 string in YYYY-MM-DD format), or a list of dates. If a list is provided,
-                only the first date is used for plotting.
+                only the first date is used for plotting. When a BreakpointMethod is
+                passed, the first detected breakpoint date is used.
             save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
-            plotly.graph_objects.Figure: Interactive Plotly figure.
+            go.Figure: Interactive Plotly figure. Includes a 'Breakpoint' entry in the
+                legend when a breakpoint is provided.
+
+        Example:
+            >>> # Plot with automatic breakpoint detection
+            >>> fig = dw_dataset.plot_timeseries_interactive(id_geohash="abc123", breakpoints=bp_method)
+
+            >>> # Plot with a specific date
+            >>> fig = dw_dataset.plot_timeseries_interactive(id_geohash="abc123", breakpoints="2023-06-15")
+
+            >>> # Save the plot to an HTML file
+            >>> fig = dw_dataset.plot_timeseries_interactive(id_geohash="abc123", save_path="plot.html")
         """
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna()
         df_plot = prepare_data_for_plot_dw(df, group_vegetation=True)
@@ -645,9 +664,10 @@ class JRCDataset(LakeDataset):
     ) -> plt.Figure:
         """Plot the time series for a specific geohash using matplotlib.
 
-        Creates a static matplotlib figure showing the Dynamic World land cover
+        Creates a static matplotlib figure showing the JRC water classification
         time series for a single lake/location, with an optional vertical line
-        indicating a breakpoint or specific date.
+        indicating a breakpoint or specific date. The figure includes a 'Breakpoint'
+        entry in the legend when a breakpoint is provided.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
@@ -664,24 +684,25 @@ class JRCDataset(LakeDataset):
 
         Example:
             >>> # Plot with automatic breakpoint detection
-            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", breakpoints=bp_method)
+            >>> fig = jrc_dataset.plot_timeseries(id_geohash="abc123", breakpoints=bp_method)
 
             >>> # Plot with a specific date
-            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", breakpoints="2023-06-15")
+            >>> fig = jrc_dataset.plot_timeseries(id_geohash="abc123", breakpoints="2023-06-15")
 
             >>> # Save the plot to a file
-            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", save_path="plot.png")
+            >>> fig = jrc_dataset.plot_timeseries(id_geohash="abc123", save_path="plot.png")
         """
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
 
-        # TODO: breaks are not visualized correctly
+        bp = None
         if breakpoints is not None:
-            breaks = breakpoints.calculate_break(self, object_id=id_geohash)
-            if breaks is not None:
-                bp = breaks["date_break"].iloc[0]
-        else:
-            bp = None
+            if self._is_breakpoint_method(breakpoints):
+                breaks = breakpoints.calculate_break(self, object_id=id_geohash)
+                if breaks is not None and len(breaks) > 0:
+                    bp = breaks["date_break"].iloc[0]
+            else:
+                bp = self._get_first_breakpoint(id_geohash, breakpoints)
 
         fig = plot_water_time_series_jrc(
             df,
@@ -699,19 +720,35 @@ class JRCDataset(LakeDataset):
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
         save_path: Optional[str | Path] = None,
-    ):
+    ) -> go.Figure:
         """Plot the interactive time series for a specific geohash using Plotly.
+
+        Creates an interactive Plotly figure showing the JRC water classification
+        time series for a single lake/location, with an optional vertical line
+        indicating a breakpoint or specific date. Includes a 'Breakpoint' entry in
+        the legend when a breakpoint is provided.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod | pd.Timestamp | str | list, optional):
                 Breakpoint detection method to use, or a single date (pd.Timestamp or
                 string in YYYY-MM-DD format), or a list of dates. If a list is provided,
-                only the first date is used for plotting.
+                only the first date is used for plotting. When a BreakpointMethod is
+                passed, the first detected breakpoint date is used.
             save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
-            plotly.graph_objects.Figure: Interactive Plotly figure.
+            go.Figure: Interactive Plotly figure.
+
+        Example:
+            >>> # Plot with automatic breakpoint detection
+            >>> fig = jrc_dataset.plot_timeseries_interactive(id_geohash="abc123", breakpoints=bp_method)
+
+            >>> # Plot with a specific date
+            >>> fig = jrc_dataset.plot_timeseries_interactive(id_geohash="abc123", breakpoints="2023-06-15")
+
+            >>> # Save the plot to an HTML file
+            >>> fig = jrc_dataset.plot_timeseries_interactive(id_geohash="abc123", save_path="plot.html")
         """
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()

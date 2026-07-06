@@ -1568,6 +1568,18 @@ def create_app(
             if st.session_state.dw_dataset is not None and id_available_dw:
                 try:
                     logger.info(f"Plotting time series for lake: {current}")
+                    local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons["id_geohash"] == current]
+
+                    # add breakpoint to plot if applicable
+                    if "date_break" in local_gdf.columns:
+                        break_date = local_gdf.iloc[0]["date_break"]  # STUB - .to_pydatetime()
+                        logger.info(f"Adding break date to time series plot: {break_date}")
+                    else:
+                        break_date = None
+                        logger.info(
+                            f"No break date available for lake {current}. Time series plot will not include a break date."
+                        )
+
                     # Create container with one row and two columns for time series plots
                     if st.session_state.disable_jrc:
                         ts_col1, ts_col2 = st.columns(spec=[0.99, 0.01])  # hacky way to have 2 cols with left/only 99%
@@ -1584,6 +1596,7 @@ def create_app(
                             is_interactive=True,
                             show_success=True,
                             show_caption=True,
+                            break_date=break_date,
                         )
 
                     # Plot JRC time series in second column if available
@@ -1598,6 +1611,7 @@ def create_app(
                                     is_interactive=True,
                                     show_success=False,
                                     show_caption=True,
+                                    break_date=break_date,
                                 )
                         else:
                             with ts_col2:
@@ -1633,7 +1647,7 @@ def create_app(
                         post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
                         # break date (start of month after break)
                         pre_break = post_break - timedelta(days=366)  # one year before
-                        print(today.strftime("%Y-%m-%d"))
+                        logger.info(f"Using break date for lake {current}: {break_date}")
                         spinner_text = "Pulling satellite image closest to the break + one year before... This may take a few seconds."
                         viz_dates = [pre_break, post_break, today]
 

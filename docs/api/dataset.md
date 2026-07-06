@@ -71,9 +71,11 @@ The `merge()` method returns a new `LakeDataset` instance (of the same type as t
 
 ## Plot Time Series
 
-Both `DWDataset` and `JRCDataset` provide a `plot_timeseries()` method to visualize water extent over time for a specific lake.
+Both `DWDataset` and `JRCDataset` provide two methods for visualization:
+- `plot_timeseries()` - Static matplotlib plots
+- `plot_timeseries_interactive()` - Interactive Plotly plots
 
-### DWDataset.plot_timeseries()
+### DWDataset.plot_timeseries() / plot_timeseries_interactive()
 
 ```python
 from water_timeseries.dataset import DWDataset
@@ -83,17 +85,23 @@ import xarray as xr
 ds = xr.open_zarr("lakes_dw.zarr")
 dataset = DWDataset(ds)
 
-# Plot time series for a specific lake
+# Get a geohash from the dataset
+geohash = dataset.object_ids_[0]
+
+# Static matplotlib plot
 fig = dataset.plot_timeseries(
-    id_geohash="b7uefy0bvcrc",
-    breakpoints=None  # Optional: pass BreakpointMethod to overlay detected breaks
+    id_geohash=geohash,
+    breakpoints=None  # Optional: see breakpoints section below
 )
 
-# Show the plot
-fig.show()
+# Interactive Plotly plot (returns go.Figure)
+fig_interactive = dataset.plot_timeseries_interactive(
+    id_geohash=geohash,
+    breakpoints=None
+)
 ```
 
-### JRCDataset.plot_timeseries()
+### JRCDataset.plot_timeseries() / plot_timeseries_interactive()
 
 ```python
 from water_timeseries.dataset import JRCDataset
@@ -103,13 +111,19 @@ import xarray as xr
 ds = xr.open_zarr("lakes_jrc.zarr")
 dataset = JRCDataset(ds)
 
-# Plot time series
+# Get a geohash from the dataset
+geohash = dataset.object_ids_[0]
+
+# Static matplotlib plot
 fig = dataset.plot_timeseries(
-    id_geohash="b7uefy0bvcrc",
-    breakpoints=None  # Optional: BreakpointMethod to overlay detected breaks
+    id_geohash=geohash,
+    breakpoints=None
 )
 
-fig.show()
+# Interactive Plotly plot
+fig_interactive = dataset.plot_timeseries_interactive(
+    id_geohash=geohash
+)
 ```
 
 ### Parameters
@@ -117,32 +131,68 @@ fig.show()
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `id_geohash` | str | The geohash identifier for the lake to plot |
-| `breakpoints` | BreakpointMethod, optional | Breakpoint detection result to overlay on the plot (e.g., from `SimpleBreakpoint` or `BeastBreakpoint`) |
+| `breakpoints` | BreakpointMethod, pd.Timestamp, str, list, optional | Breakpoint(s) to overlay on the plot. Can be a `BreakpointMethod` instance (e.g., `SimpleBreakpoint()`), a single date string ("YYYY-MM-DD") or `pd.Timestamp`, or a list of dates. Only the first date is used. |
+| `save_path` | str, Path, optional | If provided, saves the plot to this path (`.png` for static, `.html` for interactive) |
 
-### Return Value
+### Return Values
 
-Returns a `matplotlib.figure.Figure` object that can be displayed or saved.
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `plot_timeseries()` | `matplotlib.figure.Figure` | Static matplotlib figure |
+| `plot_timeseries_interactive()` | `plotly.graph_objects.Figure` | Interactive Plotly figure (can be displayed in notebooks, saved as HTML, or used with Streamlit) |
 
-### With Breakpoint Overlay
+### With Breakpoint Detection
+
+The `breakpoints` parameter accepts a `BreakpointMethod` instance which will automatically detect and visualize the breakpoint:
 
 ```python
 from water_timeseries.dataset import DWDataset
 from water_timeseries.breakpoint import SimpleBreakpoint
+import xarray as xr
 
 # Initialize dataset
 dataset = DWDataset(xr.open_zarr("lakes_dw.zarr"))
+geohash = dataset.object_ids_[0]
 
-# Detect breakpoints
+# Create breakpoint method and pass directly to plot
 bp = SimpleBreakpoint()
-breaks = bp.calculate_break(dataset, object_id="b7uefy0bvcrc")
 
-# Plot with breakpoint overlay
+# Static plot with breakpoint
 fig = dataset.plot_timeseries(
-    id_geohash="b7uefy0bvcrc",
-    breakpoints=breaks
+    id_geohash=geohash,
+    breakpoints=bp  # Pass the BreakpointMethod, not the result!
 )
 
-fig.show()
+# Interactive plot with breakpoint
+fig_interactive = dataset.plot_timeseries_interactive(
+    id_geohash=geohash,
+    breakpoints=bp
+)
+```
+
+### With Specific Date
+
+Alternatively, you can pass a specific date or list of dates:
+
+```python
+# Single date (string)
+fig = dataset.plot_timeseries(
+    id_geohash=geohash,
+    breakpoints="2023-06-15"
+)
+
+# Single date (pd.Timestamp)
+import pandas as pd
+fig = dataset.plot_timeseries(
+    id_geohash=geohash,
+    breakpoints=pd.Timestamp("2023-06-15")
+)
+
+# List of dates (only first is used)
+fig = dataset.plot_timeseries(
+    id_geohash=geohash,
+    breakpoints=["2023-06-15", "2020-09-01"]
+)
 ```
 
 ### Visual Output
@@ -151,22 +201,26 @@ fig.show()
 
 ![DW Time Series Example](../../tests/data/figures/example_dw_timeseries.png)
 
-The DWDataset plot shows land cover class proportions as a stacked area chart:
+The DWDataset plot shows land cover class proportions:
 - **Water (blue)**: Primary water extent indicator
-- **Vegetation classes** (trees, grass, crops, shrub): Grouped in green tones
-- **Other classes** (built, bare, snow): Shown in distinct colors
-- Values are normalized to total area (0-1 scale)
+- **Vegetation (green)**: Combined trees, grass, crops, shrub/scrub, flooded vegetation
+- **Bare (brown)**: Bare soil
+- **Snow and Ice (black)**: Snow/ice coverage
+- Values are shown in hectares (left axis) with optional percentage scale (right axis)
 
 **JRCDataset Time Series**
 
 ![JRC Time Series Example](../../tests/data/figures/example_jrc_timeseries.png)
 
-The JRCDataset plot shows permanent vs seasonal water as a line chart:
+The JRCDataset plot shows permanent vs seasonal water:
 - **Permanent water (blue)**: Water present year-round
 - **Seasonal water (light blue)**: Water present seasonally
-- **Land**: Dry land area (shown in brown/green)
-- Values are percentages (0-100)
+- **Land (brown)**: Dry land area
+- Gray shading indicates no-data regions
+- Values are shown in hectares (left axis) with optional percentage scale (right axis)
 
 **With Breakpoint Overlay**
 
-When a breakpoint is detected, a vertical dashed line marks when significant water extent changes occurred.
+When a breakpoint is provided, a vertical dashed black line marks the date:
+- Static plots: Includes "Breakpoint" entry in the legend
+- Interactive plots: Includes "Breakpoint" entry in the legend for hover inspection

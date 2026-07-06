@@ -294,9 +294,83 @@ uv run water-timeseries breakpoint-analysis-historical --config-file config.yaml
 
 *Can also be provided via config file
 
-## Plot Timeseries
+## Plot Time Series
 
-Plot time series for a specific lake using the CLI:
+The package provides two plotting methods for visualizing lake water extent over time:
+
+### Python API
+
+Both `DWDataset` and `JRCDataset` support static (matplotlib) and interactive (Plotly) plotting:
+
+```python
+from water_timeseries.dataset import DWDataset, JRCDataset
+from water_timeseries.breakpoint import SimpleBreakpoint
+import xarray as xr
+
+# Load data
+ds = DWDataset(xr.open_zarr("lakes_dw.zarr"))
+geohash = ds.object_ids_[0]  # Get first lake
+
+# --- Static matplotlib plot ---
+fig_static = ds.plot_timeseries(geohash)
+fig_static.show()  # In Jupyter, or plt.show() otherwise
+
+# --- Interactive Plotly plot ---
+fig_interactive = ds.plot_timeseries_interactive(geohash)
+fig_interactive.show()  # In Jupyter, or save to HTML
+```
+
+### Plot with Breakpoint Detection
+
+Pass a `BreakpointMethod` instance to automatically detect and visualize the breakpoint:
+
+```python
+from water_timeseries.breakpoint import SimpleBreakpoint
+
+# Create breakpoint method
+bp = SimpleBreakpoint()
+
+# Static plot with breakpoint
+fig_static = ds.plot_timeseries(geohash, breakpoints=bp)
+
+# Interactive plot with breakpoint
+fig_interactive = ds.plot_timeseries_interactive(geohash, breakpoints=bp)
+```
+
+### Plot with Specific Date
+
+Alternatively, pass a specific date or list of dates:
+
+```python
+# Single date (string)
+fig = ds.plot_timeseries(geohash, breakpoints="2023-06-15")
+
+# Single date (pd.Timestamp)
+import pandas as pd
+fig = ds.plot_timeseries(geohash, breakpoints=pd.Timestamp("2023-06-15"))
+
+# List of dates (only first date is used)
+fig = ds.plot_timeseries(geohash, breakpoints=["2023-06-15", "2020-09-01"])
+```
+
+### Save Plots to File
+
+```python
+# Static plot (PNG, PDF, etc.)
+fig = ds.plot_timeseries(geohash, breakpoints=bp, save_path="plot.png")
+
+# Interactive plot (HTML)
+fig = ds.plot_timeseries_interactive(geohash, breakpoints=bp, save_path="plot.html")
+```
+
+### Plot Returns and Legend
+
+| Method | Return Type | Breakpoint in Legend |
+|--------|-------------|---------------------|
+| `plot_timeseries()` | `matplotlib.figure.Figure` | Yes, labeled "Breakpoint" |
+| `plot_timeseries_interactive()` | `plotly.graph_objects.Figure` | Yes, labeled "Breakpoint" |
+
+### CLI Plot Time Series
 
 ```bash
 # Plot lake timeseries
