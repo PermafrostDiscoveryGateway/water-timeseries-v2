@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional, Tuple
 
+import pandas as pd
 import streamlit as st
 import xarray as xr
 
@@ -87,6 +88,7 @@ def plot_time_series_data(
     is_interactive: bool = True,
     show_success: bool = True,
     show_caption: bool = True,
+    break_date: Optional[str | pd.Timestamp] = None,
 ) -> bool:
     """
     Unified function to plot time series data with automatic format handling.
@@ -98,6 +100,7 @@ def plot_time_series_data(
         is_interactive: Whether to use interactive (plotly) or static (matplotlib) plots
         show_success: Whether to show success message for DW data
         show_caption: Whether to show captions and availability information
+        break_date: Optional date for breakpoint filtering
 
     Returns:
         True if plotting succeeded, False otherwise
@@ -121,7 +124,7 @@ def plot_time_series_data(
 
     try:
         # Plot interactive plotly chart
-        fig = dataset.plot_timeseries_interactive(id_geohash)
+        fig = dataset.plot_timeseries_interactive(id_geohash, breakpoints=break_date)
         st.plotly_chart(fig, width="stretch")
 
         # Save as HTML for download

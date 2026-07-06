@@ -1,7 +1,9 @@
 """Tests for plotting functionality."""
 
 import matplotlib.pyplot as plt
+import plotly.graph_objects as go
 
+from water_timeseries.breakpoint import SimpleBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
 
 
@@ -41,6 +43,65 @@ class TestDWDatasetPlotting:
             fig = ds.plot_timeseries(geohash)
             assert fig is not None
             plt.close(fig)
+
+    def test_dw_plot_timeseries_bp_date(self, dw_test_dataset):
+        """Test that plot_timeseries creates a matplotlib figure."""
+        ds = DWDataset(dw_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        fig = ds.plot_timeseries(geohash, breakpoints="2018-06-01")
+        assert fig is not None
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_dw_plot_timeseries_bp_datelist(self, dw_test_dataset):
+        """Test that plot_timeseries creates a matplotlib figure."""
+        ds = DWDataset(dw_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        fig = ds.plot_timeseries(geohash, breakpoints=["2018-06-01", "2020-09-01"])
+        assert fig is not None
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_dw_plot_timeseries_with_breakpoint_method(self, dw_test_dataset):
+        """Test that plot_timeseries works with a BreakpointMethod."""
+        ds = DWDataset(dw_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        bp = SimpleBreakpoint()
+        fig = ds.plot_timeseries(geohash, breakpoints=bp)
+        assert fig is not None
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_dw_plot_timeseries_interactive_bp_date(self, dw_test_dataset):
+        """Test that plot_timeseries creates a matplotlib figure."""
+        ds = DWDataset(dw_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        fig = ds.plot_timeseries_interactive(geohash, breakpoints="2018-06-01")
+        assert fig is not None
+        assert isinstance(fig, go.Figure)
+
+    def test_dw_plot_timeseries_interactive_datelist(self, dw_test_dataset):
+        """Test that plot_timeseries_interactive creates a Plotly figure."""
+        ds = DWDataset(dw_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        fig = ds.plot_timeseries_interactive(geohash, breakpoints=["2018-06-01", "2020-09-01"])
+        assert fig is not None
+        assert isinstance(fig, go.Figure)
+
+    def test_dw_plot_timeseries_interactive_with_breakpoint_method(self, dw_test_dataset):
+        """Test that plot_timeseries_interactive works with a BreakpointMethod."""
+        ds = DWDataset(dw_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        bp = SimpleBreakpoint()
+        fig = ds.plot_timeseries_interactive(geohash, breakpoints=bp)
+        assert fig is not None
+        assert isinstance(fig, go.Figure)
 
 
 class TestJRCDatasetPlotting:
@@ -82,3 +143,42 @@ class TestJRCDatasetPlotting:
         # Should have lines for permanent, seasonal, and land
         assert len(ax.lines) >= 1 or len(ax.collections) >= 1
         plt.close(fig)
+
+    def test_jrc_plot_timeseries_with_breakpoint_method(self, jrc_test_dataset):
+        """Test that plot_timeseries works with a BreakpointMethod."""
+        ds = JRCDataset(jrc_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        bp = SimpleBreakpoint()
+        fig = ds.plot_timeseries(geohash, breakpoints=bp)
+        assert fig is not None
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_jrc_plot_timeseries_interactive_bp_date(self, jrc_test_dataset):
+        """Test that plot_timeseries_interactive creates a Plotly figure."""
+        ds = JRCDataset(jrc_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        fig = ds.plot_timeseries_interactive(geohash, breakpoints="2018-06-01")
+        assert fig is not None
+        assert isinstance(fig, go.Figure)
+
+    def test_jrc_plot_timeseries_interactive_datelist(self, jrc_test_dataset):
+        """Test that plot_timeseries_interactive creates a Plotly figure."""
+        ds = JRCDataset(jrc_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        fig = ds.plot_timeseries_interactive(geohash, breakpoints=["2018-06-01", "2020-09-01"])
+        assert fig is not None
+        assert isinstance(fig, go.Figure)
+
+    def test_jrc_plot_timeseries_interactive_with_breakpoint_method(self, jrc_test_dataset):
+        """Test that plot_timeseries_interactive works with a BreakpointMethod."""
+        ds = JRCDataset(jrc_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        bp = SimpleBreakpoint()
+        fig = ds.plot_timeseries_interactive(geohash, breakpoints=bp)
+        assert fig is not None
+        assert isinstance(fig, go.Figure)
