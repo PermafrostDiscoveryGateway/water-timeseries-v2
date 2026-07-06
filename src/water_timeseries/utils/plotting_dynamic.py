@@ -63,6 +63,10 @@ def plot_water_time_series_dw_interactive(
         >>> st.plotly_chart(fig)
         >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123", save_path="output.html")
     """
+    # Convert first_break to pd.Timestamp if it's a string
+    if isinstance(first_break, str):
+        first_break = pd.to_datetime(first_break)
+
     # Create figure with secondary y-axis
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
@@ -144,6 +148,27 @@ def plot_water_time_series_dw_interactive(
             ),
             secondary_y=True,
         )
+
+    # Add vertical line at first_break if provided
+    if first_break is not None:
+        # Get y-range from existing data for the legend line
+        y_vals = []
+        for trace in fig.data:
+            if hasattr(trace, "y") and trace.y is not None:
+                y_vals.extend([y for y in trace.y if y is not None])
+
+        if y_vals:
+            fig.add_trace(
+                go.Scatter(
+                    x=[first_break, first_break],
+                    y=[min(y_vals), max(y_vals)],
+                    mode="lines",
+                    line=dict(width=3, dash="dash", color="black"),
+                    name="Breakpoint",
+                    showlegend=True,
+                    hoverinfo="x",
+                )
+            )
 
     # Update x-axis to show years nicely
     fig.update_xaxes(
@@ -287,6 +312,27 @@ def plot_water_time_series_jrc_interactive(
             ),
             secondary_y=True,
         )
+
+    # Add vertical line at first_break if provided
+    if first_break is not None:
+        # Get y-range from existing data for the legend line
+        y_vals = []
+        for trace in fig.data:
+            if hasattr(trace, "y") and trace.y is not None:
+                y_vals.extend([y for y in trace.y if y is not None])
+
+        if y_vals:
+            fig.add_trace(
+                go.Scatter(
+                    x=[first_break, first_break],
+                    y=[min(y_vals), max(y_vals)],
+                    mode="lines",
+                    line=dict(width=3, dash="dash", color="black"),
+                    name="Breakpoint",
+                    showlegend=True,
+                    hoverinfo="x",
+                )
+            )
 
     # Update x-axis to show years nicely
     fig.update_xaxes(

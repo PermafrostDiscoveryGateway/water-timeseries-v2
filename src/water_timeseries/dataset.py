@@ -5,9 +5,11 @@ land cover and water classification data. It includes specialized handlers for
 different data sources and processing pipelines.
 """
 
+from __future__ import annotations
+
 import warnings
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -25,6 +27,9 @@ from water_timeseries.utils.plotting_dynamic import (
     plot_water_time_series_dw_interactive,
     plot_water_time_series_jrc_interactive,
 )
+
+if TYPE_CHECKING:
+    from water_timeseries.breakpoint import BreakpointMethod
 
 
 class LakeDataset:
@@ -112,6 +117,58 @@ class LakeDataset:
         masking logic based on their quality thresholds and constraints.
         """
         pass
+
+    def _get_first_breakpoint(
+        self,
+        id_geohash: str,
+        breakpoints: pd.Timestamp | str | list[pd.Timestamp] | list[str] | None,
+    ) -> pd.Timestamp | None:
+        """Extract the first breakpoint date from various input types.
+
+        Args:
+            id_geohash: The geohash identifier for the location.
+            breakpoints: Single date (pd.Timestamp or string in YYYY-MM-DD format),
+                or list of dates. If a list is provided, only the first valid date
+                is returned.
+
+        Returns:
+            pd.Timestamp or None: The first valid breakpoint date, or None if no valid
+                breakpoint is found.
+        """
+        if breakpoints is None:
+            return None
+
+        # Treat as date(s) - convert to list if single value
+        dates = breakpoints if isinstance(breakpoints, list) else [breakpoints]
+        for date in dates:
+            if isinstance(date, str):
+                return pd.to_datetime(date)
+            elif isinstance(date, pd.Timestamp):
+                return date
+
+        return None
+
+    def _is_breakpoint_method(self, obj) -> bool:
+        """Check if an object is a BreakpointMethod instance or subclass.
+
+        This method avoids direct import of BreakpointMethod to prevent circular imports.
+
+        Args:
+            obj: The object to check.
+
+        Returns:
+            bool: True if the object is a BreakpointMethod or subclass, False otherwise.
+        """
+        # Check if the class name is in the class hierarchy
+        bp_class_name = "BreakpointMethod"
+        current_class = obj.__class__
+
+        while current_class is not None:
+            if current_class.__name__ == bp_class_name:
+                return True
+            current_class = current_class.__bases__[0] if current_class.__bases__ else None
+
+        return False
 
     def create_timelapse(
         self,
@@ -365,33 +422,54 @@ class DWDataset(LakeDataset):
         self.ds_ismasked_ = True
         self.ds_normalized_ismasked_ = True
 
-    # create_timelapse is inherited from LakeDataset
+    def plot_timeseries(
+        self,
+        id_geohash: str,
+        breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
+        save_path: Optional[str | Path] = None,
+    ) -> plt.Figure:
+        """Plot the time series for a specific geohash using matplotlib.
 
-    def plot_timeseries(self, id_geohash: str, breakpoints=None, save_path: Optional[str | Path] = None) -> plt.Figure:
-        """Plot the time series for a specific geohash.
+        Creates a static matplotlib figure showing the Dynamic World land cover
+        time series for a single lake/location, with an optional vertical line
+        indicating a breakpoint or specific date.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
-            breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
+            breakpoints (BreakpointMethod | pd.Timestamp | str | list, optional):
+                Breakpoint detection method to use, or a single date (pd.Timestamp or
+                string in YYYY-MM-DD format), or a list of dates. If a list is provided,
+                only the first date is used for plotting. When a BreakpointMethod is
+                passed, the first detected breakpoint date is used.
             save_path (str | Path, optional): Path to save the plot as an image file.
+                If provided, the figure will be saved to this location.
 
         Returns:
             plt.Figure: The matplotlib figure object.
+
+        Example:
+            >>> # Plot with automatic breakpoint detection
+            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", breakpoints=bp_method)
+
+            >>> # Plot with a specific date
+            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", breakpoints="2023-06-15")
+
+            >>> # Save the plot to a file
+            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", save_path="plot.png")
         """
-        # self._normalize_ds()
+
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna()
         df_plot = prepare_data_for_plot_dw(df, group_vegetation=True)
         normalization_factor = df["area_data"].max()
 
+        bp = None
         if breakpoints is not None:
-            breaks = breakpoints.calculate_break(self, object_id=id_geohash)
-            if breaks is not None:
-                if len(breaks) > 0:
+            if self._is_breakpoint_method(breakpoints):
+                breaks = breakpoints.calculate_break(self, object_id=id_geohash)
+                if breaks is not None and len(breaks) > 0:
                     bp = breaks["date_break"].iloc[0]
-                else:
-                    bp = None
-        else:
-            bp = None
+            else:
+                bp = self._get_first_breakpoint(id_geohash, breakpoints)
 
         figure = plot_water_time_series_dw(
             df_plot,
@@ -406,14 +484,17 @@ class DWDataset(LakeDataset):
     def plot_timeseries_interactive(
         self,
         id_geohash: str,
-        breakpoints=None,
+        breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
         save_path: Optional[str | Path] = None,
     ):
         """Plot the interactive time series for a specific geohash using Plotly.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
-            breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
+            breakpoints (BreakpointMethod | pd.Timestamp | str | list, optional):
+                Breakpoint detection method to use, or a single date (pd.Timestamp or
+                string in YYYY-MM-DD format), or a list of dates. If a list is provided,
+                only the first date is used for plotting.
             save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
@@ -423,15 +504,14 @@ class DWDataset(LakeDataset):
         df_plot = prepare_data_for_plot_dw(df, group_vegetation=True)
         normalization_factor = df["area_data"].max()
 
+        bp = None
         if breakpoints is not None:
-            breaks = breakpoints.calculate_break(self, object_id=id_geohash)
-            if breaks is not None:
-                if len(breaks) > 0:
+            if self._is_breakpoint_method(breakpoints):
+                breaks = breakpoints.calculate_break(self, object_id=id_geohash)
+                if breaks is not None and len(breaks) > 0:
                     bp = breaks["date_break"].iloc[0]
-                else:
-                    bp = None
-        else:
-            bp = None
+            else:
+                bp = self._get_first_breakpoint(id_geohash, breakpoints)
 
         figure = plot_water_time_series_dw_interactive(
             df_plot,
@@ -557,16 +637,40 @@ class JRCDataset(LakeDataset):
             overwrite_exists=overwrite_exists,
         )
 
-    def plot_timeseries(self, id_geohash: str, breakpoints=None, save_path: Optional[str | Path] = None) -> plt.Figure:
-        """Plot the time series for a specific geohash.
+    def plot_timeseries(
+        self,
+        id_geohash: str,
+        breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
+        save_path: Optional[str | Path] = None,
+    ) -> plt.Figure:
+        """Plot the time series for a specific geohash using matplotlib.
+
+        Creates a static matplotlib figure showing the Dynamic World land cover
+        time series for a single lake/location, with an optional vertical line
+        indicating a breakpoint or specific date.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
-            breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
+            breakpoints (BreakpointMethod | pd.Timestamp | str | list, optional):
+                Breakpoint detection method to use, or a single date (pd.Timestamp or
+                string in YYYY-MM-DD format), or a list of dates. If a list is provided,
+                only the first date is used for plotting. When a BreakpointMethod is
+                passed, the first detected breakpoint date is used.
             save_path (str | Path, optional): Path to save the plot as an image file.
+                If provided, the figure will be saved to this location.
 
         Returns:
             plt.Figure: The matplotlib figure object.
+
+        Example:
+            >>> # Plot with automatic breakpoint detection
+            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", breakpoints=bp_method)
+
+            >>> # Plot with a specific date
+            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", breakpoints="2023-06-15")
+
+            >>> # Save the plot to a file
+            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", save_path="plot.png")
         """
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
@@ -588,20 +692,22 @@ class JRCDataset(LakeDataset):
             save_path=save_path,
         )
 
-        # return figure
         return fig
 
     def plot_timeseries_interactive(
         self,
         id_geohash: str,
-        breakpoints=None,
+        breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
         save_path: Optional[str | Path] = None,
     ):
         """Plot the interactive time series for a specific geohash using Plotly.
 
         Args:
             id_geohash (str): The geohash identifier for the location.
-            breakpoints (BreakpointMethod, optional): Breakpoint detection method to use (not used currently).
+            breakpoints (BreakpointMethod | pd.Timestamp | str | list, optional):
+                Breakpoint detection method to use, or a single date (pd.Timestamp or
+                string in YYYY-MM-DD format), or a list of dates. If a list is provided,
+                only the first date is used for plotting.
             save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
@@ -610,8 +716,14 @@ class JRCDataset(LakeDataset):
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
 
-        # Breakpoint processing disabled for now
         bp = None
+        if breakpoints is not None:
+            if self._is_breakpoint_method(breakpoints):
+                breaks = breakpoints.calculate_break(self, object_id=id_geohash)
+                if breaks is not None and len(breaks) > 0:
+                    bp = breaks["date_break"].iloc[0]
+            else:
+                bp = self._get_first_breakpoint(id_geohash, breakpoints)
 
         fig = plot_water_time_series_jrc_interactive(
             df,

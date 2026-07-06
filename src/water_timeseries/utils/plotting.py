@@ -163,6 +163,7 @@ def plot_water_time_series_dw(
             ymax=df["value"].max(),
             color="k",
             ls="--",
+            label="Breakpoint",
         )
 
     # Set x-axis major locator and formatter for date formatting
@@ -266,6 +267,7 @@ def plot_water_time_series_jrc(
             ymax=df_melt["value"].max(),
             color="k",
             ls="--",
+            label="Breakpoint",
         )
 
     # create no data area
