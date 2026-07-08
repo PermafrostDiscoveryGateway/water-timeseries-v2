@@ -170,19 +170,19 @@ def get_legend_html_nrt_drainage() -> str:
         ">
         <p style="margin: 0 0 5px 0; font-weight: bold;">Drainage Confidence</p>
         <div style="display: flex; align-items: center; margin-bottom: 3px;">
-            <div style="width: 20px; height: 20px; background-color: #525252; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <div style="width: 20px; height: 20px; background-color: #aaaaaa; border: 1px solid #ccc; margin-right: 8px;"></div>
             <span>0 - Stable lake</span>
         </div>
         <div style="display: flex; align-items: center; margin-bottom: 3px;">
-            <div style="width: 20px; height: 20px; background-color: #969696; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <div style="width: 20px; height: 20px; background-color: #3b6a8c; border: 1px solid #ccc; margin-right: 8px;"></div>
             <span>1 - Low confidence</span>
         </div>
         <div style="display: flex; align-items: center; margin-bottom: 3px;">
-            <div style="width: 20px; height: 20px; background-color: #bdbdbd; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <div style="width: 20px; height: 20px; background-color: #9eb45c; border: 1px solid #ccc; margin-right: 8px;"></div>
             <span>2 - Medium confidence</span>
         </div>
         <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: #ffffff; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <div style="width: 20px; height: 20px; background-color: #f0d6a8; border: 1px solid #ccc; margin-right: 8px;"></div>
             <span>3 - High confidence</span>
         </div>
         </div>
