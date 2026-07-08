@@ -31,7 +31,7 @@ from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
 # Import NRT pre-computation
 from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
 from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_archive
-from water_timeseries.utils.pmtiles_build import build_pmtiles_drainage_year, find_tippecanoe
+from water_timeseries.utils.pmtiles_build import build_pmtiles_drainage_year, build_pmtiles_nrt_drainage, find_tippecanoe
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
 # Create the main app
@@ -114,7 +114,11 @@ def dashboard(
         dw_end_year: End year for Dynamic World dataset
         dw_start_month: Start month for Dynamic World dataset
         dw_end_month: End month for Dynamic World dataset
-        viz_configuration: The visualization configuration name for the map viewer.
+viz_configuration: The visualization configuration name for the map viewer.
+            Valid options:
+            - "colored_historical": Historical time series with color-coded data.
+            - "drainage_year": Data displayed by drainage year.
+            - "nrt_drainage": Near-real-time drainage data.
         pmtiles_file: Path to a .pmtiles archive for fast vector-tile rendering.
         pmtiles_url: HTTP(S) URL to a hosted .pmtiles file (e.g. on S3).
         port: Port to run the dashboard on (default: 8501)
@@ -304,6 +308,8 @@ def build_pmtiles(
     print(f"Building PMTiles from {vector_file_path} -> {output_file_path}")
     if viz_config == "drainage_year":
         build_pmtiles_drainage_year(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
+    elif viz_config == "nrt_drainage":
+        build_pmtiles_nrt_drainage(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
     else:
         build_pmtiles_archive(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
     print(f"Wrote PMTiles archive: {output_file_path}")

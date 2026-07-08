@@ -253,6 +253,40 @@ uv run water-timeseries plot-timeseries tests/data/lakes_jrc_test.zarr --lake-id
 
 ![Example Timeseries Plot](../examples/jrc_example_b7uefy0bvcrc.png)
 
+#### Build PMTiles
+
+Convert a lake GeoParquet file to a single `.pmtiles` archive for fast map rendering.
+
+| Option | Short | Description | Default |
+| -------- | ------- | ------------- | -------- |
+| `vector_file` | | Path to input GeoParquet file with lake polygons | Required |
+| `output_file` | | Path to output `.pmtiles` file | Required |
+| `--viz-configuration` | | Visualization configuration for the map viewer. Valid options: `"colored_historical"` (historical time series with color-coded data), `"drainage_year"` (data displayed by drainage year), `"nrt_drainage"` (near-real-time drainage data) | `colored_historical` |
+| `--keep-geojsonl` | | Keep intermediate GeoJSONL file after building PMTiles | `False` |
+| `--config-file` | | Path to a YAML or JSON configuration file containing default parameters. CLI arguments take priority over config file values | `None` |
+| `--logfile` | | Path to log file | Auto-generated |
+| `--verbose` | `-v` | Verbosity level (`-v` for DEBUG) | `0` |
+
+**Example usage:**
+
+```bash
+# Build PMTiles with default visualization (colored_historical)
+uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
+
+# Build PMTiles with drainage_year visualization
+uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes_drainage_year.pmtiles --viz-configuration drainage_year
+
+# Build PMTiles with nrt_drainage visualization
+uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes_nrt_drainage.pmtiles --viz-configuration nrt_drainage
+
+# Keep intermediate GeoJSONL file for debugging
+uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles --keep-geojsonl
+```
+
+**Prerequisites:** [tippecanoe](https://github.com/felt/tippecanoe) must be installed (`brew install tippecanoe`).
+
+Upload the resulting `.pmtiles` file to object storage (S3, GCS, etc.) and pass `--pmtiles-url` to the dashboard, or use `--pmtiles-file` for local development.
+
 ## Main Classes
 
 ### Datasets
@@ -305,7 +339,7 @@ The dashboard accepts the following optional arguments:
 | `dw_end_year` | End year for Dynamic World dataset time series | `2025` |
 | `dw_start_month` | Start month (1-12) for Dynamic World dataset time series filtering | `6` (June) |
 | `dw_end_month` | End month (1-12) for Dynamic World dataset time series filtering | `9` (September) |
-| `viz_configuration_name` | Name for vizualization configuration | `colored_historical` (default) or `nrt_drainage`  |
+| `viz_configuration` | Visualization configuration for the map viewer. Valid options: `"colored_historical"` (historical time series with color-coded data), `"drainage_year"` (data displayed by drainage year), `"nrt_drainage"` (near-real-time drainage data) | `colored_historical` |
 | `port` | Port to run the dashboard on | `8501` |
 | `logfile` | Path to log file | Auto-generated |
 | `verbose` | Verbosity level (`-v` for DEBUG) | `0` (INFO) |

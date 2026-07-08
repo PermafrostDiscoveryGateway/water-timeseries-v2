@@ -89,6 +89,71 @@ def get_style_pmtiles_drainage_year(hide_stable_lakes: bool = False) -> tuple:
         ]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
+def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
+    fill_color = [
+        "interpolate",
+        ["linear"],
+        ["to-number", ["get", "drainage_confidence"]],
+        1,
+        "#fff5f0",
+        3,
+        "#67000d",
+    ]
+    # fill_color_no_date = "#ADD8E6"
+    fill_opacity = [
+        "case",
+        [
+            "any",
+            ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+            ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+        ],
+        0.05,
+        0.2,
+    ]
+    line_color = [
+        "case",
+        [
+            "any",
+            ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+            ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+        ],
+        "#ADD8E6",  # default line color for stable lakes
+        [
+            "interpolate",
+            ["linear"],
+            ["to-number", ["get", "drainage_confidence"]],
+        1,
+        "#fff5f0",
+        3,
+        "#67000d",
+        ],
+    ]
+    line_opacity = 1
+    # switch to disable non drained lakes (stable lakes) from being displayed on the map
+    if hide_stable_lakes:
+        line_width = [
+            "case",
+            [
+                "any",
+                ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+                ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+            ],
+            0,
+            3,
+        ]
+    else:
+        line_width = [
+            "case",
+            [
+                "any",
+                ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+                ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+            ],
+            0.6,
+            3,
+        ]
+    return fill_color, fill_opacity, line_color, line_width, line_opacity
+
 
 def get_style_pmtiles_generic_water() -> tuple:
     fill_color = "#ADD8E6"
