@@ -13,7 +13,11 @@ from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_generic_water,
     get_style_pmtiles_nrt_drainage,
 )
-from water_timeseries.utils.visualization import get_legend_html_date_drainage_year, get_legend_html_net_change
+from water_timeseries.utils.visualization import (
+    get_legend_html_date_drainage_year,
+    get_legend_html_net_change,
+    get_legend_html_nrt_drainage,
+)
 
 
 class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.element.MacroElement):
@@ -275,7 +279,7 @@ def build_pmtiles_map(
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_drainage(
             hide_stable_lakes=hide_stable_lakes
         )
-        legend = get_legend_html_date_drainage_year()
+        legend = get_legend_html_nrt_drainage()
 
         # Use only one basemap to avoid overlap
         tile_layer_darkmatter.add_to(m)

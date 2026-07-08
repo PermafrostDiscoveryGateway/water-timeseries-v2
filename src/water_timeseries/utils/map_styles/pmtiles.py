@@ -96,9 +96,13 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
         ["linear"],
         ["to-number", ["get", "drainage_confidence"]],
         0,
-        "#ffffff",
+        "#525252",
+        1,
+        "#969696",
+        2,
+        "#bdbdbd",
         3,
-        "#67000d",
+        "#ffffff",
     ]
     # fill_color_no_date = "#ADD8E6"
     fill_opacity = [
@@ -125,15 +129,19 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
             "interpolate",
             ["linear"],
             ["to-number", ["get", "drainage_confidence"]],
+            0,
+            "#525252",
             1,
-            "#fff5f0",
+            "#969696",
+            2,
+            "#bdbdbd",
             3,
-            "#67000d",
+            "#ffffff",
         ],
     ]
     line_opacity = 1
     # switch to disable non drained lakes (stable lakes) from being displayed on the map
-    # line width is based on drainage_confidence value (minimum 0.5)
+    # line width: 0.5 for confidence 0, 1 for 1-2, 3 for 3
     if hide_stable_lakes:
         line_width = [
             "case",
@@ -144,10 +152,26 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
                 ["==", ["to-number", ["get", "drainage_confidence"]], 0],
             ],
             0,
-            ["max", 0.5, ["to-number", ["get", "drainage_confidence"]]],
+            [
+                "case",
+                ["==", ["to-number", ["get", "drainage_confidence"]], 1],
+                1,
+                ["==", ["to-number", ["get", "drainage_confidence"]], 2],
+                1,
+                3,  # confidence 3
+            ],
         ]
     else:
-        line_width = ["max", 0.5, ["to-number", ["get", "drainage_confidence"]]]
+        line_width = [
+            "case",
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+            0.5,
+            ["==", ["to-number", ["get", "drainage_confidence"]], 1],
+            1,
+            ["==", ["to-number", ["get", "drainage_confidence"]], 2],
+            1,
+            3,  # confidence 3
+        ]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 

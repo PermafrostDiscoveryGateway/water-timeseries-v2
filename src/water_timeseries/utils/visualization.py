@@ -139,6 +139,57 @@ def get_legend_html_date_drainage_year() -> str:
     return LEGEND_HTML_NET_CHANGE
 
 
+# Add legend for NRT drainage confidence (grey to white)
+def get_legend_html_nrt_drainage() -> str:
+    """Generate HTML legend for NRT drainage confidence visualization.
+
+    Returns:
+        HTML string containing a styled legend for the NRT drainage confidence
+        color scale. The legend displays 4 discrete color patches for integer
+        confidence levels 0 to 3 with corresponding line widths.
+
+    Example:
+        >>> legend_html = get_legend_html_nrt_drainage()
+        >>> # Use in folium map
+        >>> m.get_root().html.add_child(folium.Element(legend_html))
+    """
+    LEGEND_HTML_NRT_DRAINAGE = """
+        <div style="
+            position: fixed;
+            bottom: 40px;
+            right: 10px;
+            width: 180px;
+            height: auto;
+            border: 2px solid grey;
+            z-index: 9999;
+            font-size: 12px;
+            background-color: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        ">
+        <p style="margin: 0 0 5px 0; font-weight: bold;">Drainage Confidence</p>
+        <div style="display: flex; align-items: center; margin-bottom: 3px;">
+            <div style="width: 20px; height: 20px; background-color: #525252; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <span>0 - Stable lake</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 3px;">
+            <div style="width: 20px; height: 20px; background-color: #969696; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <span>1 - Low confidence</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 3px;">
+            <div style="width: 20px; height: 20px; background-color: #bdbdbd; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <span>2 - Medium confidence</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #ffffff; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <span>3 - High confidence</span>
+        </div>
+        </div>
+    """
+    return LEGEND_HTML_NRT_DRAINAGE
+
+
 def build_hover_template(
     id_column: str,
     hover_fields: List[str],
