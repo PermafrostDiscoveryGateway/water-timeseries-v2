@@ -89,6 +89,7 @@ def get_style_pmtiles_drainage_year(hide_stable_lakes: bool = False) -> tuple:
         ]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
+
 def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
     fill_color = [
         "interpolate",
@@ -124,10 +125,10 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
             "interpolate",
             ["linear"],
             ["to-number", ["get", "drainage_confidence"]],
-        1,
-        "#fff5f0",
-        3,
-        "#67000d",
+            1,
+            "#fff5f0",
+            3,
+            "#67000d",
         ],
     ]
     line_opacity = 1
@@ -146,9 +147,7 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
             ["max", 0.5, ["to-number", ["get", "drainage_confidence"]]],
         ]
     else:
-        line_width = [
-            "max", 0.5, ["to-number", ["get", "drainage_confidence"]]
-        ]
+        line_width = ["max", 0.5, ["to-number", ["get", "drainage_confidence"]]]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 

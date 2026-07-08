@@ -10,8 +10,8 @@ from folium_pmtiles.vector import PMTilesMapLibreLayer
 from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
-    get_style_pmtiles_nrt_drainage,
     get_style_pmtiles_generic_water,
+    get_style_pmtiles_nrt_drainage,
 )
 from water_timeseries.utils.visualization import get_legend_html_date_drainage_year, get_legend_html_net_change
 

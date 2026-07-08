@@ -1274,7 +1274,7 @@ def create_app(
                     logger.info("Setting zoom level to 6")
                     st.session_state.zoom_level = 6
 
-                if viz_configuration_name in  ["drainage_year", "nrt_drainage"]:
+                if viz_configuration_name in ["drainage_year", "nrt_drainage"]:
                     hide_stable_lakes = st.toggle(
                         "Hide stable lakes",
                         value=st.session_state.get("hide_stable_lakes", False),

@@ -31,7 +31,11 @@ from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
 # Import NRT pre-computation
 from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
 from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_archive
-from water_timeseries.utils.pmtiles_build import build_pmtiles_drainage_year, build_pmtiles_nrt_drainage, find_tippecanoe
+from water_timeseries.utils.pmtiles_build import (
+    build_pmtiles_drainage_year,
+    build_pmtiles_nrt_drainage,
+    find_tippecanoe,
+)
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
 # Create the main app
