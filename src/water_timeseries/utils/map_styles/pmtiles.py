@@ -94,8 +94,8 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
         "interpolate",
         ["linear"],
         ["to-number", ["get", "drainage_confidence"]],
-        1,
-        "#fff5f0",
+        0,
+        "#ffffff",
         3,
         "#67000d",
     ]
@@ -106,6 +106,7 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
             "any",
             ["==", ["to-string", ["get", "drainage_confidence"]], ""],
             ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
         ],
         0.05,
         0.2,
@@ -116,6 +117,7 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
             "any",
             ["==", ["to-string", ["get", "drainage_confidence"]], ""],
             ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
         ],
         "#ADD8E6",  # default line color for stable lakes
         [
@@ -130,6 +132,7 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
     ]
     line_opacity = 1
     # switch to disable non drained lakes (stable lakes) from being displayed on the map
+    # line width is based on drainage_confidence value (minimum 0.5)
     if hide_stable_lakes:
         line_width = [
             "case",
@@ -137,20 +140,14 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
                 "any",
                 ["==", ["to-string", ["get", "drainage_confidence"]], ""],
                 ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+                ["==", ["to-number", ["get", "drainage_confidence"]], 0],
             ],
             0,
-            3,
+            ["max", 0.5, ["to-number", ["get", "drainage_confidence"]]],
         ]
     else:
         line_width = [
-            "case",
-            [
-                "any",
-                ["==", ["to-string", ["get", "drainage_confidence"]], ""],
-                ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
-            ],
-            0.6,
-            3,
+            "max", 0.5, ["to-number", ["get", "drainage_confidence"]]
         ]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
@@ -160,7 +157,7 @@ def get_style_pmtiles_generic_water() -> tuple:
     fill_opacity = 0.7
     # line_color = "#1E90FF"
     line_color = "#eeeeee"
-    line_width = 20
+    line_width = 1
     line_opacity = 1
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 

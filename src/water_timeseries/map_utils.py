@@ -10,6 +10,7 @@ from folium_pmtiles.vector import PMTilesMapLibreLayer
 from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
+    get_style_pmtiles_nrt_drainage,
     get_style_pmtiles_generic_water,
 )
 from water_timeseries.utils.visualization import get_legend_html_date_drainage_year, get_legend_html_net_change
@@ -249,6 +250,29 @@ def build_pmtiles_map(
         )
         # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year(
+            hide_stable_lakes=hide_stable_lakes
+        )
+        legend = get_legend_html_date_drainage_year()
+
+        # Use only one basemap to avoid overlap
+        tile_layer_darkmatter.add_to(m)
+        tcvis_tile_layer.add_to(m)
+        tile_layer_esriworld.add_to(m)
+
+    elif viz_configuration_name == "nrt_drainage" and not drained_ids:
+        aliases = {
+            "id_geohash": "Lake ID",
+            "date": "Analysis date [YYYY-MM]",
+            "water_observed": "Observed water area [%]",
+            "water_predicted": "Predicted water area [%]",
+            "water_residual": "Difference of lake area from prediction [%]",
+            "drainage_confidence": "Confidence of drainage detection [0 (low) to 3 (high)]",
+        }
+        tooltip = PMTilesMapLibreTooltipWithRounding(
+            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
+        )
+        # Convert to number to handle string values in PMTiles
+        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_drainage(
             hide_stable_lakes=hide_stable_lakes
         )
         legend = get_legend_html_date_drainage_year()
