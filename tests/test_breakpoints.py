@@ -383,3 +383,70 @@ class TestNrtBreakpointBatch:
         bp = NRTBreakpoint()
         breaks = bp.calculate_break(dataset, analysis_date="2020-01-01")
         assert isinstance(breaks, pd.DataFrame)
+
+    def test_nrt_breakpoint_output_columns_with_absolute_values(self, dw_test_dataset):
+        """Test NrtBreakpoint produces correct output columns including absolute values."""
+        dataset = DWDataset(dw_test_dataset)
+        bp = NRTBreakpoint()
+
+        result = bp.calculate_break(dataset, analysis_date="2024-07")
+
+        # Check result is DataFrame
+        assert isinstance(result, pd.DataFrame)
+
+        # Check expected columns match output_columns
+        expected_columns = [
+            "date",
+            "water_observed",
+            "water_predicted",
+            "water_residual",
+            "water_predicted_lower_90",
+            "water_predicted_upper_90",
+            "water_historical_mean",
+            "water_historical_median",
+            "water_historical_std",
+            "water_historical_min",
+            "water_historical_max",
+            "drainage_confidence",
+            # absolute values
+            "water_observed_absolute",
+            "water_predicted_absolute",
+            "water_residual_absolute",
+            "water_predicted_lower_90_absolute",
+            "water_predicted_upper_90_absolute",
+            "water_historical_mean_absolute",
+            "water_historical_median_absolute",
+            "water_historical_std_absolute",
+            "water_historical_min_absolute",
+            "water_historical_max_absolute",
+        ]
+
+        for col in expected_columns:
+            assert col in result.columns, f"Expected column {col} not found in result"
+
+        # Check that output_columns match
+        assert result.columns.tolist() == bp.output_columns
+
+    def test_nrt_breakpoint_absolute_values_are_larger_than_normalized(self, dw_test_dataset):
+        """Test that absolute values are larger than normalized values (scaling factor > 1)."""
+        dataset = DWDataset(dw_test_dataset)
+        bp = NRTBreakpoint()
+
+        result = bp.calculate_break(dataset, analysis_date="2024-07")
+
+        # Check that absolute values are in a reasonable range (larger than normalized)
+        # The scaling factor should make absolute values larger than 1 for most lakes
+        if len(result) > 0:
+            # Get scaling factors from dataset
+            scaling_factors = dataset.ds.max(dim="date")["area_data"].to_dataframe()
+
+            # Check that water_observed < water_observed_absolute for most entries
+            # (unless scaling factor is very small)
+            for idx in result.index[:5]:  # Check first 5 entries
+                if idx in scaling_factors.index:
+                    scaling = scaling_factors.loc[idx, "area_data"]
+                    # If scaling factor > 1, absolute should be larger
+                    if scaling > 1:
+                        assert result.loc[idx, "water_observed_absolute"] >= result.loc[idx, "water_observed"], (
+                            f"Absolute value should be >= normalized for {idx}"
+                        )

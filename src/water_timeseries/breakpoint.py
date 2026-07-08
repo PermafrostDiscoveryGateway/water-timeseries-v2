@@ -432,6 +432,10 @@ class NRTBreakpoint(BreakpointMethod):
     data. It follows the same interface as other breakpoint methods but uses internal
     logic that is distinct from the SimpleBreakpoint and BeastBreakpoint classes.
 
+    The NRT method uses AutoARIMA to predict the expected water extent and compares
+    it against the observed value. It also calculates historical statistics and
+    assigns a drainage confidence level based on three criteria.
+
     Parameters
     ----------
     kwargs_break : dict, optional
@@ -441,12 +445,30 @@ class NRTBreakpoint(BreakpointMethod):
     ----------
     breakpoint_columns : list
         List of column names in the output DataFrame.
+    output_columns : list
+        List of column names in the output DataFrame, including normalized values
+        (0-1 scale) and their absolute equivalents (scaled by max area).
+    output_columns_base : list
+        Subset of output columns for handling NaN entries.
+
+    Notes
+    -----
+    The output includes both normalized values (0-1 range) and absolute values.
+    Absolute values are computed by multiplying normalized values with the scaling
+    factor (max area per id_geohash): ``absolute = normalized * max_area_data``.
+
+    Examples
+    --------
+    >>> from water_timeseries.breakpoint import NRTBreakpoint
+    >>> from water_timeseries.dataset import DWDataset
+    >>> bp = NRTBreakpoint()
+    >>> dataset = DWDataset(xr.open_dataset("data.zarr"))
+    >>> result = bp.calculate_break(dataset, analysis_date="2024-07")
     """
 
     def __init__(self, kwargs_break: dict = dict()):
         super().__init__(method_name="nrt")
         self.kwargs_break = kwargs_break
-        # may need some update
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
         self.output_columns = [
             "date",
@@ -461,6 +483,17 @@ class NRTBreakpoint(BreakpointMethod):
             "water_historical_min",
             "water_historical_max",
             "drainage_confidence",
+            # absolute values
+            "water_observed_absolute",
+            "water_predicted_absolute",
+            "water_residual_absolute",
+            "water_predicted_lower_90_absolute",
+            "water_predicted_upper_90_absolute",
+            "water_historical_mean_absolute",
+            "water_historical_median_absolute",
+            "water_historical_std_absolute",
+            "water_historical_min_absolute",
+            "water_historical_max_absolute",
         ]
         self.output_columns_base = [
             "date",
@@ -470,6 +503,12 @@ class NRTBreakpoint(BreakpointMethod):
             "water_predicted_lower_90",
             "water_predicted_upper_90",
             "drainage_confidence",
+            # absolute values
+            "water_observed_absolute",
+            "water_predicted_absolute",
+            "water_residual_absolute",
+            "water_predicted_lower_90_absolute",
+            "water_predicted_upper_90_absolute",
         ]
 
     def predict_nrt_arima(
@@ -755,17 +794,49 @@ class NRTBreakpoint(BreakpointMethod):
         # add confidence level to output
         df_output = self._add_confidence_level(df_output)
 
+        # compute absolute values by multiplying normalized values with scaling factor
+        # scaling factor is the max area per id_geohash: ds.max(dim="date")["area_data"]
+        scaling_factors = dataset.ds.max(dim="date")["area_data"].to_dataframe()
+        scaling_factors = scaling_factors.loc[df_output.index]
+
+        # columns to convert to absolute values
+        water_cols_absolute = [
+            "water_observed",
+            "water_predicted",
+            "water_residual",
+            "water_predicted_lower_90",
+            "water_predicted_upper_90",
+            "water_historical_mean",
+            "water_historical_median",
+            "water_historical_std",
+            "water_historical_min",
+            "water_historical_max",
+        ]
+        for col in water_cols_absolute:
+            if col in df_output.columns:
+                df_output[f"{col}_absolute"] = df_output[col] * scaling_factors["area_data"]
+
         # if keep_nans is selected: calculate historical stats for these and append to calculated data
         if keep_nans:
+            # base columns only (without absolute values, as predictions are not available)
+            base_columns_no_abs = [col for col in self.output_columns_base if not col.endswith("_absolute")]
             prediction_df_nan = pd.DataFrame(
                 index=nan_ids,
-                columns=self.output_columns_base,
+                columns=base_columns_no_abs,
             )
             df_historical_stats_nans = self._get_ds_stats(
                 ds_historical.sel(id_geohash=nan_ids), water_column=dataset.water_column
             ).round(4)
             df_historical_stats_nans.columns = "water_historical_" + df_historical_stats_nans.columns.astype(str)
             df_output_nan = prediction_df_nan.join(df_historical_stats_nans, how="left").round(4)
+
+            # compute absolute values for nan entries
+            scaling_factors_nan = dataset.ds.max(dim="date")["area_data"].to_dataframe()
+            scaling_factors_nan = scaling_factors_nan.loc[df_output_nan.index]
+            for col in water_cols_absolute:
+                if col in df_output_nan.columns:
+                    df_output_nan[f"{col}_absolute"] = df_output_nan[col] * scaling_factors_nan["area_data"]
+
             df_output = pd.concat([df_output, df_output_nan]).sort_index()
 
         return df_output[self.output_columns]
