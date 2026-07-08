@@ -384,7 +384,7 @@ load only the tiles visible in the viewport (MapLibre GL + PMTiles).
 uv run water-timeseries --vector-file build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles
 
 # 1b. Build a single .pmtiles archive from your lake parquet - set visualization style for non-generic layer info e.g. drainage year from dynamic world data
-uv run water-timeseries --vector-file build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles --viz-configuration drainage_year
+uv run water-timeseries build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles --viz-configuration drainage_year
 
 # 2a. Local dashboard (starts a small HTTP server with Range support)
 uv run water-timeseries dashboard \
@@ -497,6 +497,43 @@ gif_path = create_timelapse(
     timelapse_source="sentinel2",
     overwrite_exists=True,  # Re-download even if file exists
 )
+```
+
+### Dashboard Visualization Configurations
+
+The dashboard supports three visualization configurations for the map viewer, controlled by the `--viz-configuration` parameter:
+
+| Configuration | Description |
+|--------------|-------------|
+| `"colored_historical"` | Historical time series with color-coded data (default) |
+| `"drainage_year"` | Data displayed by drainage year |
+| `"nrt_drainage"` | Near-real-time drainage data |
+
+**Example usage:**
+
+```bash
+# Use colored_historical (default)
+uv run water-timeseries dashboard --viz-configuration colored_historical
+
+# Use drainage_year for viewing data by drainage year
+uv run water-timeseries dashboard --viz-configuration drainage_year
+
+# Use nrt_drainage for near-real-time drainage monitoring
+uv run water-timeseries dashboard --viz-configuration nrt_drainage
+```
+
+When building PMTiles archives, the `--viz-configuration` option determines how data is encoded in the vector tiles:
+
+```bash
+# Build PMTiles with drainage_year visualization
+uv run water-timeseries build-pmtiles /path/to/lakes.parquet \
+    --output-file tiles/lakes_drainage_year.pmtiles \
+    --viz-configuration drainage_year
+
+# Build PMTiles with nrt_drainage visualization
+uv run water-timeseries build-pmtiles /path/to/lakes.parquet \
+    --output-file tiles/lakes_nrt_drainage.pmtiles \
+    --viz-configuration nrt_drainage
 ```
 
 ### Dashboard Arguments

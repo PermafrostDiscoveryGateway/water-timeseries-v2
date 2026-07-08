@@ -90,12 +90,116 @@ def get_style_pmtiles_drainage_year(hide_stable_lakes: bool = False) -> tuple:
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
+def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
+    fill_color = [
+        "case",
+        [
+            "any",
+            ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+            ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+        ],
+        "#aaaaaa",  # grey for stable lakes (0 or NaN)
+        [
+            "interpolate",
+            ["linear"],
+            ["to-number", ["get", "drainage_confidence"]],
+            1,
+            "#3b6a8c",
+            2,
+            "#9eb45c",
+            3,
+            "#f0d6a8",
+        ],
+    ]
+    # fill_color_no_date = "#ADD8E6"
+    if hide_stable_lakes:
+        fill_opacity = [
+            "case",
+            [
+                "any",
+                ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+                ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+                ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+            ],
+            0,  # completely hide stable lakes
+            0.2,
+        ]
+    else:
+        fill_opacity = [
+            "case",
+            [
+                "any",
+                ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+                ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+                ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+            ],
+            0.05,
+            0.2,
+        ]
+    line_color = [
+        "case",
+        [
+            "any",
+            ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+            ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+        ],
+        "#aaaaaa",  # grey for stable lakes (0 or NaN)
+        [
+            "interpolate",
+            ["linear"],
+            ["to-number", ["get", "drainage_confidence"]],
+            1,
+            "#3b6a8c",
+            2,
+            "#9eb45c",
+            3,
+            "#f0d6a8",
+        ],
+    ]
+    line_opacity = 1
+    # switch to disable non drained lakes (stable lakes) from being displayed on the map
+    # line width: 0.5 for confidence 0, 1 for 1-2, 3 for 3
+    if hide_stable_lakes:
+        line_width = [
+            "case",
+            [
+                "any",
+                ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+                ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+                ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+            ],
+            0,
+            [
+                "case",
+                ["==", ["to-number", ["get", "drainage_confidence"]], 1],
+                1,
+                ["==", ["to-number", ["get", "drainage_confidence"]], 2],
+                1,
+                3,  # confidence 3
+            ],
+        ]
+    else:
+        line_width = [
+            "case",
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+            0.5,
+            ["==", ["to-number", ["get", "drainage_confidence"]], 1],
+            1,
+            ["==", ["to-number", ["get", "drainage_confidence"]], 2],
+            1,
+            3,  # confidence 3
+        ]
+    return fill_color, fill_opacity, line_color, line_width, line_opacity
+
+
 def get_style_pmtiles_generic_water() -> tuple:
     fill_color = "#ADD8E6"
     fill_opacity = 0.7
     # line_color = "#1E90FF"
     line_color = "#eeeeee"
-    line_width = 20
+    line_width = 1
     line_opacity = 1
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
