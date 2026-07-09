@@ -264,9 +264,19 @@ def build_pmtiles_nrt_drainage(
         "water_residual",
         "drainage_confidence",
     )
+
+    columns_absolute = (
+        "id_geohash",
+        "date",
+        "water_observed_absolute",
+        "water_predicted_absolute",
+        "water_residual_absolute",
+        "drainage_confidence",
+    )
+
     return build_pmtiles(
         parquet_path,
         output_path,
-        property_columns=columns,
+        property_columns=columns_absolute,
         **kwargs,
     )
