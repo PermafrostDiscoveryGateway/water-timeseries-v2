@@ -256,20 +256,21 @@ def build_pmtiles_nrt_drainage(
     **kwargs,
 ) -> Path:
     """Build PMTiles with drainage year styling properties."""
-    columns = (
-        "id_geohash",
-        "date",
-        "water_observed",
-        "water_predicted",
-        "water_residual",
-        "drainage_confidence",
-    )
+    # columns = (
+    #     "id_geohash",
+    #     "date",
+    #     "water_observed",
+    #     "water_predicted",
+    #     "water_residual",
+    #     "drainage_confidence",
+    # )
 
     columns_absolute = (
         "id_geohash",
         "date",
         "water_observed_absolute",
         "water_predicted_absolute",
+        "water_predicted_ci_absolute",
         "water_residual_absolute",
         "drainage_confidence",
     )

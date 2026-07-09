@@ -91,15 +91,17 @@ def get_style_pmtiles_drainage_year(hide_stable_lakes: bool = False) -> tuple:
 
 
 def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
+    # Helper expressions for NaN (empty string or actual NaN) vs zero
+    is_nan = [
+        "any",
+        ["==", ["to-string", ["get", "drainage_confidence"]], ""],
+        ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
+    ]
+
     fill_color = [
         "case",
-        [
-            "any",
-            ["==", ["to-string", ["get", "drainage_confidence"]], ""],
-            ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
-            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-        ],
-        "#aaaaaa",  # grey for stable lakes (0 or NaN)
+        is_nan,
+        "#aaaaaa",  # grey for NaN
         [
             "interpolate",
             ["linear"],
@@ -112,40 +114,33 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
             "#f0d6a8",
         ],
     ]
+
     # fill_color_no_date = "#ADD8E6"
     if hide_stable_lakes:
         fill_opacity = [
             "case",
-            [
-                "any",
-                ["==", ["to-string", ["get", "drainage_confidence"]], ""],
-                ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
-                ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            ],
-            0,  # completely hide stable lakes
+            is_nan,
+            0,  # completely hide NaN
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+            0,  # completely hide stable lakes (confidence 0)
             0.2,
         ]
     else:
         fill_opacity = [
             "case",
-            [
-                "any",
-                ["==", ["to-string", ["get", "drainage_confidence"]], ""],
-                ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
-                ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            ],
-            0.05,
+            is_nan,
+            0,  # completely transparent fill for NaN
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+            0.05,  # lower opacity for stable lakes (confidence 0)
             0.2,
         ]
+
     line_color = [
         "case",
-        [
-            "any",
-            ["==", ["to-string", ["get", "drainage_confidence"]], ""],
-            ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
-            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-        ],
-        "#aaaaaa",  # grey for stable lakes (0 or NaN)
+        is_nan,
+        "#888888",  # grey for NaN
+        ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+        "#aaaaaa",  # light grey for confidence 0 (stable lakes)
         [
             "interpolate",
             ["linear"],
@@ -153,23 +148,36 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
             1,
             "#3b6a8c",
             2,
-            "#9eb45c",
+            "#4b9379",
             3,
-            "#f0d6a8",
+            "#fbf7b3",
         ],
     ]
-    line_opacity = 1
+    # line opacity: depends on hide_stable_lakes
+    if hide_stable_lakes:
+        line_opacity = [
+            "case",
+            is_nan,
+            0,  # hide NaN
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+            0,  # hide confidence 0
+            1,
+        ]
+    else:
+        line_opacity = [
+            "case",
+            is_nan,
+            0.5,  # lower opacity for NaN
+            1,
+        ]
     # switch to disable non drained lakes (stable lakes) from being displayed on the map
-    # line width: 0.5 for confidence 0, 1 for 1-2, 3 for 3
+    # line width: 0.5 for NaN, 1 for confidence 0, 1 for 1-2, 3 for 3
     if hide_stable_lakes:
         line_width = [
             "case",
-            [
-                "any",
-                ["==", ["to-string", ["get", "drainage_confidence"]], ""],
-                ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
-                ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            ],
+            is_nan,
+            0,
+            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
             0,
             [
                 "case",
@@ -183,8 +191,10 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
     else:
         line_width = [
             "case",
+            is_nan,
+            0.5,  # width 0.5 for NaN
             ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            0.5,
+            1,  # width 1 for confidence 0
             ["==", ["to-number", ["get", "drainage_confidence"]], 1],
             1,
             ["==", ["to-number", ["get", "drainage_confidence"]], 2],
