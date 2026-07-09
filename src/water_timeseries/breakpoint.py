@@ -40,6 +40,7 @@ from water_timeseries.utils.data import (
     calculate_water_area_after,
     calculate_water_area_before,
 )
+from water_timeseries.utils.nrt_postprocessing import add_confidence_interval_strings
 
 warnings.filterwarnings("ignore")
 
@@ -494,6 +495,9 @@ class NRTBreakpoint(BreakpointMethod):
             "water_historical_std_absolute",
             "water_historical_min_absolute",
             "water_historical_max_absolute",
+            # confidence interval strings
+            "water_predicted_ci",
+            "water_predicted_ci_absolute",
         ]
         self.output_columns_base = [
             "date",
@@ -838,5 +842,8 @@ class NRTBreakpoint(BreakpointMethod):
                     df_output_nan[f"{col}_absolute"] = df_output_nan[col] * scaling_factors_nan["area_data"]
 
             df_output = pd.concat([df_output, df_output_nan]).sort_index()
+
+        # Add confidence interval string columns
+        df_output = add_confidence_interval_strings(df_output)
 
         return df_output[self.output_columns]
