@@ -270,6 +270,7 @@ def build_pmtiles_nrt_drainage(
         "date",
         "water_observed_absolute",
         "water_predicted_absolute",
+        "water_predicted_ci_absolute",
         "water_residual_absolute",
         "drainage_confidence",
     )

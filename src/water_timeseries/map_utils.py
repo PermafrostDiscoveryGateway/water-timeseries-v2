@@ -264,19 +264,12 @@ def build_pmtiles_map(
         tile_layer_esriworld.add_to(m)
 
     elif viz_configuration_name == "nrt_drainage" and not drained_ids:
-        # aliases = {
-        #     "id_geohash": "Lake ID",
-        #     "date": "Analysis date [YYYY-MM]",
-        #     "water_observed": "Observed water area [%]",
-        #     "water_predicted": "Predicted water area [%]",
-        #     "water_residual": "Difference of lake area from prediction [%]",
-        #     "drainage_confidence": "Confidence of drainage detection [0 (low) to 3 (high)]",
-        # }
         aliases = {
             "id_geohash": "Lake ID",
             "date": "Analysis date [YYYY-MM]",
             "water_observed_absolute": "Observed water area [ha]",
             "water_predicted_absolute": "Predicted water area [ha]",
+            "water_predicted_ci_absolute": "Predicted water area range [ha]",
             "water_residual_absolute": "Difference of lake area from prediction [ha]",
             "drainage_confidence": "Confidence of drainage detection [0 (low) to 3 (high)]",
         }
