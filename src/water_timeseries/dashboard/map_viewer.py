@@ -1579,6 +1579,7 @@ def create_app(
                             show_success=True,
                             show_caption=True,
                             break_date=break_date,
+                            plot_variables=["water", "vegetation", "bare"],
                         )
 
                     # Plot JRC time series in second column if available

@@ -89,6 +89,7 @@ def plot_time_series_data(
     show_success: bool = True,
     show_caption: bool = True,
     break_date: Optional[str | pd.Timestamp] = None,
+    plot_variables: Optional[list] = None,
 ) -> bool:
     """
     Unified function to plot time series data with automatic format handling.
@@ -101,6 +102,9 @@ def plot_time_series_data(
         show_success: Whether to show success message for DW data
         show_caption: Whether to show captions and availability information
         break_date: Optional date for breakpoint filtering
+        plot_variables: Optional list of variables to plot. If None, uses default variables.
+            For DW: defaults to all (water, bare, vegetation, snow_and_ice)
+            For JRC: defaults to all (area_water_permanent, area_water_seasonal, area_land)
 
     Returns:
         True if plotting succeeded, False otherwise
@@ -124,7 +128,7 @@ def plot_time_series_data(
 
     try:
         # Plot interactive plotly chart
-        fig = dataset.plot_timeseries_interactive(id_geohash, breakpoints=break_date)
+        fig = dataset.plot_timeseries_interactive(id_geohash, breakpoints=break_date, plot_variables=plot_variables)
         st.plotly_chart(fig, width="stretch")
 
         # Save as HTML for download
