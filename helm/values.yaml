@@ -46,10 +46,11 @@ affinity: {}
 ingress:
   ## @param ingress.enabled Enable ingress to allow web traffic. Ingress settings ignored if 'false'
   ##
-  enabled: false
+  enabled: true
   ## @param ingress.className The class of the ingress controller to use.
   ##
-  className: traefik
+  #className: traefik
+  className: nginx
   ## @param ingress.hosts Full ingress host/path subtree (advanced mode).
   ## If provided (non-empty), this takes precedence over `ingress.hostname`.
   ## Example:
@@ -82,7 +83,7 @@ ingress:
   ## and the TLS secret name will be pulled from ingress.tlsSecretName.
   ## If true, and ingress.tls is NOT empty, that takes precedence over the inferred TLS settings.
   ##
-  tlsEnabled: false
+  tlsEnabled: true
   ## @param ingress.tlsSecretName Secret name used by inferred TLS when `ingress.tls` is empty.
   ##
   tlsSecretName: ingress-nginx-tls-cert  # leave as-is until LetsEncrypt HTTP-01 working in traefik
@@ -108,5 +109,8 @@ ingress:
   ## To disable TLS altogether (i.e. use http only), set:
   ##    tlsEnabled: false
   ##
-  tls: []
+  tls:
+    - hosts:
+        - lostlakes.arcticdata.io
+      secretName: ingress-tls-cert
 
