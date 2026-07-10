@@ -36,6 +36,12 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = unquote(parsed.path)
 
+        prefix = getattr(self.server, "path_prefix", "")
+        if prefix and route.startswith(prefix):
+            route = route[len(prefix):]
+        if not route.startswith("/"):
+            route = "/" + route
+
         if route in ("/map", "/map.html"):
             self._serve_map_page(parse_qs(parsed.query), head_only=head_only)
             return
@@ -177,6 +183,8 @@ class PmtilesServer:
         # the browser must use "localhost" (or the host IP) via the published
         # port.  Override with the PMTILES_HOST env var or pass explicitly.
         self.public_host: str = public_host or os.environ.get("PMTILES_HOST", "localhost")
+        env_base_url = os.environ.get("PMTILES_BASE_URL")
+        self.path_prefix = urlparse(env_base_url).path.rstrip("/") if env_base_url else ""
         self._httpd: Optional[ThreadingHTTPServer] = None
         self._thread: Optional[threading.Thread] = None
         self.config_cache: dict[str, Any] = {}
@@ -185,8 +193,12 @@ class PmtilesServer:
     def base_url(self) -> str:
         if self._httpd is None:
             raise RuntimeError("Server is not running")
-        # Use public_host so the URL is reachable from the browser, even when
-        # the server socket is bound to 0.0.0.0 inside a Docker container.
+        # PMTILES_BASE_URL overrides the full base URL — use when the server is
+        # behind a reverse proxy (e.g. nginx ingress) that rewrites the path.
+        # Example: https://example.com/pmtiles
+        override = os.environ.get("PMTILES_BASE_URL")
+        if override:
+            return override.rstrip("/")
         return f"http://{self.public_host}:{self._httpd.server_port}"
 
     def start(self) -> "PmtilesServer":
@@ -194,6 +206,7 @@ class PmtilesServer:
         self._httpd.directory = self.directory
         self._httpd.pmtiles_filename = self.pmtiles_filename
         self._httpd.config_cache = self.config_cache
+        self._httpd.path_prefix = self.path_prefix
         self._httpd.base_url = ""  # set after bind
         self.port = self._httpd.server_port
         self._httpd.base_url = self.base_url

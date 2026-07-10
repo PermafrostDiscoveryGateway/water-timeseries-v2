@@ -1,6 +1,5 @@
 {{- if .Values.ingress.enabled -}}
 {{- $fullName := include "water-timeseries.fullname" . -}}
-{{- $svcPort := .Values.service.port -}}
 {{- $inferredHostname := .Values.ingress.hostname | default "" -}}
 {{- $tlsSecretName := .Values.ingress.tlsSecretName | default "ingress-tls-cert" -}}
 {{- $tlsEnabled := true -}}
@@ -41,32 +40,21 @@ spec:
   {{- end }}
   {{- if or $hasHosts $inferredHostname }}
   rules:
-    {{- if $hasHosts }}
-    {{- range .Values.ingress.hosts }}
+    {{- $services := .Values.services -}}
+    {{- $hosts := .Values.ingress.hosts | default (list (dict "host" $inferredHostname)) }}
+    {{- range $hosts }}
     - host: {{ .host | quote }}
       http:
         paths:
-          {{- range .http.paths }}
-          - path: {{ .path }}
-            pathType: {{ .pathType | default "Prefix" }}
-            backend:
-              service:
-                name: {{ $fullName }}
-                port:
-                  number: {{ $svcPort }}
-          {{- end }}
-    {{- end }}
-    {{- else }}
-    - host: {{ $inferredHostname | quote }}
-      http:
-        paths:
-          - path: /
+          {{- range $i, $svc := $services }}
+          - path: {{ if eq $i 0 }}/{{ else }}/{{ $svc.name }}{{ end }}
             pathType: Prefix
             backend:
               service:
-                name: {{ $fullName }}
+                name: {{ $fullName }}-{{ $svc.name }}
                 port:
-                  number: {{ $svcPort }}
+                  number: {{ $svc.port }}
+          {{- end }}
     {{- end }}
   {{- end }}
 {{- end }}

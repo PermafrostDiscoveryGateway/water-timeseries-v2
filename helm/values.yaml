@@ -3,7 +3,7 @@ replicaCount: 1
 image:
   repository: ghcr.io/nceas/water-timeseries-v2
   tag: 0.13.1
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 nameOverride: ""
 fullnameOverride: ""
@@ -24,9 +24,13 @@ persistence:
   storageClassName: ""
   annotations: {}
 
-service:
-  type: ClusterIP
-  port: 8501
+services:
+  - name: dashboard
+    type: ClusterIP
+    port: 8501
+  - name: pmtiles
+    type: ClusterIP
+    port: 8901
 
 resources: {}
 
@@ -68,15 +72,6 @@ ingress:
   ##
   hosts:
     - host: "lostlakes.arcticdata.io"
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: lostlakes-water-timeseries
-                port:
-                  number: 8501
 
   ## @param ingress.tlsEnabled Set to 'false', to disable rendering Ingress TLS (HTTP-only).
   ## If true, and ingress.tls is empty, the ingress TLS entry will be inferred from ingress.hostname

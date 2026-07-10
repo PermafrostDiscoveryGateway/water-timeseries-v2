@@ -26,9 +26,11 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - name: http
-              containerPort: {{ .Values.service.port }}
+            {{- range .Values.services }}
+            - name: {{ .name }}
+              containerPort: {{ .port }}
               protocol: TCP
+            {{- end }}
           command:
             - water-timeseries
             #- bash
@@ -45,6 +47,10 @@ spec:
             - --ee-project={{ .Values.dashboard.eeProject }}
             {{- end }}
           env:
+            - name: PMTILES_BASE_URL
+              value: "{{ if .Values.ingress.tlsEnabled }}https{{ else }}http{{ end }}://{{ (index .Values.ingress.hosts 0).host }}/{{ (index .Values.services 1).name }}"
+            - name: PMTILES_PORT
+              value: {{ (index .Values.services 1).port | quote }}
             - name: MPLBACKEND
               value: Agg
             - name: POLARS_SKIP_CPU_CHECK

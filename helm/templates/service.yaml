@@ -1,15 +1,18 @@
+{{- range .Values.services }}
+---
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "water-timeseries.fullname" . }}
+  name: {{ include "water-timeseries.fullname" $ }}-{{ .name }}
   labels:
-    {{- include "water-timeseries.labels" . | nindent 4 }}
+    {{- include "water-timeseries.labels" $ | nindent 4 }}
 spec:
-  type: {{ .Values.service.type }}
+  type: {{ .type }}
   selector:
-    {{- include "water-timeseries.selectorLabels" . | nindent 4 }}
+    {{- include "water-timeseries.selectorLabels" $ | nindent 4 }}
   ports:
-    - name: http
-      port: {{ .Values.service.port }}
-      targetPort: http
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .port }}
       protocol: TCP
+{{- end }}
