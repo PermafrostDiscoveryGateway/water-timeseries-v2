@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: water-timeseries-v2
-  tag: 0.9.4
+  repository: ghcr.io/nceas/water-timeseries-v2
+  tag: 0.13.1
   pullPolicy: IfNotPresent
 
 nameOverride: ""
@@ -10,40 +10,23 @@ fullnameOverride: ""
 
 dashboard:
   port: 8501
-  offlineMode: false
+  offlineMode: true
   eeProject: ""
-  vectorFile: /data/input/lake_polygons.parquet
-  dwDatasetFile: /data/input/lakes_dw_test.zarr
-  jrcDatasetFile: /data/input/lakes_jrc_test.zarr
-  precomputedNrtDir: /data/nrt
-  vizConfiguration: colored_historical
-  dwStartYear: 2017
-  dwEndYear: 2025
-  dwStartMonth: 6
-  dwEndMonth: 9
+  configFile: /data/dashboard_nrt/dashboard_PMTiles_nrt_subset_forMattJones.yaml
 
 persistence:
   enabled: true
-  existingClaim: "local-data-pvc"
+  existingClaim: "lostlakes-vardata"
   mountPath: /data
   accessModes:
-    - ReadWriteOnce
-  size: 10Gi
+    - ReadOnlyMany
+  size: 500Ti
   storageClassName: ""
   annotations: {}
 
 service:
   type: ClusterIP
   port: 8501
-
-ingress:
-  enabled: true
-  className: traefik
-  annotations: {}
-  host: water-timeseries.localhost
-  path: /
-  pathType: Prefix
-  tls: []
 
 resources: {}
 
@@ -55,3 +38,75 @@ nodeSelector: {}
 tolerations: []
 
 affinity: {}
+
+## @section Ingress
+## Configuration for the ingress, including certifications and host name. There is no configured
+## service section here because the ingress automatically pulls the default named service for the
+## pod via release name. The section establishing that service is above.
+ingress:
+  ## @param ingress.enabled Enable ingress to allow web traffic. Ingress settings ignored if 'false'
+  ##
+  enabled: false
+  ## @param ingress.className The class of the ingress controller to use.
+  ##
+  className: traefik
+  ## @param ingress.hosts Full ingress host/path subtree (advanced mode).
+  ## If provided (non-empty), this takes precedence over `ingress.hostname`.
+  ## Example:
+  ##  hosts:
+  ##    - host: "lostlakes.arcticdata.io"
+  ##      http:
+  ##        paths:
+  ##          - path: /
+  ##            pathType: Prefix
+  ##            backend:
+  ##              service:
+  ##                name: lostlakes
+  ##                port:
+  ##                  number: 80
+  ##
+  hosts:
+    - host: "lostlakes.arcticdata.io"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: lostlakes-water-timeseries
+                port:
+                  number: 8501
+
+  ## @param ingress.tlsEnabled Set to 'false', to disable rendering Ingress TLS (HTTP-only).
+  ## If true, and ingress.tls is empty, the ingress TLS entry will be inferred from ingress.hostname
+  ## and the TLS secret name will be pulled from ingress.tlsSecretName.
+  ## If true, and ingress.tls is NOT empty, that takes precedence over the inferred TLS settings.
+  ##
+  tlsEnabled: false
+  ## @param ingress.tlsSecretName Secret name used by inferred TLS when `ingress.tls` is empty.
+  ##
+  tlsSecretName: ingress-nginx-tls-cert  # leave as-is until LetsEncrypt HTTP-01 working in traefik
+
+  annotations:
+    ## @param ingress.annotations.cert-manager.io/cluster-issuer cert-manager cluster issuer
+    ## to use for provisioning certificates
+    ##
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+
+  ## @param ingress.tls Full TLS subtree (advanced mode). Ignored unless ingress.enabled is true.
+  ## If provided (non-empty), this takes precedence over inferred TLS from `ingress.hostname`.
+  ## If set, cert-manager will attempt to provision TLS certificates for the specified hosts
+  ## ingress.tls.hosts: The hostname for TLS config
+  ## ingress.tls.secretName: Name of the secret holding the TLS cert(s)
+  ##
+  ## Example:
+  ##  tls:
+  ##    - hosts:
+  ##        - lostlakes.arcticdata.io
+  ##      secretName: ingress-tls-cert
+  ##
+  ## To disable TLS altogether (i.e. use http only), set:
+  ##    tlsEnabled: false
+  ##
+  tls: []
+

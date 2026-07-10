@@ -30,35 +30,27 @@ spec:
               containerPort: {{ .Values.service.port }}
               protocol: TCP
           command:
-            - streamlit
+            - water-timeseries
+            #- bash
           args:
-            - run
-            - src/water_timeseries/dashboard/app.py
-            - --server.port={{ .Values.dashboard.port }}
-            - --server.address=0.0.0.0
-            - --
-            - --vector-file
-            - {{ .Values.dashboard.vectorFile | quote }}
-            - --dw-dataset-file
-            - {{ .Values.dashboard.dwDatasetFile | quote }}
-            - --jrc-dataset-file
-            - {{ .Values.dashboard.jrcDatasetFile | quote }}
-            - --precomputed-nrt-dir
-            - {{ .Values.dashboard.precomputedNrtDir | quote }}
-            - --dw-start-year={{ .Values.dashboard.dwStartYear }}
-            - --dw-end-year={{ .Values.dashboard.dwEndYear }}
-            - --dw-start-month={{ .Values.dashboard.dwStartMonth }}
-            - --dw-end-month={{ .Values.dashboard.dwEndMonth }}
-            - --viz-configuration={{ .Values.dashboard.vizConfiguration }}
-            {{- if .Values.dashboard.offlineMode }}
-            - --offline-mode
-            {{- end }}
+            # uv run water-timeseries dashboard --config-file configs/dashboard/dashboard_PMTiles_historical_drainage_allLakes.yaml --port 8510
+            #- -c 
+            #- "while true; do sleep 1; done"
+            - dashboard
+            #- --port={{ .Values.dashboard.port }}
+            #- --server.address=0.0.0.0
+            - --config-file
+            - {{ .Values.dashboard.configFile | quote }}
             {{- if .Values.dashboard.eeProject }}
             - --ee-project={{ .Values.dashboard.eeProject }}
             {{- end }}
           env:
             - name: MPLBACKEND
               value: Agg
+            - name: POLARS_SKIP_CPU_CHECK
+              value: "1"
+            - name: POLARS_FORCE_PKG
+              value: "compat"
             {{- if .Values.dashboard.eeProject }}
             - name: EE_PROJECT
               value: {{ .Values.dashboard.eeProject | quote }}
