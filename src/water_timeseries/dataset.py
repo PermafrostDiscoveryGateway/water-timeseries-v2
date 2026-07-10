@@ -427,6 +427,7 @@ class DWDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
+        plot_variables: Optional[list] = None,
         save_path: Optional[str | Path] = None,
     ) -> plt.Figure:
         """Plot the time series for a specific geohash using matplotlib.
@@ -443,6 +444,9 @@ class DWDataset(LakeDataset):
                 string in YYYY-MM-DD format), or a list of dates. If a list is provided,
                 only the first date is used for plotting. When a BreakpointMethod is
                 passed, the first detected breakpoint date is used.
+            plot_variables (list, optional): List of variables to plot. If None,
+                defaults to all variables. Options include: 'water', 'bare', 'vegetation',
+                'snow_and_ice'.
             save_path (str | Path, optional): Path to save the plot as an image file.
                 If provided, the figure will be saved to this location.
 
@@ -458,6 +462,9 @@ class DWDataset(LakeDataset):
 
             >>> # Save the plot to a file
             >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", save_path="plot.png")
+
+            >>> # Plot only water and bare
+            >>> fig = dw_dataset.plot_timeseries(id_geohash="abc123", plot_variables=["water", "bare"])
         """
 
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna()
@@ -476,6 +483,7 @@ class DWDataset(LakeDataset):
         figure = plot_water_time_series_dw(
             df_plot,
             first_break=bp,
+            plot_variables=plot_variables,
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
             save_path=save_path,
@@ -487,6 +495,7 @@ class DWDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
+        plot_variables: Optional[list] = None,
         save_path: Optional[str | Path] = None,
     ) -> go.Figure:
         """Plot the interactive time series for a specific geohash using Plotly.
@@ -503,6 +512,9 @@ class DWDataset(LakeDataset):
                 string in YYYY-MM-DD format), or a list of dates. If a list is provided,
                 only the first date is used for plotting. When a BreakpointMethod is
                 passed, the first detected breakpoint date is used.
+            plot_variables (list, optional): List of variables to plot. If None,
+                defaults to all variables. Options include: 'water', 'bare', 'vegetation',
+                'snow_and_ice'.
             save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
@@ -518,6 +530,9 @@ class DWDataset(LakeDataset):
 
             >>> # Save the plot to an HTML file
             >>> fig = dw_dataset.plot_timeseries_interactive(id_geohash="abc123", save_path="plot.html")
+
+            >>> # Plot only water and bare
+            >>> fig = dw_dataset.plot_timeseries_interactive(id_geohash="abc123", plot_variables=["water", "bare"])
         """
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna()
         df_plot = prepare_data_for_plot_dw(df, group_vegetation=True)
@@ -535,6 +550,7 @@ class DWDataset(LakeDataset):
         figure = plot_water_time_series_dw_interactive(
             df_plot,
             first_break=bp,
+            plot_variables=plot_variables,
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
             save_path=save_path,
@@ -660,6 +676,7 @@ class JRCDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
+        plot_variables: Optional[list] = None,
         save_path: Optional[str | Path] = None,
     ) -> plt.Figure:
         """Plot the time series for a specific geohash using matplotlib.
@@ -676,6 +693,8 @@ class JRCDataset(LakeDataset):
                 string in YYYY-MM-DD format), or a list of dates. If a list is provided,
                 only the first date is used for plotting. When a BreakpointMethod is
                 passed, the first detected breakpoint date is used.
+            plot_variables (list, optional): List of variables to plot. If None,
+                defaults to ["area_water_permanent", "area_water_seasonal", "area_land"].
             save_path (str | Path, optional): Path to save the plot as an image file.
                 If provided, the figure will be saved to this location.
 
@@ -691,6 +710,9 @@ class JRCDataset(LakeDataset):
 
             >>> # Save the plot to a file
             >>> fig = jrc_dataset.plot_timeseries(id_geohash="abc123", save_path="plot.png")
+
+            >>> # Plot only permanent water
+            >>> fig = jrc_dataset.plot_timeseries(id_geohash="abc123", plot_variables=["area_water_permanent"])
         """
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
@@ -704,10 +726,14 @@ class JRCDataset(LakeDataset):
             else:
                 bp = self._get_first_breakpoint(id_geohash, breakpoints)
 
+        # Default plot variables for JRC
+        if plot_variables is None:
+            plot_variables = ["area_water_permanent", "area_water_seasonal", "area_land"]
+
         fig = plot_water_time_series_jrc(
             df,
             first_break=bp,
-            plot_variables=["area_water_permanent", "area_water_seasonal", "area_land"],
+            plot_variables=plot_variables,
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
             save_path=save_path,
@@ -719,6 +745,7 @@ class JRCDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
+        plot_variables: Optional[list] = None,
         save_path: Optional[str | Path] = None,
     ) -> go.Figure:
         """Plot the interactive time series for a specific geohash using Plotly.
@@ -735,6 +762,8 @@ class JRCDataset(LakeDataset):
                 string in YYYY-MM-DD format), or a list of dates. If a list is provided,
                 only the first date is used for plotting. When a BreakpointMethod is
                 passed, the first detected breakpoint date is used.
+            plot_variables (list, optional): List of variables to plot. If None,
+                defaults to ["area_water_permanent", "area_water_seasonal", "area_land"].
             save_path (str | Path, optional): Path to save the plot as HTML file.
 
         Returns:
@@ -749,6 +778,9 @@ class JRCDataset(LakeDataset):
 
             >>> # Save the plot to an HTML file
             >>> fig = jrc_dataset.plot_timeseries_interactive(id_geohash="abc123", save_path="plot.html")
+
+            >>> # Plot only permanent water
+            >>> fig = jrc_dataset.plot_timeseries_interactive(id_geohash="abc123", plot_variables=["area_water_permanent"])
         """
         df = self.ds.sel(id_geohash=id_geohash).load().to_dataframe().dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
@@ -762,10 +794,14 @@ class JRCDataset(LakeDataset):
             else:
                 bp = self._get_first_breakpoint(id_geohash, breakpoints)
 
+        # Default plot variables for JRC
+        if plot_variables is None:
+            plot_variables = ["area_water_permanent", "area_water_seasonal", "area_land"]
+
         fig = plot_water_time_series_jrc_interactive(
             df,
             first_break=bp,
-            plot_variables=["area_water_permanent", "area_water_seasonal", "area_land"],
+            plot_variables=plot_variables,
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
             save_path=save_path,

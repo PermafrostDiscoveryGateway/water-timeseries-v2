@@ -75,6 +75,7 @@ def prepare_data_for_plot_dw(df: pd.DataFrame, group_vegetation: bool = True) ->
 def plot_water_time_series_dw(
     df: pd.DataFrame,
     first_break: pd.Timestamp | None,
+    plot_variables: list = None,
     normalization_factor=None,
     lake_id: str = None,
     save_path: Optional[str | Path] = None,
@@ -94,6 +95,10 @@ def plot_water_time_series_dw(
 
     first_break : pd.Timestamp
         The date for the vertical line on the plot, indicating a significant event or change in the time series.
+
+    plot_variables : list, optional
+        List of variables to plot. If None, plots all variables in the DataFrame.
+        Options include: 'water', 'bare', 'vegetation', 'snow_and_ice'.
 
     normalization_factor : float, optional
         If provided, a secondary y-axis will be added showing normalized values as percentages.
@@ -115,6 +120,7 @@ def plot_water_time_series_dw(
     Example:
     --------
     >>> fig = plot_water_time_series(df_plot, first_break=pd.Timestamp('2023-06-01'), normalization_factor=100)
+    >>> fig = plot_water_time_series(df_plot, plot_variables=['water', 'bare'])
 
     Notes:
     ------
@@ -135,9 +141,15 @@ def plot_water_time_series_dw(
         "snow_and_ice": "#000000",  # Black
     }
 
+    # Filter variables to plot if plot_variables is specified
+    if plot_variables is not None:
+        df_filtered = df[df["variable"].isin(plot_variables)]
+    else:
+        df_filtered = df
+
     # Plot each variable separately to control colors
-    for variable in df["variable"].unique():
-        data = df[df["variable"] == variable]
+    for variable in df_filtered["variable"].unique():
+        data = df_filtered[df_filtered["variable"] == variable]
         color = color_map.get(variable, None)  # Use predefined color or None
 
         linewidth = 1.5 if variable == "water" else 0.3
