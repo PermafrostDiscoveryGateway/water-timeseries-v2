@@ -419,6 +419,9 @@ class TestNrtBreakpointBatch:
             "water_historical_std_absolute",
             "water_historical_min_absolute",
             "water_historical_max_absolute",
+            # confidence interval strings
+            "water_predicted_ci",
+            "water_predicted_ci_absolute",
         ]
 
         for col in expected_columns:

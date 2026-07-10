@@ -32,6 +32,7 @@ JRC_COLOR_MAP = {
 def plot_water_time_series_dw_interactive(
     df: pd.DataFrame,
     first_break: pd.Timestamp | None = None,
+    plot_variables: List[str] = None,
     normalization_factor: Optional[float] = None,
     lake_id: Optional[str] = None,
     height: int = 500,
@@ -48,6 +49,8 @@ def plot_water_time_series_dw_interactive(
         df: DataFrame with columns 'date', 'variable', and 'value'.
             The 'variable' column should contain land cover types.
         first_break: Optional timestamp for breakpoint vertical line.
+        plot_variables: List of variables to plot. If None, defaults to
+            ["water", "bare", "vegetation", "snow_and_ice"].
         normalization_factor: Optional factor for secondary y-axis (normalized %).
         lake_id: Optional lake identifier for the title.
         height: Plot height in pixels.
@@ -62,6 +65,7 @@ def plot_water_time_series_dw_interactive(
         >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123")
         >>> st.plotly_chart(fig)
         >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123", save_path="output.html")
+        >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123", plot_variables=["water", "bare"])
     """
     # Convert first_break to pd.Timestamp if it's a string
     if isinstance(first_break, str):
@@ -71,7 +75,10 @@ def plot_water_time_series_dw_interactive(
     fig = make_subplots(specs=[[{"secondary_y": True}]])
 
     # Define which variables to plot (in order for legend)
-    plot_order = ["water", "bare", "vegetation", "snow_and_ice"]
+    if plot_variables is not None:
+        plot_order = plot_variables
+    else:
+        plot_order = ["water", "bare", "vegetation", "snow_and_ice"]
 
     # Plot each variable
     for variable in plot_order:

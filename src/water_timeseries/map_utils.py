@@ -267,9 +267,10 @@ def build_pmtiles_map(
         aliases = {
             "id_geohash": "Lake ID",
             "date": "Analysis date [YYYY-MM]",
-            "water_observed": "Observed water area [%]",
-            "water_predicted": "Predicted water area [%]",
-            "water_residual": "Difference of lake area from prediction [%]",
+            "water_observed_absolute": "Observed water area [ha]",
+            "water_predicted_absolute": "Predicted water area [ha]",
+            "water_predicted_ci_absolute": "Predicted water area range [ha]",
+            "water_residual_absolute": "Difference of lake area from prediction [ha]",
             "drainage_confidence": "Confidence of drainage detection [0 (low) to 3 (high)]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(

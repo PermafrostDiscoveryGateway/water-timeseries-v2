@@ -170,6 +170,10 @@ def get_legend_html_nrt_drainage() -> str:
         ">
         <p style="margin: 0 0 5px 0; font-weight: bold;">Drainage Confidence</p>
         <div style="display: flex; align-items: center; margin-bottom: 3px;">
+            <div style="width: 20px; height: 20px; background-color: #888888; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <span>NaN - No data</span>
+        </div>
+        <div style="display: flex; align-items: center; margin-bottom: 3px;">
             <div style="width: 20px; height: 20px; background-color: #aaaaaa; border: 1px solid #ccc; margin-right: 8px;"></div>
             <span>0 - Stable lake</span>
         </div>
@@ -178,11 +182,11 @@ def get_legend_html_nrt_drainage() -> str:
             <span>1 - Low confidence</span>
         </div>
         <div style="display: flex; align-items: center; margin-bottom: 3px;">
-            <div style="width: 20px; height: 20px; background-color: #9eb45c; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <div style="width: 20px; height: 20px; background-color: #4b9379; border: 1px solid #ccc; margin-right: 8px;"></div>
             <span>2 - Medium confidence</span>
         </div>
         <div style="display: flex; align-items: center;">
-            <div style="width: 20px; height: 20px; background-color: #f0d6a8; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <div style="width: 20px; height: 20px; background-color: #fbf7b3; border: 1px solid #ccc; margin-right: 8px;"></div>
             <span>3 - High confidence</span>
         </div>
         </div>

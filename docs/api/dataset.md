@@ -132,6 +132,7 @@ fig_interactive = dataset.plot_timeseries_interactive(
 |-----------|------|-------------|
 | `id_geohash` | str | The geohash identifier for the lake to plot |
 | `breakpoints` | BreakpointMethod, pd.Timestamp, str, list, optional | Breakpoint(s) to overlay on the plot. Can be a `BreakpointMethod` instance (e.g., `SimpleBreakpoint()`), a single date string ("YYYY-MM-DD") or `pd.Timestamp`, or a list of dates. Only the first date is used. |
+| `plot_variables` | list, optional | List of variables to plot. If None, uses all variables. For DWDataset: `["water", "bare", "vegetation", "snow_and_ice"]`. For JRCDataset: `["area_water_permanent", "area_water_seasonal", "area_land"]`. |
 | `save_path` | str, Path, optional | If provided, saves the plot to this path (`.png` for static, `.html` for interactive) |
 
 ### Return Values
@@ -195,6 +196,24 @@ fig = dataset.plot_timeseries(
 )
 ```
 
+### With Custom plot_variables
+
+You can customize which variables are displayed using the `plot_variables` parameter:
+
+```python
+# DWDataset: plot only water and bare (exclude vegetation and snow_and_ice)
+fig = dataset.plot_timeseries_interactive(
+    id_geohash=geohash,
+    plot_variables=["water", "bare"]
+)
+
+# JRCDataset: plot only permanent water
+fig = dataset.plot_timeseries_interactive(
+    id_geohash=geohash,
+    plot_variables=["area_water_permanent"]
+)
+```
+
 ### Visual Output
 
 **DWDataset Time Series**
@@ -207,6 +226,8 @@ The DWDataset plot shows land cover class proportions:
 - **Bare (brown)**: Bare soil
 - **Snow and Ice (black)**: Snow/ice coverage
 - Values are shown in hectares (left axis) with optional percentage scale (right axis)
+
+Use `plot_variables` to select which classes to display (e.g., `plot_variables=["water", "bare", "vegetation"]` to exclude snow_and_ice).
 
 **JRCDataset Time Series**
 
