@@ -17,6 +17,15 @@ from loguru import logger
 _MAP_HTML = Path(__file__).parent.parent / "dashboard" / "static" / "lake_map.html"
 
 
+def build_map_url(base_url: str, config: dict) -> str:
+    """Return a /map URL with the full config encoded as a base64 query parameter."""
+    import base64
+    import json
+
+    b64 = base64.urlsafe_b64encode(json.dumps(config).encode()).decode().rstrip("=")
+    return f"{base_url.rstrip('/')}/map?config={b64}"
+
+
 class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
     """HTTP handler: map page + static files with byte-range support for .pmtiles."""
 
@@ -165,9 +174,15 @@ class PmtilesServer:
         public_host: Optional[str] = None,
     ):
         if pmtiles_file is not None:
-            self.pmtiles_path = Path(pmtiles_file).resolve()
-            self.directory = self.pmtiles_path.parent
-            self.pmtiles_filename = self.pmtiles_path.name
+            path = Path(pmtiles_file).resolve()
+            if path.is_dir():
+                self.directory = path
+                self.pmtiles_path = None
+                self.pmtiles_filename = None
+            else:
+                self.pmtiles_path = path
+                self.directory = path.parent
+                self.pmtiles_filename = path.name
         else:
             self.pmtiles_path = None
             self.directory = _MAP_HTML.parent  # Fallback map location

@@ -1,4 +1,5 @@
 from pathlib import Path
+import functools
 
 import branca.element
 import folium
@@ -427,7 +428,11 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
         path = pmtiles_file[5:]
         return f"https://storage.googleapis.com/{path}"
 
-    import streamlit as st
+    import os
+
+    base_url = os.environ.get("PMTILES_BASE_URL")
+    if base_url:
+        return f"{base_url.rstrip('/')}/{Path(pmtiles_file).name}"
 
     from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
@@ -435,16 +440,14 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
     if not pmtiles_path.is_file():
         raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
 
-    server_key = "_pmtiles_map_server"
-    server = st.session_state.get(server_key)
-    if server is None or server.pmtiles_path != pmtiles_path:
-        if server is not None:
-            server.stop()
-        # Serve the file
-        server = PmtilesServer(pmtiles_path).start()
-        st.session_state[server_key] = server
+    return _get_pmtiles_server(str(pmtiles_path)).url_for(pmtiles_path.name)
 
-    return server.url_for(pmtiles_path.name)
+
+@functools.lru_cache(maxsize=None)
+def _get_pmtiles_server(path_str: str):
+    from water_timeseries.utils.pmtiles_serve import PmtilesServer
+
+    return PmtilesServer(Path(path_str)).start()
 
 
 def geohash_to_human_readable_name(geohash: str) -> str:

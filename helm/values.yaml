@@ -13,6 +13,7 @@ dashboard:
   offlineMode: true
   eeProject: ""
   configFile: /data/dashboard_nrt/dashboard_PMTiles_nrt_subset_forMattJones.yaml
+  pmtilesFile: ""  # optional: explicit .pmtiles path; if empty, serve-tiles parses pmtiles_file from configFile
 
 persistence:
   enabled: true

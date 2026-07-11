@@ -321,30 +321,39 @@ def build_pmtiles(
 
 @app.command(group="Visualization")
 def serve_tiles(
-    pmtiles_file: Path,
+    path: Path,
     host: str = "localhost",
     port: int = 8080,
     logfile: Optional[str] = None,
     verbose: int = 0,
 ):
-    """Serve a .pmtiles file over HTTP with Range request support.
+    """Serve PMTiles over HTTP with Range request support.
 
-    Use the printed URL with MapLibre (``pmtiles://<url>``) or pass it to the
-    dashboard via ``--pmtiles-url``.
+    PATH may be a .pmtiles file, a directory of files, or a dashboard config
+    YAML (the ``pmtiles_file`` key is resolved at runtime).
 
     Example:
         water-timeseries serve-tiles tiles/lakes.pmtiles --port 8080
+        water-timeseries serve-tiles configs/dashboard.yaml --port 8080
     """
     if logfile:
         logfile = setup_logging(logfile=logfile, verbose=verbose)
-    pmtiles_path = Path(pmtiles_file).resolve()
-    if not pmtiles_path.is_file():
-        raise FileNotFoundError(pmtiles_path)
+    resolved = Path(path).resolve()
 
-    with PmtilesServer(pmtiles_path.parent, host=host, port=port) as server:
-        url = server.url_for(pmtiles_path.name)
-        logger.info(f"Serving {pmtiles_path.name} at {url} (Ctrl+C to stop)")
-        logger.info(f"Dashboard: water-timeseries dashboard --pmtiles-url {url}")
+    if resolved.suffix in (".yaml", ".yml"):
+        import yaml
+
+        with open(resolved) as f:
+            cfg = yaml.safe_load(f)
+        pmtiles_field = cfg.get("pmtiles_file")
+        if not pmtiles_field:
+            raise ValueError(f"No pmtiles_file key found in {resolved}")
+        serve_path = Path(pmtiles_field).resolve()
+    else:
+        serve_path = resolved
+
+    with PmtilesServer(serve_path, host=host, port=port) as server:
+        logger.info(f"Serving at {server.base_url} (Ctrl+C to stop)")
         try:
             import time
 

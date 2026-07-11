@@ -49,8 +49,6 @@ spec:
           env:
             - name: PMTILES_BASE_URL
               value: "{{ if .Values.ingress.tlsEnabled }}https{{ else }}http{{ end }}://{{ (index .Values.ingress.hosts 0).host }}/{{ (index .Values.services 1).name }}"
-            - name: PMTILES_PORT
-              value: {{ (index .Values.services 1).port | quote }}
             - name: MPLBACKEND
               value: Agg
             - name: POLARS_SKIP_CPU_CHECK
@@ -69,6 +67,29 @@ spec:
           {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
+        - name: pmtiles-sidecar
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - water-timeseries
+            - serve-tiles
+            - {{ .Values.dashboard.pmtilesFile | default .Values.dashboard.configFile | quote }}
+            - --host=0.0.0.0
+          env:
+            - name: PMTILES_BASE_URL
+              value: "{{ if .Values.ingress.tlsEnabled }}https{{ else }}http{{ end }}://{{ (index .Values.ingress.hosts 0).host }}/{{ (index .Values.services 1).name }}"
+            - name: PMTILES_PORT
+              value: {{ (index .Values.services 1).port | quote }}
+          ports:
+            - name: pmtiles
+              containerPort: {{ (index .Values.services 1).port }}
+              protocol: TCP
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath | quote }}
+              readOnly: true
+          {{- end }}
       {{- if .Values.persistence.enabled }}
       volumes:
         - name: data
