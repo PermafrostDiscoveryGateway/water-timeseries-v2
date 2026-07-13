@@ -435,14 +435,11 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
     if not pmtiles_path.is_file():
         raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
 
-    server_key = "_pmtiles_map_server"
-    server = st.session_state.get(server_key)
-    if server is None or server.pmtiles_path != pmtiles_path:
-        if server is not None:
-            server.stop()
-        # Serve the file
-        server = PmtilesServer(pmtiles_path).start()
-        st.session_state[server_key] = server
+    @st.cache_resource
+    def _get_pmtiles_server(path_str: str):
+        return PmtilesServer(Path(path_str)).start()
+
+    server = _get_pmtiles_server(str(pmtiles_path))
 
     return server.url_for(pmtiles_path.name)
 
