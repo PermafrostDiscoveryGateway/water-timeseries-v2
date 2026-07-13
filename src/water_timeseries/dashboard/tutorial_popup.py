@@ -11,21 +11,45 @@ import streamlit as st
 @st.dialog("Welcome to Lost Lakes", width="large")
 def _show_tutorial_dialog(sections: dict[str, str]) -> None:
     """Internal dialog function for the tutorial popup."""
-    # Header with logos
-    col_left, col_right = st.columns([3, 1])
-    with col_left:
-        st.markdown("### Lost Lakes: Near Real-Time Lake Drainage")
-        st.markdown("Discover Arctic Lakes disappearing right after it happened")
-    with col_right:
-        # Combined box with logos and acknowledgment
-        st.markdown("""
+    # Header
+    st.markdown("### Lost Lakes: Near Real-Time Lake Drainage")
+    st.markdown("Discover Arctic Lakes disappearing right after it happened")
+
+    # Main content (2/3) and info panel (1/3) with vertical divider
+    col_content, col_divider, col_sidebar = st.columns([2, 0.02, 1])
+
+    with col_content:
+        st.markdown("---")
+        for header, content in sections.items():
+            st.markdown(f"**{header}**")
+            st.markdown(content)
+
+    with col_divider:
+        st.markdown(
+            """
+            <style>
+                .vertical-divider {
+                    border-left: 1px solid #e0e0e0;
+                    height: 100%;
+                }
+            </style>
+            <div class="vertical-divider"></div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    with col_sidebar:
+        # Info box with logos and acknowledgment
+        st.markdown(
+            """
         <style>
             .info-box {
                 background-color: #ffffff;
                 border: 1px solid #e0e0e0;
                 border-radius: 8px;
-                padding: 12px;
+                padding: 10px;
                 margin-bottom: 10px;
+                margin-top: -8px;
                 box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
             }
             .info-box a {
@@ -39,18 +63,22 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
                 display: flex;
                 flex-wrap: wrap;
                 align-items: center;
-                gap: 8px;
-                margin-bottom: 10px;
-                padding-bottom: 10px;
+                gap: 6px;
+                margin-bottom: 8px;
+                padding-bottom: 8px;
                 border-bottom: 1px solid #e0e0e0;
             }
             .logo-row img {
-                height: 28px;
+                height: 24px;
                 width: auto;
             }
             .text-row {
-                font-size: 11px;
-                line-height: 1.5;
+                font-size: 10px;
+                line-height: 1.4;
+            }
+            [data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"]:nth-child(3) > div {
+                margin-top: 0 !important;
+                padding-top: 0 !important;
             }
         </style>
         <div class="info-box">
@@ -68,41 +96,78 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
                 <b>Contact:</b> <a href="mailto:ingmar.nitze@awi.de?subject=Lost%20Lakes%20Viewer">ingmar.nitze@awi.de</a>
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
-    st.markdown("---")
+        # Photos stacked vertically, matching info box width
+        photos_html = """
+        <style>
+            .photo-box {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                overflow: hidden;
+                margin-bottom: 10px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            }
+            .photo-box img {
+                width: 100%;
+                height: auto;
+                display: block;
+            }
+            .photo-caption {
+                font-size: 10px;
+                color: #666;
+                padding: 6px 8px;
+                background-color: #f9f9f9;
+                line-height: 1.3;
+            }
+        </style>
+        """
+        st.markdown(photos_html, unsafe_allow_html=True)
 
-    for header, content in sections.items():
-        st.markdown(f"**{header}**")
-        st.markdown(content)
+        try:
+            from pathlib import Path
 
-    # Add photos side by side at the bottom with max width
-    with st.container():
-        col_img1, col_img2 = st.columns(2)
+            img_path = Path(__file__).parent / ".." / "images" / "P1010258.JPG"
+            import base64
 
-        with col_img1:
-            try:
-                from pathlib import Path
+            with open(img_path.resolve(), "rb") as f:
+                img_data = f.read()
+            b64 = base64.b64encode(img_data).decode()
+            st.markdown(
+                f"""
+            <div class="photo-box">
+                <img src="data:image/jpeg;base64,{b64}" />
+                <div class="photo-caption">Drained Lake at Cape Halkett, Alaska North Slope, July 2015. Photo I.Nitze (AWI)</div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+        except Exception:
+            pass
 
-                img_path = Path(__file__).parent / ".." / "images" / "P1010258.JPG"
-                st.image(str(img_path.resolve()), width=350)
-                st.caption("Drained Lake at Cape Halkett, Alaska North Slope, July 2015. Photo I.Nitze (AWI)")
-            except Exception:
-                pass  # Skip image if not found
+        try:
+            from pathlib import Path
 
-        with col_img2:
-            try:
-                from pathlib import Path
+            img_path = Path(__file__).parent / ".." / "images" / "20240701_110133.jpg"
+            import base64
 
-                img_path = Path(__file__).parent / ".." / "images" / "20240701_110133.jpg"
-                st.image(str(img_path.resolve()), width=350)
-                st.caption(
-                    "Lake-rich permafrost landscape on the Seward Peninsula in Alaska, July 2024. Photo I.Nitze (AWI)"
-                )
-            except Exception:
-                pass  # Skip image if not found
-
-    st.markdown("---")
+            with open(img_path.resolve(), "rb") as f:
+                img_data = f.read()
+            b64 = base64.b64encode(img_data).decode()
+            st.markdown(
+                f"""
+            <div class="photo-box">
+                <img src="data:image/jpeg;base64,{b64}" />
+                <div class="photo-caption">Lake-rich permafrost landscape on the Seward Peninsula in Alaska, July 2024. Photo I.Nitze (AWI)</div>
+            </div>
+            """,
+                unsafe_allow_html=True,
+            )
+        except Exception:
+            pass
 
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
