@@ -17,26 +17,58 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
         st.markdown("### Lost Lakes: Near Real-Time Lake Drainage")
         st.markdown("Discover Arctic Lakes disappearing right after it happened")
     with col_right:
-        logos_html = """
+        # Combined box with logos and acknowledgment
+        st.markdown("""
         <style>
-            .logo-container {
+            .info-box {
+                background-color: #ffffff;
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 10px;
+                box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+            }
+            .info-box a {
+                color: #1a73e8;
+                text-decoration: none;
+            }
+            .info-box a:hover {
+                text-decoration: underline;
+            }
+            .logo-row {
                 display: flex;
-                justify-content: flex-end;
+                flex-wrap: wrap;
                 align-items: center;
                 gap: 8px;
-                padding-top: 5px;
+                margin-bottom: 10px;
+                padding-bottom: 10px;
+                border-bottom: 1px solid #e0e0e0;
             }
-            .logo-container img {
-                height: 30px;
+            .logo-row img {
+                height: 28px;
                 width: auto;
             }
+            .text-row {
+                font-size: 11px;
+                line-height: 1.5;
+            }
         </style>
-        <div class="logo-container">
-            <img src="https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg" alt="AWI">
-            <img src="https://pdg.open.uaf.edu/wp-content/uploads/sites/46/2023/06/PDG_logo_compact_transparent_bkg.png" alt="PDG">
+        <div class="info-box">
+            <div class="logo-row">
+                <img src="https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg" alt="AWI">
+                <img src="https://pdg.open.uaf.edu/wp-content/uploads/sites/46/2023/06/PDG_logo_compact_transparent_bkg.png" alt="PDG">
+                <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ5o8cBYEkcRNtWKws2y7tZPZvy2OeEC5pp-S-13KPd_g&s=10" alt="Arctic ODS">
+                <img src="https://images.seeklogo.com/logo-png/63/1/national-center-for-supercomputing-applications-logo-png_seeklogo-637758.png" alt="NCSA">
+                <img src="https://arcticdata.io/wp-content/themes/aurora/library/images/logo_.png" alt="Arctic Data">
+                <img src="https://www.google.com/s2/favicons?domain=woodwellclimate.org&sz=64" alt="Woodwell">
+            </div>
+            <div class="text-row">
+                <b>Lost Lakes</b> is part of the <i>Permafrost Discovery Gateway</i> Project. The Permafrost Discovery Gateway (PDG) is an online platform for creating, analyzing, and visualizing big geospatial permafrost products funded through the <i>Google.org Impact Challenge</i>.<br><br>
+                <b>Team:</b> Created by Ingmar Nitze (AWI), Todd Nicholson (NCSA), Drshika Asher (NCSA), Kayla Hardie (Google), Matt Jones (NCEAS/ADC). With support from many PDG Team members.<br><br>
+                <b>Contact:</b> <a href="mailto:ingmar.nitze@awi.de?subject=Lost%20Lakes%20Viewer">ingmar.nitze@awi.de</a>
+            </div>
         </div>
-        """
-        st.markdown(logos_html, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
 
     st.markdown("---")
 
