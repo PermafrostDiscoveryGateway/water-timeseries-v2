@@ -1087,7 +1087,16 @@ def create_app(
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
 
-    st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
+    # Setup page header
+    if viz_configuration_name == "colored_historical":
+        dashboard_title = "Lost Lakes: Lake Changes 2000-2020"
+    elif viz_configuration_name == "drainage_year":
+        dashboard_title = "Lost Lakes: Lake Drainage Drainage Analysis: 2017-2025"
+    elif viz_configuration_name == "nrt_drainage":
+        dashboard_title = "Lost Lakes: Near Real-Time Lake Drainage: 2017-2025"
+    else:
+        dashboard_title = "Lost Lakes"
+    st.set_page_config(page_title=dashboard_title, page_icon="🗺️", layout="wide")
 
     st.title("💧 Lost Lakes: Arctic Lake Drainage Explorer")
     st.markdown("""
