@@ -16,6 +16,7 @@ import streamlit as st
 from loguru import logger
 from streamlit_folium import st_folium
 
+from water_timeseries.dashboard.tutorial_popup import show_help_button, show_tutorial_popup
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.map_utils import geohash_to_human_readable_name
@@ -1087,6 +1088,9 @@ def create_app(
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
 
+    # open tutorial
+    show_tutorial_popup(config_name=viz_configuration_name)
+
     # Setup page header
     if viz_configuration_name == "colored_historical":
         dashboard_title = "Lost Lakes: Lake Changes 2000-2020"
@@ -1107,6 +1111,8 @@ def create_app(
 
     # Create sidebar for controls
     # st.sidebar.header("Settings")
+    with st.sidebar.divider():
+        show_help_button(config_name=viz_configuration_name)
 
     # Show offline mode indicator
     if offline_mode:
