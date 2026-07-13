@@ -427,6 +427,11 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
         path = pmtiles_file[5:]
         return f"https://storage.googleapis.com/{path}"
 
+    import os
+    base_url = os.environ.get("PMTILES_BASE_URL")
+    if base_url:
+        return f"{base_url.rstrip('/')}/{Path(pmtiles_file).name}"
+
     import streamlit as st
 
     from water_timeseries.utils.pmtiles_serve import PmtilesServer
