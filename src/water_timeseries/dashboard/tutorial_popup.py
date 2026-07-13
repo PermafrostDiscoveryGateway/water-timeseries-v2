@@ -8,7 +8,7 @@ import streamlit as st
 # =============================================================================
 # INTERNAL DIALOG - DO NOT CALL DIRECTLY
 # =============================================================================
-@st.dialog("Welcome to Lost Lakes", width="small")
+@st.dialog("Welcome to Lost Lakes", width="large")
 def _show_tutorial_dialog(sections: dict[str, str]) -> None:
     """Internal dialog function for the tutorial popup."""
     # Header with logos
@@ -43,7 +43,32 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
     for header, content in sections.items():
         st.markdown(f"**{header}**")
         st.markdown(content)
-        st.markdown("")
+
+    # Add photos side by side at the bottom with max width
+    with st.container():
+        col_img1, col_img2 = st.columns(2)
+
+        with col_img1:
+            try:
+                from pathlib import Path
+
+                img_path = Path(__file__).parent / ".." / "images" / "P1010258.JPG"
+                st.image(str(img_path.resolve()), width=350)
+                st.caption("Drained Lake at Cape Halkett, Alaska North Slope, July 2015. Photo I.Nitze (AWI)")
+            except Exception:
+                pass  # Skip image if not found
+
+        with col_img2:
+            try:
+                from pathlib import Path
+
+                img_path = Path(__file__).parent / ".." / "images" / "20240701_110133.jpg"
+                st.image(str(img_path.resolve()), width=350)
+                st.caption(
+                    "Lake-rich permafrost landscape on the Seward Peninsula in Alaska, July 2024. Photo I.Nitze (AWI)"
+                )
+            except Exception:
+                pass  # Skip image if not found
 
     st.markdown("---")
 
