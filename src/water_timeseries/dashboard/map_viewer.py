@@ -16,6 +16,7 @@ import streamlit as st
 from loguru import logger
 from streamlit_folium import st_folium
 
+from water_timeseries.dashboard.tutorial_popup import show_help_button, show_tutorial_popup
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.map_utils import geohash_to_human_readable_name
@@ -1087,7 +1088,19 @@ def create_app(
     # Store offline_mode in session state so it's accessible throughout the app
     st.session_state.offline_mode = offline_mode
 
-    st.set_page_config(page_title="Lake Polygon Map Viewer", page_icon="🗺️", layout="wide")
+    # open tutorial
+    show_tutorial_popup(config_name=viz_configuration_name)
+
+    # Setup page header
+    if viz_configuration_name == "colored_historical":
+        dashboard_title = "Lost Lakes: Lake Changes 2000-2020"
+    elif viz_configuration_name == "drainage_year":
+        dashboard_title = "Lost Lakes: Lake Drainage Drainage Analysis: 2017-2025"
+    elif viz_configuration_name == "nrt_drainage":
+        dashboard_title = "Lost Lakes: Near Real-Time Lake Drainage: 2017-2025"
+    else:
+        dashboard_title = "Lost Lakes"
+    st.set_page_config(page_title=dashboard_title, page_icon="🗺️", layout="wide")
 
     st.title("💧 Lost Lakes: Arctic Lake Drainage Explorer")
     st.markdown("""
@@ -1098,6 +1111,8 @@ def create_app(
 
     # Create sidebar for controls
     # st.sidebar.header("Settings")
+    with st.sidebar.divider():
+        show_help_button(config_name=viz_configuration_name)
 
     # Show offline mode indicator
     if offline_mode:
