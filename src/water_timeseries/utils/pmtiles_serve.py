@@ -47,7 +47,7 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
 
         prefix = getattr(self.server, "path_prefix", "")
         if prefix and route.startswith(prefix):
-            route = route[len(prefix):]
+            route = route[len(prefix) :]
         if not route.startswith("/"):
             route = "/" + route
 

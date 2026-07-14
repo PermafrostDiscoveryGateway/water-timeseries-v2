@@ -1103,10 +1103,10 @@ def create_app(
     st.set_page_config(page_title=dashboard_title, page_icon="🗺️", layout="wide")
 
     st.title("💧 Lost Lakes: Arctic Lake Drainage Explorer")
+
     st.markdown("""
-    This dashboard displays drained lakes across the circum-arctic.
     - **Hover** over a feature to see its attributes
-    - **Click** on a feature to select it and view time series & create timelapse animations below the map.
+    - **Click** on a feature to select it and view time series & show latest imagery.
     """)
 
     # Create sidebar for controls
@@ -1190,7 +1190,7 @@ def create_app(
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
-    st.sidebar.subheader("Activate Historical drainage events")
+    st.sidebar.subheader("Historical Drainage")
     show_drained = st.sidebar.toggle(
         "Show temporal drainage statistics",
         value=default_activate_historical,
@@ -1268,7 +1268,14 @@ def create_app(
 
     # Create map viewer
     logger.info(map_backend)
-    st.subheader("Interactive Map Viewer")
+
+    # map viewer header
+    tooltip_mapviewer = """
+    - Hover over a feature to see its attributes
+    - Click on a feature to select it and view time series & show latest imagery.
+    """
+    st.markdown("##### Map Viewer", unsafe_allow_html=True, width="content", help=tooltip_mapviewer)
+
     try:
 
         @st.fragment
@@ -1387,10 +1394,13 @@ def create_app(
         if current:
             logger.info(f"Map click event: id_geohash={current} - Opening time series section")
             st.divider()
-            st.subheader(
-                f"📈 Time Series Plot of Lake: {geohash_to_human_readable_name(current)}",
-                anchor="time-series-header",
-                help="In this section time-series of surface water area are shown.",
+            st.markdown(
+                f"""
+                ##### 📈 Time Series Plot of Lake: {geohash_to_human_readable_name(current)} <a id="time-series-header"></a>
+                """,
+                help=dw_tooltip_info,
+                unsafe_allow_html=True,
+                width="content",
             )
 
             if not st.session_state.disable_popup_plot:
@@ -1585,7 +1595,7 @@ def create_app(
 
                     # Plot Dynamic World time series in first column
                     with ts_col1:
-                        st.subheader("Dynamic World", help=dw_tooltip_info)
+                        # st.subheader("Dynamic World", help=dw_tooltip_info)
                         plot_time_series_data(
                             st.session_state.dw_dataset,
                             current,
@@ -1631,7 +1641,13 @@ def create_app(
                     "or run without --offline-mode to enable downloads."
                 )
             else:
-                st.subheader("🛰️ Recent imagery")
+                # st.subheader("🛰️ Recent imagery")
+                st.markdown(
+                    """
+                    ##### 🛰️ Recent imagery<a id="recent-imagery-header"></a>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
                 # setup today's date and one year go
                 today = datetime.now()
