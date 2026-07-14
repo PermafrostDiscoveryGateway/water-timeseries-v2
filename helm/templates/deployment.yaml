@@ -59,10 +59,19 @@ spec:
             - name: EE_PROJECT
               value: {{ .Values.dashboard.eeProject | quote }}
             {{- end }}
-          {{- if .Values.persistence.enabled }}
+            {{- if .Values.dashboard.eeSecretName }}
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: "/var/secrets/google/gee-sa-key.json"
+            {{- end }}
           volumeMounts:
+          {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.mountPath | quote }}
+              readOnly: true
+          {{- end }}
+          {{- if .Values.dashboard.eeSecretName }}
+            - name: gee-key-volume
+              mountPath: "/var/secrets/google"
               readOnly: true
           {{- end }}
           resources:
@@ -90,11 +99,16 @@ spec:
               mountPath: {{ .Values.persistence.mountPath | quote }}
               readOnly: true
           {{- end }}
-      {{- if .Values.persistence.enabled }}
       volumes:
+      {{- if .Values.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ default (include "water-timeseries.fullname" .) .Values.persistence.existingClaim | quote }}
+      {{- end }}
+      {{- if .Values.dashboard.eeSecretName }}
+        - name: gee-key-volume
+          secret:
+            secretName: {{ .Values.dashboard.eeSecretName | quote }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

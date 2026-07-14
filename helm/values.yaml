@@ -2,7 +2,7 @@ replicaCount: 1
 
 image:
   repository: ghcr.io/nceas/water-timeseries-v2
-  tag: 0.13.1
+  tag: 0.14.0
   pullPolicy: Always
 
 nameOverride: ""
@@ -11,7 +11,8 @@ fullnameOverride: ""
 dashboard:
   port: 8501
   offlineMode: true
-  eeProject: ""
+  eeProject: "pdg-project-406720"
+  eeSecretName: "lostlakes-ee-sa-secret"
   configFile: /data/dashboard_nrt/dashboard_PMTiles_nrt_subset_forMattJones.yaml
   pmtilesFile: ""  # optional: explicit .pmtiles path; if empty, serve-tiles parses pmtiles_file from configFile
 
