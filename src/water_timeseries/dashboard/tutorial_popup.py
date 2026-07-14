@@ -127,47 +127,27 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
         """
         st.markdown(photos_html, unsafe_allow_html=True)
 
-        try:
-            from pathlib import Path
-
-            img_path = Path(__file__).parent / ".." / "images" / "P1010258.JPG"
-            import base64
-
-            with open(img_path.resolve(), "rb") as f:
-                img_data = f.read()
-            b64 = base64.b64encode(img_data).decode()
-            st.markdown(
-                f"""
+        # Photo 1: Drained Lake
+        st.markdown(
+            """
             <div class="photo-box">
-                <img src="data:image/jpeg;base64,{b64}" />
+                <img src="https://raw.githubusercontent.com/PermafrostDiscoveryGateway/water-timeseries-v2/main/src/water_timeseries/images/P1010258.JPG" />
                 <div class="photo-caption">Drained Lake at Cape Halkett, Alaska North Slope, July 2015. Photo I.Nitze (AWI)</div>
             </div>
             """,
-                unsafe_allow_html=True,
-            )
-        except Exception:
-            pass
+            unsafe_allow_html=True,
+        )
 
-        try:
-            from pathlib import Path
-
-            img_path = Path(__file__).parent / ".." / "images" / "20240701_110133.jpg"
-            import base64
-
-            with open(img_path.resolve(), "rb") as f:
-                img_data = f.read()
-            b64 = base64.b64encode(img_data).decode()
-            st.markdown(
-                f"""
+        # Photo 2: Lake-rich permafrost landscape
+        st.markdown(
+            """
             <div class="photo-box">
-                <img src="data:image/jpeg;base64,{b64}" />
+                <img src="https://raw.githubusercontent.com/PermafrostDiscoveryGateway/water-timeseries-v2/main/src/water_timeseries/images/20240701_110133.jpg" />
                 <div class="photo-caption">Lake-rich permafrost landscape on the Seward Peninsula in Alaska, July 2024. Photo I.Nitze (AWI)</div>
             </div>
             """,
-                unsafe_allow_html=True,
-            )
-        except Exception:
-            pass
+            unsafe_allow_html=True,
+        )
 
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
