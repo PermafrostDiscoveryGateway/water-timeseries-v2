@@ -428,6 +428,7 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
         return f"https://storage.googleapis.com/{path}"
 
     import os
+
     base_url = os.environ.get("PMTILES_BASE_URL")
     if base_url:
         return f"{base_url.rstrip('/')}/{Path(pmtiles_file).name}"
