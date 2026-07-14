@@ -302,7 +302,7 @@ class MapViewer:
         if getattr(self, "drained_data", None) is not None:
             drained_ids = list(self.drained_data.keys())
             logger.info(f"Drained data overlay: {len(drained_ids) if drained_ids else 0} lakes")
-            logger.info("Setting up map")
+        logger.info("Setting up map")
         tooltip = None
         m = build_pmtiles_map(
             pmtiles_url,

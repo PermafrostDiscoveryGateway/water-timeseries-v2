@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any, Optional
 
@@ -10,7 +11,7 @@ import streamlit as st
 
 from water_timeseries.utils.io import load_vector_dataset
 from water_timeseries.utils.pmtiles_reader import read_pmtiles_header, read_pmtiles_header_remote
-from water_timeseries.utils.pmtiles_serve import PmtilesServer
+from water_timeseries.utils.pmtiles_serve import PmtilesServer, build_map_url
 
 _SESSION_SERVER_KEY = "_pmtiles_map_server"
 
@@ -62,6 +63,12 @@ def _get_or_start_server(pmtiles_file: str) -> PmtilesServer:
         raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
 
     return PmtilesServer(pmtiles_path).start()
+
+
+@st.cache_resource
+def _get_html_server() -> PmtilesServer:
+    """Map-HTML-only server (pmtiles served remotely, no local file)."""
+    return PmtilesServer(None).start()
 
 
 def _build_map_config(
@@ -146,8 +153,36 @@ def render_pmtiles_map(
     share one origin. Streamlit's ``components.html`` sandbox often blocks cross-origin
     fetches to a separate tile port (basemap loads, vector lakes do not).
     """
+    sidecar_base = os.environ.get("PMTILES_BASE_URL")
+    if sidecar_base and pmtiles_file is not None:
+        # K8s sidecar mode: tiles are served by the pmtiles sidecar container.
+        # Build a stateless map URL with the full config embedded as base64 so
+        # no shared memory is needed between the Streamlit and sidecar processes.
+        ext_pmtiles_url = f"{sidecar_base.rstrip('/')}/{Path(pmtiles_file).name}"
+        config = _build_map_config(
+            pmtiles_file=pmtiles_file,
+            vector_file_for_bounds=vector_file_for_bounds,
+            id_column=id_column,
+            viz_configuration=viz_configuration,
+            height=height,
+            center=center,
+            zoom=zoom,
+            drained_data=drained_data,
+            show_main_layer=show_main_layer,
+        )
+        config["pmtiles_url"] = ext_pmtiles_url
+        map_url = build_map_url(sidecar_base, config)
+        _inject_selection_bridge()
+        if hasattr(st, "iframe"):
+            st.iframe(map_url, height=height)
+        else:
+            import streamlit.components.v1 as components
+
+            components.iframe(map_url, height=height)
+        return
+
     if pmtiles_url:
-        server = _get_or_start_server(None)  # Server running in HTML-only remote mode
+        server = _get_html_server()  # serves map.html; pmtiles fetched remotely
         config = _build_map_config(
             pmtiles_url=pmtiles_url,
             vector_file_for_bounds=vector_file_for_bounds,
