@@ -1,18 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "water-timeseries.fullname" . }}
+  name: {{ include "water-timeseries.fullname" . }}-dashboard
   labels:
     {{- include "water-timeseries.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       {{- include "water-timeseries.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dashboard
   template:
     metadata:
       labels:
         {{- include "water-timeseries.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: dashboard
         {{- with .Values.podLabels }}
         {{- toYaml . | nindent 8 }}
         {{- end }}
@@ -26,56 +29,66 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           ports:
-            - name: http
-              containerPort: {{ .Values.service.port }}
+            {{- range .Values.services }}
+            - name: {{ .name }}
+              containerPort: {{ .port }}
               protocol: TCP
-          command:
-            - streamlit
-          args:
-            - run
-            - src/water_timeseries/dashboard/app.py
-            - --server.port={{ .Values.dashboard.port }}
-            - --server.address=0.0.0.0
-            - --
-            - --vector-file
-            - {{ .Values.dashboard.vectorFile | quote }}
-            - --dw-dataset-file
-            - {{ .Values.dashboard.dwDatasetFile | quote }}
-            - --jrc-dataset-file
-            - {{ .Values.dashboard.jrcDatasetFile | quote }}
-            - --precomputed-nrt-dir
-            - {{ .Values.dashboard.precomputedNrtDir | quote }}
-            - --dw-start-year={{ .Values.dashboard.dwStartYear }}
-            - --dw-end-year={{ .Values.dashboard.dwEndYear }}
-            - --dw-start-month={{ .Values.dashboard.dwStartMonth }}
-            - --dw-end-month={{ .Values.dashboard.dwEndMonth }}
-            - --viz-configuration={{ .Values.dashboard.vizConfiguration }}
-            {{- if .Values.dashboard.offlineMode }}
-            - --offline-mode
             {{- end }}
+          command:
+            - water-timeseries
+            #- bash
+          args:
+            # uv run water-timeseries dashboard --config-file configs/dashboard/dashboard_PMTiles_historical_drainage_allLakes.yaml --port 8510
+            #- -c 
+            #- "while true; do sleep 1; done"
+            - dashboard
+            #- --port={{ .Values.dashboard.port }}
+            #- --server.address=0.0.0.0
+            - --config-file
+            - {{ .Values.dashboard.configFile | quote }}
             {{- if .Values.dashboard.eeProject }}
             - --ee-project={{ .Values.dashboard.eeProject }}
             {{- end }}
           env:
+            - name: PMTILES_BASE_URL
+              value: "{{ if .Values.ingress.tlsEnabled }}https{{ else }}http{{ end }}://{{ (index .Values.ingress.hosts 0).host }}/{{ (index .Values.services 1).name }}"
             - name: MPLBACKEND
               value: Agg
+            - name: POLARS_SKIP_CPU_CHECK
+              value: "1"
+            - name: POLARS_FORCE_PKG
+              value: "compat"
             {{- if .Values.dashboard.eeProject }}
             - name: EE_PROJECT
               value: {{ .Values.dashboard.eeProject | quote }}
             {{- end }}
-          {{- if .Values.persistence.enabled }}
+            {{- if .Values.dashboard.eeSecretName }}
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: "/var/secrets/google/gee-sa-key.json"
+            {{- end }}
           volumeMounts:
+          {{- if .Values.persistence.enabled }}
             - name: data
               mountPath: {{ .Values.persistence.mountPath | quote }}
               readOnly: true
           {{- end }}
+          {{- if .Values.dashboard.eeSecretName }}
+            - name: gee-key-volume
+              mountPath: "/var/secrets/google"
+              readOnly: true
+          {{- end }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if .Values.persistence.enabled }}
       volumes:
+      {{- if .Values.persistence.enabled }}
         - name: data
           persistentVolumeClaim:
             claimName: {{ default (include "water-timeseries.fullname" .) .Values.persistence.existingClaim | quote }}
+      {{- end }}
+      {{- if .Values.dashboard.eeSecretName }}
+        - name: gee-key-volume
+          secret:
+            secretName: {{ .Values.dashboard.eeSecretName | quote }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "water-timeseries.fullname" . }}-pmtiles
+  labels:
+    {{- include "water-timeseries.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pmtiles
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "water-timeseries.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: pmtiles
+  ports:
+    - name: pmtiles
+      port: {{ (index .Values.services 1).port }}
+      targetPort: {{ (index .Values.services 1).port }}
+      protocol: TCP

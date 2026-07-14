@@ -1,4 +1,5 @@
 from pathlib import Path
+import functools
 
 import branca.element
 import folium
@@ -433,21 +434,20 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
     if base_url:
         return f"{base_url.rstrip('/')}/{Path(pmtiles_file).name}"
 
-    import streamlit as st
-
     from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
     pmtiles_path = Path(pmtiles_file).resolve()
     if not pmtiles_path.is_file():
         raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
 
-    @st.cache_resource
-    def _get_pmtiles_server(path_str: str):
-        return PmtilesServer(Path(path_str)).start()
+    return _get_pmtiles_server(str(pmtiles_path)).url_for(pmtiles_path.name)
 
-    server = _get_pmtiles_server(str(pmtiles_path))
 
-    return server.url_for(pmtiles_path.name)
+@functools.lru_cache(maxsize=None)
+def _get_pmtiles_server(path_str: str):
+    from water_timeseries.utils.pmtiles_serve import PmtilesServer
+
+    return PmtilesServer(Path(path_str)).start()
 
 
 def geohash_to_human_readable_name(geohash: str) -> str:

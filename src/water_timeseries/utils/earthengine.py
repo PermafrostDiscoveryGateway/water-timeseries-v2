@@ -7,6 +7,7 @@ import ee
 import eemont  # noqa: F401
 import geemap
 import geopandas as gpd
+import google.auth
 import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
@@ -25,6 +26,7 @@ def initialize_earth_engine(project: str | None = None, token_name: str = "EARTH
         project = os.environ.get("EE_PROJECT") or None
     if project == "":
         project = None
+    key_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or None
 
     try:
         from geemap.coreutils import ee_initialize as _geemap_ee_initialize
@@ -38,8 +40,18 @@ def initialize_earth_engine(project: str | None = None, token_name: str = "EARTH
         geemap.ee_initialize(token_name=token_name, project=project)
         return
 
-    # ee.Initialize uses persisted credentials only; token_name is not applicable.
-    ee.Initialize(project=project)
+    if key_file is None:
+        # ee.Initialize uses persisted credentials only; token_name is not applicable.
+        ee.Initialize(project=project)
+    else:
+        # Use a service account key via the Application Default Credentials (ADC)
+        credentials, project_id = google.auth.default(
+            scopes=["https://www.googleapis.com/auth/earthengine", 
+                    "https://www.googleapis.com/auth/cloud-platform"]
+        )
+
+        # Initialize Earth Engine with the SA credentials and GCP project
+        ee.Initialize(credentials, project=project)
 
 
 def get_bbox(gdf, to_crs=4326, return_ee=True):

@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "water-timeseries.fullname" . }}-pmtiles
+  labels:
+    {{- include "water-timeseries.labels" . | nindent 4 }}
+    app.kubernetes.io/component: pmtiles
+spec:
+  replicas: {{ .Values.pmtiles.replicaCount | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "water-timeseries.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: pmtiles
+  template:
+    metadata:
+      labels:
+        {{- include "water-timeseries.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: pmtiles
+    spec:
+      containers:
+        - name: pmtiles-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            - water-timeseries
+            - serve-tiles
+            - {{ .Values.dashboard.pmtilesFile | default .Values.dashboard.configFile | quote }}
+            - --host=0.0.0.0
+          env:
+            - name: PMTILES_BASE_URL
+              value: "{{ if .Values.ingress.tlsEnabled }}https{{ else }}http{{ end }}://{{ (index .Values.ingress.hosts 0).host }}/{{ (index .Values.services 1).name }}"
+            - name: PMTILES_PORT
+              value: {{ (index .Values.services 1).port | quote }}
+          ports:
+            - name: pmtiles
+              containerPort: {{ (index .Values.services 1).port }}
+              protocol: TCP
+          {{- if .Values.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.mountPath | quote }}
+              readOnly: true
+          {{- end }}
+          resources:
+            {{- toYaml .Values.pmtiles.resources | nindent 12 }}
+      {{- if .Values.persistence.enabled }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ default (include "water-timeseries.fullname" .) .Values.persistence.existingClaim | quote }}
+      {{- end }}
+      {{- with .Values.pmtiles.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.pmtiles.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.pmtiles.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -1,0 +1,19 @@
+{{- range .Values.services }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "water-timeseries.fullname" $ }}-{{ .name }}
+  labels:
+    {{- include "water-timeseries.labels" $ | nindent 4 }}
+spec:
+  type: {{ .type }}
+  selector:
+    {{- include "water-timeseries.selectorLabels" $ | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+  ports:
+    - name: {{ .name }}
+      port: {{ .port }}
+      targetPort: {{ .port }}
+      protocol: TCP
+{{- end }}

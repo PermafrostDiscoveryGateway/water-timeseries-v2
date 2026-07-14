@@ -1,41 +1,60 @@
-{{- if .Values.ingress.enabled }}
+{{- if .Values.ingress.enabled -}}
+{{- $fullName := include "water-timeseries.fullname" . -}}
+{{- $inferredHostname := .Values.ingress.hostname | default "" -}}
+{{- $tlsSecretName := .Values.ingress.tlsSecretName | default "ingress-tls-cert" -}}
+{{- $tlsEnabled := true -}}
+{{- if hasKey .Values.ingress "tlsEnabled" -}}
+{{- $tlsEnabled = .Values.ingress.tlsEnabled -}}
+{{- end -}}
+{{- $hasHosts := gt (len (.Values.ingress.hosts | default (list))) 0 -}}
+{{- $hasTls := gt (len (.Values.ingress.tls | default (list))) 0 -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "water-timeseries.fullname" . }}
+  name: {{ $fullName }}
   labels:
     {{- include "water-timeseries.labels" . | nindent 4 }}
-  {{- if gt (len .Values.ingress.annotations) 0 }}
+  {{- with .Values.ingress.annotations }}
   annotations:
-    {{- toYaml .Values.ingress.annotations | nindent 4 }}
+    {{- toYaml . | nindent 4 }}
   {{- end }}
 spec:
+  {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
-  {{- if .Values.ingress.tls }}
-  tls:
-    {{- toYaml .Values.ingress.tls | nindent 4 }}
   {{- end }}
+  {{- if and $tlsEnabled (or $hasTls $inferredHostname) }}
+  tls:
+    {{- if $hasTls }}
+    {{- range .Values.ingress.tls }}
+    - hosts:
+        {{- range .hosts }}
+        - {{ . | quote }}
+        {{- end }}
+      secretName: {{ .secretName }}
+    {{- end }}
+    {{- else }}
+    - hosts:
+        - {{ $inferredHostname | quote }}
+      secretName: {{ $tlsSecretName }}
+    {{- end }}
+  {{- end }}
+  {{- if or $hasHosts $inferredHostname }}
   rules:
-    {{- if .Values.ingress.host }}
-    - host: {{ .Values.ingress.host | quote }}
+    {{- $services := .Values.services -}}
+    {{- $hosts := .Values.ingress.hosts | default (list (dict "host" $inferredHostname)) }}
+    {{- range $hosts }}
+    - host: {{ .host | quote }}
       http:
         paths:
-          - path: {{ .Values.ingress.path }}
-            pathType: {{ .Values.ingress.pathType }}
+          {{- range $i, $svc := $services }}
+          - path: {{ if eq $i 0 }}/{{ else }}/{{ $svc.name }}{{ end }}
+            pathType: Prefix
             backend:
               service:
-                name: {{ include "water-timeseries.fullname" . }}
+                name: {{ $fullName }}-{{ $svc.name }}
                 port:
-                  number: {{ .Values.service.port }}
-    {{- else }}
-    - http:
-        paths:
-          - path: {{ .Values.ingress.path }}
-            pathType: {{ .Values.ingress.pathType }}
-            backend:
-              service:
-                name: {{ include "water-timeseries.fullname" . }}
-                port:
-                  number: {{ .Values.service.port }}
+                  number: {{ $svc.port }}
+          {{- end }}
     {{- end }}
+  {{- end }}
 {{- end }}
