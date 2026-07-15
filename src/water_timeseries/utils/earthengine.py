@@ -14,44 +14,53 @@ import streamlit as st
 import xarray as xr
 from shapely.geometry import box
 from xee import helpers
+from loguru import logger
 
 
 def initialize_earth_engine(project: str | None = None, token_name: str = "EARTHENGINE_TOKEN") -> None:
     """Initialize the Earth Engine Python client.
 
-    geemap >= 0.37 moved ``ee_initialize`` to ``geemap.coreutils``; older releases
-    expose it on the top-level ``geemap`` module.
+    Supports two authentication modes:
+    - Service account: via GOOGLE_APPLICATION_CREDENTIALS env var (non-interactive, for servers)
+    - OAuth token: via persisted credentials or geemap token_name (interactive, for local use)
     """
     if project is None:
         project = os.environ.get("EE_PROJECT") or None
     if project == "":
         project = None
+    
     key_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or None
-
+    
+    # Service account mode takes priority
+    if key_file is not None:
+        try:
+            credentials, project_id = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/earthengine", 
+                        "https://www.googleapis.com/auth/cloud-platform"]
+            )
+            ee.Initialize(credentials, project=project)
+            logger.info("Successfully authenticated with Earth Engine Service Account!")
+            return
+        except (google.auth.exceptions.GoogleAuthError, ValueError) as e:
+            logger.error(f"Failed to authenticate with service account: {e}")
+            raise
+    
+    # OAuth/persisted credentials mode
+    # geemap >= 0.37 moved ``ee_initialize`` to ``geemap.coreutils``; older releases
+    # expose it on the top-level ``geemap`` module.
     try:
         from geemap.coreutils import ee_initialize as _geemap_ee_initialize
-
         _geemap_ee_initialize(token_name=token_name, project=project)
         return
     except (ImportError, AttributeError):
         pass
-
+    
     if hasattr(geemap, "ee_initialize"):
         geemap.ee_initialize(token_name=token_name, project=project)
         return
-
-    if key_file is None:
-        # ee.Initialize uses persisted credentials only; token_name is not applicable.
-        ee.Initialize(project=project)
-    else:
-        # Use a service account key via the Application Default Credentials (ADC)
-        credentials, project_id = google.auth.default(
-            scopes=["https://www.googleapis.com/auth/earthengine", 
-                    "https://www.googleapis.com/auth/cloud-platform"]
-        )
-
-        # Initialize Earth Engine with the SA credentials and GCP project
-        ee.Initialize(credentials, project=project)
+    
+    # Fall back to persisted credentials
+    ee.Initialize(project=project)
 
 
 def get_bbox(gdf, to_crs=4326, return_ee=True):
