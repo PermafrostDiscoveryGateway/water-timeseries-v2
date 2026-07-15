@@ -1,5 +1,5 @@
-from pathlib import Path
 import functools
+from pathlib import Path
 
 import branca.element
 import folium
@@ -434,7 +434,7 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
     if base_url:
         return f"{base_url.rstrip('/')}/{Path(pmtiles_file).name}"
 
-    from water_timeseries.utils.pmtiles_serve import PmtilesServer
+    from water_timeseries.utils.pmtiles_serve import PmtilesServer # noqa: F401, I001
 
     pmtiles_path = Path(pmtiles_file).resolve()
     if not pmtiles_path.is_file():
@@ -445,7 +445,7 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
 
 @functools.lru_cache(maxsize=None)
 def _get_pmtiles_server(path_str: str):
-    from water_timeseries.utils.pmtiles_serve import PmtilesServer
+    from water_timeseries.utils.pmtiles_serve import PmtilesServer # noqa: F401, I001
 
     return PmtilesServer(Path(path_str)).start()
 

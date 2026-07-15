@@ -12,9 +12,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import streamlit as st
 import xarray as xr
+from loguru import logger
 from shapely.geometry import box
 from xee import helpers
-from loguru import logger
 
 
 def initialize_earth_engine(project: str | None = None, token_name: str = "EARTHENGINE_TOKEN") -> None:
