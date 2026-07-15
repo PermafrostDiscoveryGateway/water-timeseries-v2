@@ -1,8 +1,8 @@
 replicaCount: 1
 
 image:
-  repository: ghcr.io/premafrostdiscoverygateway/water-timeseries-v2
-  tag: 0.14.0
+  repository: ghcr.io/permafrostdiscoverygateway/water-timeseries-v2
+  tag: v0.14.1
   pullPolicy: IfNotPresent
 
 nameOverride: ""
