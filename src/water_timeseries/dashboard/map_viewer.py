@@ -25,13 +25,13 @@ from water_timeseries.utils.dashboard import (
     check_dataset_availability_ds_raw,
     dw_tooltip_info,
     load_dataset,
-    load_lake_polygons_cached,
+    load_lake_polygon_cached,
     load_xarray_dataset_cached,
     plot_time_series_data,
 )
 from water_timeseries.utils.earthengine import (
+    cached_get_rioxarray_ds_from_lake,
     cached_visualize_cube,
-    get_rioxarray_ds_from_lake,
     initialize_earth_engine,
 )
 from water_timeseries.utils.io import load_vector_dataset
@@ -225,6 +225,55 @@ class MapViewer:
         gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
         return gdf
 
+    def find_lake_id_at_point(self, lat: float, lng: float) -> Optional[str]:
+        """Find the lake containing a clicked point without loading the full parquet.
+
+        Since ``id_geohash`` encodes the lake's location, a geohash-prefix range
+        filter on the ID column prunes the parquet read to the click's
+        neighborhood (the precision-4 cell of the click plus its 8 neighbors,
+        ~40x20 km each) before running the exact point-in-polygon test.
+        """
+        from shapely.geometry import Point
+
+        click_point = Point(lng, lat)
+
+        if self.gdf is not None and not self.gdf.empty:
+            sindex = self.gdf.sindex
+            possible_idx = list(sindex.intersection((lng, lat, lng, lat)))
+            matching = self.gdf.iloc[possible_idx]
+            matching = matching[matching.geometry.contains(click_point)]
+            return matching.iloc[0][self.id_column] if not matching.empty else None
+
+        if self._parquet_path is None:
+            return None
+
+        # Precision-4 geohash cells are 0.352 deg lon x 0.176 deg lat; offsetting
+        # by one cell in each direction yields the 3x3 neighborhood prefixes.
+        prefixes = set()
+        for dlat in (-0.176, 0.0, 0.176):
+            for dlng in (-0.352, 0.0, 0.352):
+                p_lat = max(-90.0, min(90.0, lat + dlat))
+                p_lng = ((lng + dlng + 180.0) % 360.0) - 180.0
+                prefixes.add(pygeohash.encode(p_lat, p_lng, precision=4))
+
+        # 'z' is the last character of the geohash base32 alphabet, so padding
+        # with 'z' gives an inclusive upper bound for each prefix range.
+        filters = [
+            [(self.id_column, ">=", p), (self.id_column, "<=", p + "z" * 8)] for p in sorted(prefixes)
+        ]
+        try:
+            candidates = gpd.read_parquet(self._parquet_path, filters=filters)
+        except Exception as e:
+            logger.warning(f"Spatial-fallback parquet lookup failed: {e}")
+            return None
+
+        if candidates.empty:
+            return None
+        if candidates.crs is None:
+            candidates = candidates.set_crs(epsg=4326)
+        matching = candidates[candidates.geometry.notna() & candidates.geometry.contains(click_point)]
+        return matching.iloc[0][self.id_column] if not matching.empty else None
+
     def render(self) -> Optional[str]:
         """Render the interactive map in Streamlit using the selected backend.
 
@@ -359,23 +408,13 @@ class MapViewer:
                 lat = clicked_map.get("lat")
                 lng = clicked_map.get("lng")
                 if lat is not None and lng is not None:
-                    from shapely.geometry import Point
-
-                    click_point = Point(lng, lat)
-                    lakes_gdf = st.session_state.get("lake_polygons")
-                    if lakes_gdf is not None and not lakes_gdf.empty:
-                        sindex = lakes_gdf.sindex
-                        possible_matches_idx = list(sindex.intersection((lng, lat, lng, lat)))
-                        possible_matches = lakes_gdf.iloc[possible_matches_idx]
-                        matching = possible_matches[possible_matches.geometry.contains(click_point)]
-                        if not matching.empty:
-                            clicked_id = matching.iloc[0][self.id_column]
-                            logger.info(f"Found lake via spatial search: {clicked_id}")
-                            clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
-                            # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
-                            st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
-                            st.session_state.zoom_level = 12
-                            logger.info(f"Clicked on lake {clicked_id} and coordinate {clicked_lat} {clicked_lon}")
+                    clicked_id = self.find_lake_id_at_point(lat, lng)
+                    if clicked_id:
+                        logger.info(f"Found lake via spatial search: {clicked_id}")
+                        clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
+                        st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
+                        st.session_state.zoom_level = 12
+                        logger.info(f"Clicked on lake {clicked_id} and coordinate {clicked_lat} {clicked_lon}")
 
         # Update session state only if a NEW feature was clicked
         if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
@@ -1151,29 +1190,23 @@ def create_app(
             if selected_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(selected_id)
 
-    # Initialize dataset in session state if not already
+    # Initialize dataset in session state if not already.
+    # The zarr handles and lake polygons are NOT loaded here: first paint only
+    # needs the PMTiles map, so all data reads are deferred until a lake is
+    # selected (see the `if current:` branch below).
     if "dw_dataset" not in st.session_state:
         st.session_state.dw_dataset = None
     if "dw_dataset_raw" not in st.session_state:
-        if zarr_path:
-            st.session_state.dw_dataset_raw = load_xarray_dataset_cached(zarr_path)
-        else:
-            st.session_state.dw_dataset_raw = None
+        st.session_state.dw_dataset_raw = None
     if "downloaded_dsdw" not in st.session_state:
         st.session_state.downloaded_dsdw = None
     if not st.session_state.disable_jrc:
         if "jrc_dataset" not in st.session_state:
             st.session_state.jrc_dataset = None
         if "jrc_dataset_raw" not in st.session_state:
-            if zarr_path_jrc:
-                st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc)
-            else:
-                st.session_state.jrc_dataset_raw = None
+            st.session_state.jrc_dataset_raw = None
         if "downloaded_dsjrc" not in st.session_state:
             st.session_state.downloaded_dsjrc = None
-    if "lake_polygons" not in st.session_state:
-        st.session_state.lake_polygons = load_lake_polygons_cached(data_path_input)
-        # st.session_state.lake_polygons = None
     if "show_ts_popup" not in st.session_state:
         st.session_state.show_ts_popup = False
 
@@ -1411,6 +1444,15 @@ def create_app(
                 logger.info(f"Time series section opened for lake: {current}")
                 st.caption("Preview - click button above for full view")
 
+            # Deferred data loads: opening the zarr here only reads metadata
+            # (load_xarray_dataset_cached returns a lazy handle), so first paint
+            # never touches the cube.
+            if st.session_state.dw_dataset_raw is None and zarr_path_input:
+                st.session_state.dw_dataset_raw = load_xarray_dataset_cached(zarr_path_input)
+            if not st.session_state.disable_jrc:
+                if st.session_state.jrc_dataset_raw is None and zarr_path_jrc_input:
+                    st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc_input)
+
             # Load datasets using unified helper function
             dw_dataset = st.session_state.get("dw_dataset")
             if not st.session_state.disable_jrc:
@@ -1423,7 +1465,8 @@ def create_app(
             # Load DW dataset if needed
             if id_available_dw_raw:
                 logger.info(f"Lake {current} is available from Dynamic world database file")
-                dw_dataset = DWDataset(st.session_state.dw_dataset_raw.sel(id_geohash=[current]))
+                # .load() materializes only the selected lake's chunk of the cube
+                dw_dataset = DWDataset(st.session_state.dw_dataset_raw.sel(id_geohash=[current]).load())
                 success = True
                 st.session_state.dw_dataset = dw_dataset
             else:
@@ -1438,7 +1481,7 @@ def create_app(
             if not st.session_state.disable_jrc:
                 if id_available_jrc_raw:
                     logger.info(f"Lake {current} is available from the JRC database file")
-                    jrc_dataset = JRCDataset(st.session_state.jrc_dataset_raw.sel(id_geohash=[current]))
+                    jrc_dataset = JRCDataset(st.session_state.jrc_dataset_raw.sel(id_geohash=[current]).load())
                     success = True
 
                 else:
@@ -1575,10 +1618,10 @@ def create_app(
             if st.session_state.dw_dataset is not None and id_available_dw:
                 try:
                     logger.info(f"Plotting time series for lake: {current}")
-                    local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons["id_geohash"] == current]
+                    local_gdf = load_lake_polygon_cached(data_path_input, current)
 
                     # add breakpoint to plot if applicable
-                    if "date_break" in local_gdf.columns:
+                    if "date_break" in local_gdf.columns and not local_gdf.empty:
                         break_date = local_gdf.iloc[0]["date_break"]
                         logger.info(f"Adding break date to time series plot: {break_date}")
                     else:
@@ -1641,49 +1684,80 @@ def create_app(
                     "or run without --offline-mode to enable downloads."
                 )
             else:
-                # st.subheader("🛰️ Recent imagery")
-                st.markdown(
-                    """
-                    ##### 🛰️ Recent imagery<a id="recent-imagery-header"></a>
-                    """,
-                    unsafe_allow_html=True,
-                )
 
-                # setup today's date and one year go
-                today = datetime.now()
-                if viz_configuration_name == "drainage_year":
-                    local_gdf = st.session_state.lake_polygons[st.session_state.lake_polygons["id_geohash"] == current]
-                    if pd.isna(local_gdf.iloc[0]["date_break"]):
-                        logger.info(f"No break available for lake {current}!")
-                        viz_dates = [datetime(2017, 7, 1), today]
-                        spinner_text = "Pulling satellite 2017 + latest satellite image... This may take a few seconds."
-                    else:
-                        post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
-                        # break date (start of month after break)
-                        pre_break = post_break - timedelta(days=366)  # one year before
-                        logger.info(f"Using break date for lake {current}: {break_date}")
-                        spinner_text = "Pulling satellite image closest to the break + one year before... This may take a few seconds."
-                        viz_dates = [pre_break, post_break, today]
-
-                else:
-                    today = datetime.now()
-                    one_year_ago = today - timedelta(days=366)
-                    spinner_text = "Pulling most recent satellite image + one year ago... This may take a few seconds."
-                    viz_dates = [one_year_ago, today]
-
-                with st.spinner(spinner_text):
-                    # pull ds via xee
-                    logger.info(f"Collecting Satellite image previews for dates: {viz_dates}")
-                    ds = get_rioxarray_ds_from_lake(
-                        lake_gdf=st.session_state.lake_polygons,
-                        id_geohash=current,
-                        start_date="2016-06-01",
-                        end_date=today.strftime("%Y-%m-%d"),
+                @st.fragment
+                def recent_imagery_section():
+                    st.markdown(
+                        """
+                        ##### 🛰️ Recent imagery<a id="recent-imagery-header"></a>
+                        """,
+                        unsafe_allow_html=True,
                     )
-                    fig = cached_visualize_cube(ds, dates=viz_dates, style="rgb")
-                    # plot figure
-                    st.pyplot(fig, width="content")
-                    logger.info("Loaded Satellite image previews finished")
+
+                    # setup today's date and one year go
+                    today = datetime.now()
+                    if viz_configuration_name == "drainage_year":
+                        local_gdf = load_lake_polygon_cached(data_path_input, current)
+                        if local_gdf.empty or pd.isna(local_gdf.iloc[0]["date_break"]):
+                            logger.info(f"No break available for lake {current}!")
+                            viz_dates = [datetime(2017, 7, 1), today]
+                            spinner_text = (
+                                "Pulling satellite 2017 + latest satellite image... This may take a few seconds."
+                            )
+                        else:
+                            post_break = local_gdf.iloc[0]["date_break"].to_pydatetime() + timedelta(days=30)
+                            # break date (start of month after break)
+                            pre_break = post_break - timedelta(days=366)  # one year before
+                            logger.info(f"Using break date for lake {current}: {local_gdf.iloc[0]['date_break']}")
+                            spinner_text = "Pulling satellite image closest to the break + one year before... This may take a few seconds."
+                            viz_dates = [pre_break, post_break, today]
+
+                    else:
+                        one_year_ago = today - timedelta(days=366)
+                        spinner_text = "Pulling most recent satellite image + one year ago... This may take a few seconds."
+                        viz_dates = [one_year_ago, today]
+
+                    # Day-precision strings keep the Streamlit cache keys stable across
+                    # reruns (raw datetime.now() values change the key on every rerun).
+                    viz_date_strs = tuple(d.strftime("%Y-%m-%d") for d in viz_dates)
+                    # Restrict the EE query to windows around the visualized dates.
+                    # Each window reaches one year back so it always contains at least
+                    # one full Jun-Sep season (the collection is summer-filtered).
+                    date_windows = tuple(
+                        (
+                            (d - timedelta(days=366)).strftime("%Y-%m-%d"),
+                            (d + timedelta(days=45)).strftime("%Y-%m-%d"),
+                        )
+                        for d in viz_dates
+                    )
+
+                    with st.spinner(spinner_text):
+                        # pull ds via xee
+                        logger.info(f"Collecting Satellite image previews for dates: {viz_date_strs}")
+                        lake_gdf = load_lake_polygon_cached(data_path_input, current)
+                        if lake_gdf.empty:
+                            st.caption("⚠️ Lake polygon not found; cannot pull satellite imagery.")
+                            return
+                        try:
+                            ds = cached_get_rioxarray_ds_from_lake(
+                                lake_gdf,
+                                id_geohash=current,
+                                start_date=min(w[0] for w in date_windows),
+                                end_date=max(w[1] for w in date_windows),
+                                bands=("B2", "B3", "B4"),  # only the rendered RGB bands
+                                date_windows=date_windows,
+                                grid_scale=20,  # thumbnail resolution, 4x fewer pixels than native 10 m
+                            )
+                            fig = cached_visualize_cube(ds, dates=viz_date_strs, style="rgb", id_geohash=current)
+                        except Exception as e:
+                            logger.error(f"Failed to load satellite preview for lake {current}: {e}")
+                            st.warning(f"Could not load satellite imagery for this lake: {e}")
+                            return
+                        # plot figure
+                        st.pyplot(fig, width="content")
+                        logger.info("Loaded Satellite image previews finished")
+
+                recent_imagery_section()
 
             ###################### END Recent imagery plotter #############################
 

@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
+from typing import List, Optional, Sequence, Tuple
 
 import ee
 import eemont  # noqa: F401
@@ -898,6 +898,9 @@ def get_rioxarray_ds_from_lake(
     end_date: str,
     max_cloud_cover: float = 20,
     buffer: float = 200,
+    bands: Optional[Sequence[str]] = None,
+    date_windows: Optional[Sequence[Tuple[str, str]]] = None,
+    grid_scale: float = 10,
 ) -> xr.Dataset:
     """
     Load Sentinel-2 satellite imagery for a specific lake as an xarray Dataset.
@@ -918,6 +921,14 @@ def get_rioxarray_ds_from_lake(
             images (0-100). Defaults to 20.
         buffer (float, optional): Buffer distance in meters to expand the lake's
             bounding box for image extraction. Defaults to 200.
+        bands (Sequence[str], optional): Subset of S2 bands to open (e.g.
+            ("B2", "B3", "B4")). Defaults to None, which opens all bands.
+        date_windows (Sequence[Tuple[str, str]], optional): List of
+            (start, end) date pairs; when given, the collection is restricted
+            to the union of these windows (within start_date/end_date), so only
+            imagery near the dates of interest is fetched.
+        grid_scale (float, optional): Pixel size in meters for the output grid.
+            Defaults to 10 (native S2 resolution); use 20-30 for thumbnails.
 
     Returns:
         xr.Dataset: An xarray Dataset with Sentinel-2 bands as data variables,
@@ -946,7 +957,7 @@ def get_rioxarray_ds_from_lake(
     aoi = local_gdf.to_crs(crs).buffer(buffer).to_crs(4326).iloc[0]
     fc = geemap.gdf_to_ee(local_gdf)
 
-    grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(10, 10))
+    grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(grid_scale, grid_scale))
     grid = fix_xee_grid_utm(grid)
 
     ic = (
@@ -956,9 +967,44 @@ def get_rioxarray_ds_from_lake(
         .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", max_cloud_cover))
         .filter(ee.Filter.calendarRange(6, 9, "month"))
     )
+    if date_windows:
+        ic = ic.filter(ee.Filter.Or(*[ee.Filter.date(s, e) for s, e in date_windows]))
+    if bands:
+        ic = ic.select(list(bands))
     ds_rio = xr.open_dataset(ic, engine="ee", **grid).rio.write_crs(crs).sortby("time")
 
     return ds_rio
+
+
+@st.cache_resource(ttl=3600, show_spinner=False)
+def cached_get_rioxarray_ds_from_lake(
+    _lake_gdf: gpd.GeoDataFrame,
+    id_geohash: str,
+    start_date: str,
+    end_date: str,
+    max_cloud_cover: float = 20,
+    buffer: float = 200,
+    bands: Optional[Tuple[str, ...]] = None,
+    date_windows: Optional[Tuple[Tuple[str, str], ...]] = None,
+    grid_scale: float = 10,
+) -> xr.Dataset:
+    """Cached wrapper around get_rioxarray_ds_from_lake.
+
+    The GeoDataFrame is excluded from the cache key (underscore prefix);
+    id_geohash together with the query parameters identifies the result, so
+    re-selecting a lake does not re-hit Earth Engine.
+    """
+    return get_rioxarray_ds_from_lake(
+        lake_gdf=_lake_gdf,
+        id_geohash=id_geohash,
+        start_date=start_date,
+        end_date=end_date,
+        max_cloud_cover=max_cloud_cover,
+        buffer=buffer,
+        bands=bands,
+        date_windows=date_windows,
+        grid_scale=grid_scale,
+    )
 
 
 def visualize_s2_xee_cube(ds: xr.Dataset, dates: List[str], style: str = "rgb") -> plt.Figure:
@@ -1018,6 +1064,7 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: List[str], style: str = "rgb") 
 
 
 @st.cache_resource(show_spinner=False)
-def cached_visualize_cube(_ds: xr.Dataset, dates: List[str], style: str = "rgb"):
-    # Convert viz_dates to a tuple if it's a list, because lists aren't hashable by Streamlit
+def cached_visualize_cube(_ds: xr.Dataset, dates: List[str], style: str = "rgb", id_geohash: Optional[str] = None):
+    # _ds is excluded from the cache key (underscore prefix), so id_geohash must be
+    # part of the key — otherwise two lakes with the same dates share one figure.
     return visualize_s2_xee_cube(_ds, dates=tuple(dates), style=style)
