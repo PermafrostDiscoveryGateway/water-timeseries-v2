@@ -16,6 +16,15 @@ import streamlit as st
 from loguru import logger
 from streamlit_folium import st_folium
 
+from water_timeseries.dashboard.share_state import (
+    adopt_live_view,
+    apply_url_state_once,
+    render_copy_link_button,
+    render_state_bridge,
+    set_desired_view,
+    sync_flag_param,
+    update_live_view,
+)
 from water_timeseries.dashboard.tutorial_popup import show_help_button, show_tutorial_popup
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
@@ -325,8 +334,13 @@ class MapViewer:
                 "last_object_clicked",
                 "last_object_clicked_tooltip",
                 "last_clicked",
+                "center",
+                "zoom",
             ],
         )
+
+        # Track the user's live view (feeds the shareable URL, not map construction)
+        update_live_view(map_data.get("center"), map_data.get("zoom"))
 
         # Extract clicked feature's id_geohash for time-series lookup
         clicked_id = None
@@ -372,9 +386,8 @@ class MapViewer:
                             clicked_id = matching.iloc[0][self.id_column]
                             logger.info(f"Found lake via spatial search: {clicked_id}")
                             clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
-                            # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
-                            st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
-                            st.session_state.zoom_level = 12
+                            set_desired_view(clicked_lat, clicked_lon, 12)
+                            st.session_state["_centered_selection"] = clicked_id
                             logger.info(f"Clicked on lake {clicked_id} and coordinate {clicked_lat} {clicked_lon}")
 
         # Update session state only if a NEW feature was clicked
@@ -384,9 +397,8 @@ class MapViewer:
             logger.info(f"New lake selected: {clicked_id}")
 
             clicked_lat, clicked_lon = pygeohash.decode(clicked_id)
-            # self.map_center = {'lat': clicked_lat, 'lon': clicked_lon}
-            st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
-            st.session_state.zoom_level = 12
+            set_desired_view(clicked_lat, clicked_lon, 12)
+            st.session_state["_centered_selection"] = clicked_id
             logger.info(f"Clicked on lake {clicked_id} and coodinate {clicked_lat} {clicked_lon}")
             if clicked_id not in st.session_state.get("clicked_features", []):
                 if "clicked_features" not in st.session_state:
@@ -574,8 +586,15 @@ class MapViewer:
 
         # Render the map and get click data
         # Note: returned_objects includes 'last_active_drawing' for click detection
-        result = st_folium(m, height=600, width="100%", key="map_viewer", returned_objects=["last_active_drawing"])
-        # st.session_state.zoom_level = 6
+        result = st_folium(
+            m,
+            height=600,
+            width="100%",
+            key="map_viewer",
+            returned_objects=["last_active_drawing", "center", "zoom"],
+        )
+        # Track the user's live view (feeds the shareable URL, not map construction)
+        update_live_view(result.get("center"), result.get("zoom"))
 
         # Extract id_geohash from clicked feature
         clicked_id = None
@@ -623,6 +642,7 @@ class MapViewer:
         st.session_state.pop("selected_geohash", None)
         st.session_state.pop("selected_geohash_readable", None)
         st.session_state.pop("_pmtiles_last_rerun", None)
+        st.session_state.pop("_centered_selection", None)
 
     def _fix_current_view(self) -> None:
         """Fix the current map view (center and zoom) in session state.
@@ -873,6 +893,9 @@ def _render_drain_heatmap(
                         st.session_state.selected_geohash = drained_id
                         st.session_state.clicked_features.append(drained_id)
                         st.query_params["selected_lake"] = drained_id
+                        drained_lat, drained_lon = pygeohash.decode(drained_id)
+                        set_desired_view(drained_lat, drained_lon, 12)
+                        st.session_state["_centered_selection"] = drained_id
 
         # dummy deactivate clear selection button
         if False:
@@ -1063,11 +1086,12 @@ def create_app(
         logger.info(
             f"Setting center map to match lake id: {selected_option} at location ({clicked_lat}, {clicked_lon})"
         )
-        st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
-        st.session_state.zoom_level = 12
+        set_desired_view(clicked_lat, clicked_lon, 12)
+        st.session_state["_centered_selection"] = selected_option
 
     def _clear_selection():
         st.session_state.pop("selected_geohash", None)
+        st.session_state.pop("_centered_selection", None)
         st.query_params.pop("selected_lake", None)
         st.rerun()
 
@@ -1081,8 +1105,17 @@ def create_app(
     if st.session_state.disable_popup_plot:
         logger.warning("Plot popup disabled!")
 
+    # Restore shared window state from URL (once per session), then adopt the
+    # user's live panned/zoomed view so the map is rebuilt where they left it.
+    apply_url_state_once()
+    adopt_live_view()
+
     # check if there is a selected lake and jump to it if available
-    if st.session_state.get("selected_geohash", None):
+    # (only once per selection, so it doesn't fight a restored or panned view)
+    if (
+        st.session_state.get("selected_geohash", None)
+        and st.session_state.get("_centered_selection") != st.session_state.selected_geohash
+    ):
         _set_center_to_selected()
 
     # Store offline_mode in session state so it's accessible throughout the app
@@ -1113,6 +1146,10 @@ def create_app(
     # st.sidebar.header("Settings")
     with st.sidebar.divider():
         show_help_button(config_name=viz_configuration_name)
+
+    # Copy-link button: copies a URL that restores the exact window state
+    with st.sidebar:
+        render_copy_link_button()
 
     # Show offline mode indicator
     if offline_mode:
@@ -1191,11 +1228,19 @@ def create_app(
     # Near-real-time drainage overlay
     st.sidebar.divider()
     st.sidebar.subheader("Historical Drainage")
+    st.session_state.setdefault("show_drained_toggle", default_activate_historical)
     show_drained = st.sidebar.toggle(
         "Show temporal drainage statistics",
-        value=default_activate_historical,
+        key="show_drained_toggle",
         help="Activates visualization of number of drained lakes per month.",
     )
+    sync_flag_param("drained", show_drained)
+    if not show_drained:
+        st.query_params.pop("month", None)
+    # Jump to the drainage overview zoom only when the toggle flips on,
+    # not on every rerun (would fight a restored or user-panned view).
+    drained_just_enabled = show_drained and not st.session_state.get("_prev_show_drained", False)
+    st.session_state["_prev_show_drained"] = show_drained
     drained_breaks = None
     drained_label = None
 
@@ -1252,6 +1297,15 @@ def create_app(
 
                 selected_analysis_month = heatmap_pick
 
+                # Keep the shareable month param in sync with the selected month
+                if selected_analysis_month:
+                    if st.query_params.get("month") != selected_analysis_month:
+                        st.query_params["month"] = selected_analysis_month
+                    if selected_analysis_month not in selectable_months:
+                        st.sidebar.caption(
+                            f"Month {selected_analysis_month} from the shared link is not available."
+                        )
+
                 if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
                     month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
                     if not month_slice.empty:
@@ -1283,16 +1337,17 @@ def create_app(
 
             try:
                 # st.write(f"DEBUG: fragment running, hide_stable_lakes={st.session_state.get('toggle_hide_stable_lakes')}")
-                if show_drained and drained_breaks is not None and st.session_state.selected_geohash is None:
+                if drained_just_enabled and drained_breaks is not None and st.session_state.selected_geohash is None:
                     logger.info("Setting zoom level to 6")
-                    st.session_state.zoom_level = 6
+                    overview_center = st.session_state.map_center
+                    set_desired_view(overview_center["lat"], overview_center["lon"], 6)
 
                 if viz_configuration_name in ["drainage_year", "nrt_drainage"]:
                     hide_stable_lakes = st.toggle(
                         "Hide stable lakes",
-                        value=st.session_state.get("hide_stable_lakes", False),
                         key="toggle_hide_stable_lakes",
                     )
+                    sync_flag_param("hide_stable", hide_stable_lakes)
                 else:
                     hide_stable_lakes = False
 
@@ -1337,6 +1392,10 @@ def create_app(
                 # Render the map INSIDE the fragment
                 selected = viewer.render()
 
+                # Mirror the current state params to a cooperating parent page
+                # (re-posts on fragment reruns, e.g. after pan/zoom)
+                render_state_bridge()
+
                 return viewer, selected
             except Exception as e:
                 st.error(f"Error loading data: {str(e)}")
@@ -1377,8 +1436,8 @@ def create_app(
                 st.query_params["selected_lake"] = selected_option
                 # change map params
                 clicked_lat, clicked_lon = pygeohash.decode(selected_option)
-                st.session_state.map_center = {"lat": clicked_lat, "lon": clicked_lon}
-                st.session_state.zoom_level = 12
+                set_desired_view(clicked_lat, clicked_lon, 12)
+                st.session_state["_centered_selection"] = selected_option
                 st.rerun()
         else:
             st.sidebar.info("No features clicked yet. Click on a feature to select it.")
