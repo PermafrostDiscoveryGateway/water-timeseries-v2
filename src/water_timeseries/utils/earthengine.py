@@ -957,7 +957,7 @@ def get_rioxarray_ds_from_lake(
     aoi = local_gdf.to_crs(crs).buffer(buffer).to_crs(4326).iloc[0]
     fc = geemap.gdf_to_ee(local_gdf)
 
-    grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(grid_scale, grid_scale))
+    grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(10, 10))
     grid = fix_xee_grid_utm(grid)
 
     ic = (
