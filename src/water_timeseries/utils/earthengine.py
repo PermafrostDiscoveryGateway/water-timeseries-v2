@@ -976,7 +976,7 @@ def get_rioxarray_ds_from_lake(
     return ds_rio
 
 
-@st.cache_resource(ttl=3600, show_spinner=False)
+@st.cache_resource(show_spinner="Loading Sentinel-2 satellite imagery for a specific lake ")
 def cached_get_rioxarray_ds_from_lake(
     _lake_gdf: gpd.GeoDataFrame,
     id_geohash: str,
