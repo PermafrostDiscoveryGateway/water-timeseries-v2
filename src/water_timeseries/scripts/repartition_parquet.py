@@ -31,8 +31,41 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pyarrow as pa
 import pyarrow.parquet as pq
 from loguru import logger
+
+
+def _widen_binary_columns(table: pa.Table) -> pa.Table:
+    """Cast ``binary``/``string`` columns to their 64-bit ``large_*`` variants.
+
+    ``Table.sort_by`` reorders rows with a ``take`` that concatenates each
+    column into a single array. A 32-bit ``binary`` column (e.g. WKB geometry)
+    whose combined size exceeds 2 GB overflows the 32-bit offset and raises
+    ``ArrowInvalid: offset overflow``. The ``large_binary``/``large_string``
+    types use 64-bit offsets and avoid this. Casting is chunk-wise (no
+    concatenation), so it does not itself overflow. Schema metadata (including
+    the GeoParquet ``geo`` key) is preserved.
+    """
+    fields = []
+    columns = []
+    changed = False
+    for i, field in enumerate(table.schema):
+        col = table.column(i)
+        if pa.types.is_binary(field.type):
+            col = col.cast(pa.large_binary())
+            field = field.with_type(pa.large_binary())
+            changed = True
+        elif pa.types.is_string(field.type):
+            col = col.cast(pa.large_string())
+            field = field.with_type(pa.large_string())
+            changed = True
+        fields.append(field)
+        columns.append(col)
+    if not changed:
+        return table
+    schema = pa.schema(fields, metadata=table.schema.metadata)
+    return pa.Table.from_arrays(columns, schema=schema)
 
 
 def repartition_parquet(
@@ -68,6 +101,10 @@ def repartition_parquet(
 
     if sort_column not in table.column_names:
         raise ValueError(f"Sort column {sort_column!r} not found in {input_file} (columns: {table.column_names})")
+
+    # Widen binary/string columns so the sort's internal concatenation does not
+    # overflow 32-bit offsets on large columns (e.g. multi-GB WKB geometry).
+    table = _widen_binary_columns(table)
 
     logger.info(f"Sorting by {sort_column!r} ...")
     table = table.sort_by([(sort_column, "ascending")])
