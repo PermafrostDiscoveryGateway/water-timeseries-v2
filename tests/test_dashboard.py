@@ -56,3 +56,47 @@ def test_resolve_pmtiles_url_passthrough():
 
     url = "https://storage.googleapis.com/bucket/lakes.pmtiles"
     assert resolve_pmtiles_url(url) == url
+
+
+def test_build_pmtiles_map_adds_only_the_selected_basemap():
+    import folium
+
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    for basemap, expected_name in (
+        ("dark_matter", "Dark Matter (CartoDB)"),
+        ("esri_world_imagery", "ESRI World Imagery"),
+        ("tcvis", "TCVIS Landsat Trends 2005-2024 (AWI)"),
+    ):
+        m = build_pmtiles_map("https://example.com/lakes.pmtiles", basemap=basemap)
+        # leafmap.Map() always seeds its own default OpenStreetMap tile layer;
+        # we only assert that our own code adds exactly the chosen basemap
+        # (not all three stacked, as before this change).
+        our_layer_names = {
+            "Dark Matter (CartoDB)",
+            "ESRI World Imagery",
+            "TCVIS Landsat Trends 2005-2024 (AWI)",
+        }
+        tile_layers = [
+            c
+            for c in m._children.values()
+            if isinstance(c, (folium.TileLayer, folium.WmsTileLayer)) and c.layer_name in our_layer_names
+        ]
+        assert len(tile_layers) == 1
+        assert tile_layers[0].layer_name == expected_name
+
+
+def test_build_pmtiles_map_marker_visibility():
+    import folium
+
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    m = build_pmtiles_map(
+        "https://example.com/lakes.pmtiles",
+        drained_ids=["b7zpm2xq4k9d"],
+        show_drained_markers=False,
+    )
+    marker_group = next(
+        c for c in m._children.values() if isinstance(c, folium.FeatureGroup) and c.layer_name == "Drained Lake Markers"
+    )
+    assert marker_group.show is False

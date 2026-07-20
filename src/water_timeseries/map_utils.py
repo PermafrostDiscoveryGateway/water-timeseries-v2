@@ -192,6 +192,8 @@ def build_pmtiles_map(
     min_zoom=4,
     max_zoom=15,
     hide_stable_lakes: bool = False,
+    basemap: str = "dark_matter",
+    show_drained_markers: bool = True,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
 
@@ -203,24 +205,28 @@ def build_pmtiles_map(
     )
     # m.clear_layers()
     # logger.info("running render pmtiles")
-    # Add background map types
-    wms_url = "https://maps.awi.de/services/common/permafrost/ows"
-    tcvis_tile_layer = folium.WmsTileLayer(
-        url=wms_url,
-        name="TCVIS Landsat Trends 2005-2024 (AWI)",
-        styles="composite",
-        transparent=True,
-        overlay=False,
-        layers="tcvis",
-        min_zoom=min_zoom,
-        max_zoom=max_zoom,
-    )
-    tile_layer_darkmatter = folium.TileLayer(
-        "CartoDB.DarkMatter", name="Dark Matter (CartoDB)", min_zoom=min_zoom, max_zoom=max_zoom
-    )
-    tile_layer_esriworld = folium.TileLayer(
-        "Esri.WorldImagery", name="ESRI World Imagery", min_zoom=min_zoom, max_zoom=max_zoom
-    )
+    # Add only the sidebar-selected base layer (see dashboard/map_viewer.py's
+    # basemap picker, synced to the `basemap` URL param) instead of stacking
+    # all three and relying on folium's in-map LayerControl to switch them.
+    if basemap == "tcvis":
+        folium.WmsTileLayer(
+            url="https://maps.awi.de/services/common/permafrost/ows",
+            name="TCVIS Landsat Trends 2005-2024 (AWI)",
+            styles="composite",
+            transparent=True,
+            overlay=False,
+            layers="tcvis",
+            min_zoom=min_zoom,
+            max_zoom=max_zoom,
+        ).add_to(m)
+    elif basemap == "esri_world_imagery":
+        folium.TileLayer(
+            "Esri.WorldImagery", name="ESRI World Imagery", min_zoom=min_zoom, max_zoom=max_zoom
+        ).add_to(m)
+    else:
+        folium.TileLayer(
+            "CartoDB.DarkMatter", name="Dark Matter (CartoDB)", min_zoom=min_zoom, max_zoom=max_zoom
+        ).add_to(m)
 
     if viz_configuration_name == "colored_historical" and not drained_ids:
         aliases = {
@@ -235,10 +241,6 @@ def build_pmtiles_map(
         )
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
-        # Use only one basemap to avoid overlap
-        tile_layer_darkmatter.add_to(m)
-        tile_layer_esriworld.add_to(m)
-        tcvis_tile_layer.add_to(m)
 
     elif viz_configuration_name == "drainage_year" and not drained_ids:
         aliases = {
@@ -259,11 +261,6 @@ def build_pmtiles_map(
         )
         legend = get_legend_html_date_drainage_year()
 
-        # Use only one basemap to avoid overlap
-        tile_layer_darkmatter.add_to(m)
-        tcvis_tile_layer.add_to(m)
-        tile_layer_esriworld.add_to(m)
-
     elif viz_configuration_name == "nrt_drainage" and not drained_ids:
         aliases = {
             "id_geohash": "Lake ID",
@@ -283,21 +280,12 @@ def build_pmtiles_map(
         )
         legend = get_legend_html_nrt_drainage()
 
-        # Use only one basemap to avoid overlap
-        tile_layer_darkmatter.add_to(m)
-        tcvis_tile_layer.add_to(m)
-        tile_layer_esriworld.add_to(m)
-
     else:
         tooltip = PMTilesMapLibreTooltipWithRounding(filter_layers=["lakes-fill"])
         # Define default paint values
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_generic_water()
         # legend = get_legend_html_net_change()
         legend = None
-        # Add background tiles
-        tile_layer_darkmatter.add_to(m)
-        tcvis_tile_layer.add_to(m)
-        tile_layer_esriworld.add_to(m)
 
     if drained_ids:
         # Highlight drained lakes in red, dim others
@@ -384,7 +372,7 @@ def build_pmtiles_map(
     m.add_child(lake_layer)
 
     if drained_ids:
-        drained_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
+        drained_markers = folium.FeatureGroup(name="Drained Lake Markers", show=show_drained_markers)
         for gid in drained_ids:
             # Decode the geohash into latitude and longitude coordinates
             lat, lon = pygeohash.decode(gid)
@@ -409,8 +397,8 @@ def build_pmtiles_map(
         print(ul, lr)
     # -----------------------------------------------
 
-    # m.add_child(lake_layer)
-    folium.LayerControl().add_to(m)
+    # Base map and overlay visibility are chosen via the sidebar controls
+    # (see dashboard/map_viewer.py) rather than folium's in-map LayerControl.
 
     m.get_root().html.add_child(folium.Element(legend))
     return m

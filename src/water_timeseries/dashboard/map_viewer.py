@@ -17,12 +17,17 @@ from loguru import logger
 from streamlit_folium import st_folium
 
 from water_timeseries.dashboard.share_state import (
+    BASEMAP_CHOICES,
+    DEFAULT_BASEMAP,
+    LAYER_SESSION_KEYS,
     adopt_live_view,
     apply_url_state_once,
     render_copy_link_button,
     render_state_bridge,
     set_desired_view,
     sync_flag_param,
+    sync_hidden_layers_param,
+    sync_text_param,
     update_live_view,
 )
 from water_timeseries.dashboard.tutorial_popup import show_help_button, show_tutorial_popup
@@ -53,6 +58,13 @@ from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
 )
+
+#: Display labels for the sidebar base-map picker (keys match share_state.BASEMAP_CHOICES).
+BASEMAP_LABELS = {
+    "dark_matter": "Dark Matter (CartoDB)",
+    "esri_world_imagery": "ESRI World Imagery",
+    "tcvis": "TCVIS Landsat Trends 2005-2024 (AWI)",
+}
 
 # Initialize Earth Engine when credentials are available
 _ee_project = os.environ.get("EE_PROJECT") or None
@@ -112,6 +124,9 @@ class MapViewer:
         show_main_layer: bool = True,
         viz_configuration_name: Optional[str] = "colored_historical",
         hide_stable_lakes: bool = False,
+        basemap: str = DEFAULT_BASEMAP,
+        show_drained_polygons: bool = True,
+        show_drained_markers: bool = True,
         logger=None,
     ):
         """Initialize the MapViewer.
@@ -132,6 +147,9 @@ class MapViewer:
             drained_label: Optional label to show in the legend for the drained layer.
             show_main_layer: Whether to show the main layer (gdf) by default. If False, it will be added but initially hidden.
             viz_configuration_name: The visualization configuration name to determine styling and tooltip content.
+            basemap: Which base tile layer to show; one of share_state.BASEMAP_CHOICES.
+            show_drained_polygons: Whether the "Drained last month" polygon overlay starts visible (folium backend only).
+            show_drained_markers: Whether the "Drained Lake Markers" overlay starts visible.
         """
         self.geometry_column = geometry_column
         self.id_column = id_column
@@ -150,6 +168,9 @@ class MapViewer:
         self.drained_data = None
         self.viz_configuration_name = viz_configuration_name
         self.hide_stable_lakes = hide_stable_lakes
+        self.basemap = basemap if basemap in BASEMAP_CHOICES else DEFAULT_BASEMAP
+        self.show_drained_polygons = show_drained_polygons
+        self.show_drained_markers = show_drained_markers
 
         use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
         if use_pmtiles and map_backend != "pmtiles":
@@ -321,6 +342,8 @@ class MapViewer:
             viz_configuration_name=viz_configuration_name,
             tooltip=tooltip,
             hide_stable_lakes=self.hide_stable_lakes,
+            basemap=self.basemap,
+            show_drained_markers=self.show_drained_markers,
         )
 
         # Render the map and get click data
@@ -412,6 +435,29 @@ class MapViewer:
 
         return st.session_state.get("selected_geohash")
 
+    def _add_selected_basemap(self, m: folium.Map) -> None:
+        """Add only the sidebar-selected base tile layer to the map.
+
+        Only one base layer is ever added (instead of stacking Dark Matter,
+        ESRI World Imagery, and the TCVIS WMS layer and switching between them
+        via folium's in-map LayerControl radio), since the sidebar basemap
+        picker (synced to the ``basemap`` URL param) is now the single source
+        of truth for which one is shown.
+        """
+        if self.basemap == "tcvis":
+            folium.WmsTileLayer(
+                url="https://maps.awi.de/services/common/permafrost/ows",
+                name=BASEMAP_LABELS["tcvis"],
+                styles="composite",
+                transparent=True,
+                overlay=False,
+                layers="tcvis",
+            ).add_to(m)
+        elif self.basemap == "esri_world_imagery":
+            folium.TileLayer("Esri.WorldImagery", name=BASEMAP_LABELS["esri_world_imagery"]).add_to(m)
+        else:
+            folium.TileLayer("CartoDB.DarkMatter", name=BASEMAP_LABELS["dark_matter"]).add_to(m)
+
     # TODO: create configuration option
     def _render_folium(
         self,
@@ -439,30 +485,14 @@ class MapViewer:
 
         m = folium.Map(location=center, zoom_start=self.zoom)
 
-        # # Add tile layers using utility function
-
-        # Add WMS layer for permafrost data
-        wms_url = "https://maps.awi.de/services/common/permafrost/ows"
-        tcvis_tile_layer = folium.WmsTileLayer(
-            url=wms_url,
-            name="TCVIS Landsat Trends 2005-2024 (AWI)",
-            styles="composite",
-            transparent=True,
-            overlay=False,
-            layers="tcvis",
-        )
-        tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
-        tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
+        # Base map is a single, user-chosen layer (sidebar radio, synced to the
+        # `basemap` URL param) rather than all three stacked and switched via
+        # folium's in-map LayerControl.
+        self._add_selected_basemap(m)
 
         if viz_configuration_name == "colored_historical":
             # Create style function based on whether NetChange_perc column exists
             if "NetChange_perc" in valid_gdf.columns:
-                # add tile layers
-                m.add_basemap("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
-                # tile_layer_darkmatter.add_to(m)
-                tile_layer_esriworld.add_to(m)
-                tcvis_tile_layer.add_to(m)
-
                 style_function = get_colored_style_function(
                     color_column="NetChange_perc",
                     vmin=-40,
@@ -484,11 +514,6 @@ class MapViewer:
         elif viz_configuration_name == "drainage_year":
             # Create style function based on whether NetChange_perc column exists
             if "water_residual" in valid_gdf.columns:
-                # add tile layers
-                tcvis_tile_layer.add_to(m)
-                tile_layer_esriworld.add_to(m)
-                tile_layer_darkmatter.add_to(m)
-
                 style_function = get_colored_style_function(
                     color_column="date_break_year",
                     vmin=2017,
@@ -551,6 +576,7 @@ class MapViewer:
                 folium.GeoJson(
                     drained_gdf,
                     name=drained_layer_name,
+                    show=self.show_drained_polygons,
                     style_function=get_default_style_function(
                         fill_color="#d73027",
                         edge_color="#7f0000",
@@ -564,7 +590,7 @@ class MapViewer:
                 ).add_to(m)
 
                 # --- ADD THIS BLOCK FOR DRAINED LAKE MARKERS ---
-                drained_markers = folium.FeatureGroup(name="Drained Lake Markers", show=True)
+                drained_markers = folium.FeatureGroup(name="Drained Lake Markers", show=self.show_drained_markers)
                 for idx, row in drained_gdf.iterrows():
                     # Calculate centroid for standard geometries (Polygons/MultiPolygons)
                     centroid = row.geometry.centroid
@@ -580,7 +606,9 @@ class MapViewer:
                 drained_markers.add_to(m)
                 # -----------------------------------------------
 
-        folium.LayerControl().add_to(m)
+        # Base map and overlay visibility are chosen via the sidebar controls
+        # (see create_app) rather than folium's in-map LayerControl, so there's
+        # a single source of truth that can round-trip through the URL.
 
         m.get_root().html.add_child(folium.Element(get_legend_html_net_change()))
 
@@ -1160,6 +1188,20 @@ def create_app(
     use_pmtiles = bool(pmtiles_file or pmtiles_url)
     map_backend = "pmtiles" if use_pmtiles else "folium"
 
+    # Map layer controls (base map + overlay visibility). These are the single
+    # source of truth for what's shown on the map -- kept in sync with the
+    # `basemap`/`hidden_layers` URL params so a shared link restores them.
+    st.sidebar.divider()
+    st.sidebar.subheader("Map Layers")
+    st.session_state.setdefault("map_basemap_choice", DEFAULT_BASEMAP)
+    basemap_choice = st.sidebar.radio(
+        "Base map",
+        options=BASEMAP_CHOICES,
+        format_func=lambda key: BASEMAP_LABELS[key],
+        key="map_basemap_choice",
+    )
+    sync_text_param("basemap", basemap_choice, DEFAULT_BASEMAP)
+
     # Performance settings for large datasets (defined programmatically, UI removed)
     max_features = None if use_pmtiles else 2000
 
@@ -1320,6 +1362,22 @@ def create_app(
                 else:
                     st.sidebar.caption(f"No per-lake break data available for {selected_analysis_month}")
 
+    # Drained-layer overlay visibility -- only meaningful (and only offered)
+    # once there's drained data to show for the selected month.
+    show_drained_layers = bool(show_drained and drained_breaks is not None and not drained_breaks.empty)
+    if show_drained_layers:
+        if map_backend != "pmtiles":
+            # The pmtiles backend highlights drained lakes within the "Lakes"
+            # layer itself; there's no separate polygon overlay to toggle.
+            st.session_state.setdefault("show_layer_drained_polygons", True)
+            st.sidebar.checkbox("Drained last month", key="show_layer_drained_polygons")
+        st.session_state.setdefault("show_layer_drained_markers", True)
+        st.sidebar.checkbox("Drained lake markers", key="show_layer_drained_markers")
+
+    sync_hidden_layers_param(
+        {layer for layer, key in LAYER_SESSION_KEYS.items() if not st.session_state.get(key, True)}
+    )
+
     # Create map viewer
     logger.info(map_backend)
 
@@ -1363,6 +1421,9 @@ def create_app(
                     pmtiles_url=pmtiles_url,
                     logger=logger,
                     hide_stable_lakes=hide_stable_lakes,
+                    basemap=st.session_state.get("map_basemap_choice", DEFAULT_BASEMAP),
+                    show_drained_polygons=st.session_state.get("show_layer_drained_polygons", True),
+                    show_drained_markers=st.session_state.get("show_layer_drained_markers", True),
                 )
 
                 if show_drained and drained_breaks is not None and not drained_breaks.empty:
@@ -1373,7 +1434,6 @@ def create_app(
                             breaks_df["date"] = breaks_df["date"].astype(str)
                         viewer.drained_data = breaks_df.to_dict(orient="index")
                         viewer.drained_label = drained_label
-                        viewer.show_main_layer = True
                     else:
                         drained_gdf = viewer.load_drained_gdf(drained_ids).merge(
                             drained_breaks.reset_index(),
@@ -1382,12 +1442,10 @@ def create_app(
                         )
                         viewer.drained_gdf = drained_gdf
                         viewer.drained_label = drained_label
-                        viewer.show_main_layer = True
                 elif show_drained:
                     viewer.drained_gdf = None
                     viewer.drained_data = None
                     viewer.drained_label = drained_label
-                    viewer.show_main_layer = True
 
                 # Render the map INSIDE the fragment
                 selected = viewer.render()

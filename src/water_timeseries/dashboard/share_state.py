@@ -3,6 +3,7 @@
 The dashboard keeps its restorable state in readable query params on its own URL:
 
     ?selected_lake=<geohash>&lat=<f>&lon=<f>&zoom=<f>&drained=1&month=YYYY-MM&hide_stable=1
+    &basemap=tcvis&hidden_layers=drained_markers
 
 Params at their default value are removed to keep URLs clean. When the app is
 embedded in an iframe on a cooperating parent site (see ``embed/``), the same
@@ -34,7 +35,17 @@ DEFAULT_LON = -164.1
 DEFAULT_ZOOM = 10.0
 
 #: All query-param keys owned by this module (plus the pre-existing selected_lake).
-STATE_PARAM_KEYS = ("selected_lake", "lat", "lon", "zoom", "drained", "month", "hide_stable")
+STATE_PARAM_KEYS = (
+    "selected_lake",
+    "lat",
+    "lon",
+    "zoom",
+    "drained",
+    "month",
+    "hide_stable",
+    "basemap",
+    "hidden_layers",
+)
 
 #: Prefix applied to state params when mirrored onto a parent site's URL.
 PARENT_PARAM_PREFIX = "wt_"
@@ -48,6 +59,21 @@ _GEOHASH_RE = re.compile(r"^[0-9a-zA-Z]{1,12}$")
 _COORD_EPS = 1e-5
 _ZOOM_EPS = 0.01
 
+#: Selectable base map layers (keys used both in session_state and the URL param).
+BASEMAP_CHOICES = ("dark_matter", "esri_world_imagery", "tcvis")
+DEFAULT_BASEMAP = "dark_matter"
+
+#: Toggleable overlay layers. Default state is "all visible", so the URL param
+#: (``hidden_layers``) only ever lists the ones a user turned off. The main
+#: "Lakes" layer isn't included -- it's the map's primary content and always shown.
+LAYER_KEYS = ("drained_polygons", "drained_markers")
+
+#: Sidebar checkbox widget key owning each layer's visibility (map_viewer.py).
+LAYER_SESSION_KEYS = {
+    "drained_polygons": "show_layer_drained_polygons",
+    "drained_markers": "show_layer_drained_markers",
+}
+
 
 @dataclass
 class UrlState:
@@ -60,6 +86,8 @@ class UrlState:
     drained: bool = False
     month: Optional[str] = None
     hide_stable: bool = False
+    basemap: Optional[str] = None
+    hidden_layers: tuple = ()
 
 
 def _parse_float(value: Optional[str]) -> Optional[float]:
@@ -94,6 +122,13 @@ def decode_url_state(params: Mapping[str, str]) -> UrlState:
     if month and not _MONTH_RE.match(str(month)):
         month = None
 
+    basemap = params.get("basemap")
+    if basemap not in BASEMAP_CHOICES:
+        basemap = None
+
+    hidden_raw = params.get("hidden_layers") or ""
+    hidden_layers = tuple(sorted({key for key in hidden_raw.split(",") if key in LAYER_KEYS}))
+
     return UrlState(
         lat=lat,
         lon=lon,
@@ -102,6 +137,8 @@ def decode_url_state(params: Mapping[str, str]) -> UrlState:
         drained=params.get("drained") == "1",
         month=str(month) if month else None,
         hide_stable=params.get("hide_stable") == "1",
+        basemap=basemap,
+        hidden_layers=hidden_layers,
     )
 
 
@@ -141,6 +178,27 @@ def sync_flag_param(name: str, on: bool) -> None:
             st.query_params[name] = "1"
     else:
         st.query_params.pop(name, None)
+
+
+def sync_text_param(name: str, value: Optional[str], default: Optional[str]) -> None:
+    """Keep a free-text query param in sync, eliding it when equal to the default."""
+    if value == default or not value:
+        st.query_params.pop(name, None)
+    elif st.query_params.get(name) != value:
+        st.query_params[name] = value
+
+
+def sync_hidden_layers_param(hidden: set) -> None:
+    """Keep the ``hidden_layers`` query param in sync with the set of hidden layer keys.
+
+    Default state is "everything visible", so an empty set elides the param.
+    """
+    value = ",".join(sorted(key for key in hidden if key in LAYER_KEYS))
+    if value:
+        if st.query_params.get("hidden_layers") != value:
+            st.query_params["hidden_layers"] = value
+    else:
+        st.query_params.pop("hidden_layers", None)
 
 
 def set_desired_view(lat: float, lon: float, zoom: float) -> None:
@@ -207,7 +265,7 @@ def apply_url_state_once() -> None:
 
     Must run in create_app BEFORE the recenter-to-selection block and before
     any widget it seeds (show_drained_toggle, toggle_hide_stable_lakes,
-    heatmap_selected_cell) is instantiated.
+    heatmap_selected_cell, map_basemap_choice, map_hidden_layers) is instantiated.
     """
     if st.session_state.get("_url_state_applied"):
         return
@@ -239,6 +297,12 @@ def apply_url_state_once() -> None:
 
     if state.hide_stable:
         st.session_state["toggle_hide_stable_lakes"] = True
+
+    if state.basemap:
+        st.session_state["map_basemap_choice"] = state.basemap
+
+    for layer_key in state.hidden_layers:
+        st.session_state[LAYER_SESSION_KEYS[layer_key]] = False
 
 
 def current_state_params() -> dict:
