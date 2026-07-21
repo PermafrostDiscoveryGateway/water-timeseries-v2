@@ -127,6 +127,9 @@ All messages are objects with `type` and `version: 1`.
    python -m http.server 8000
    ```
 
-4. Pan, zoom, select a lake, flip toggles — the parent address bar gains
-   `wt_*` params live. Click **🔗 Copy link to this view** and paste into a
-   fresh tab: the parent page loads with the iframe restored to the same state.
+4. Pan, zoom, select a lake, flip toggles — the *parent page's* address bar
+   gains `wt_*` params live. Copy it (e.g. `Cmd/Ctrl+L`, `Cmd/Ctrl+C`) and paste
+   into a fresh tab: the parent page loads with the iframe restored to the
+   same state. The dashboard's own **🔗 Copy link to this view** button
+   copies the dashboard's own direct URL instead — useful standalone, or to
+   link straight to the framed app outside the parent page.
