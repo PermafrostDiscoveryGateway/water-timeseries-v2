@@ -54,18 +54,13 @@
     }
     iframe.src = appUrl.toString();
 
-    // 2) Answer the dashboard's handshake and mirror its state onto our URL.
+    // 2) Mirror the dashboard's state onto our URL.
     global.addEventListener("message", function (event) {
       if (event.origin !== appOrigin) return;
       var data = event.data;
       if (!data || typeof data !== "object") return;
 
-      if (data.type === "wt:hello") {
-        event.source.postMessage(
-          { type: "wt:hello-ack", version: 1, href: global.location.href, prefix: prefix },
-          event.origin
-        );
-      } else if (data.type === "wt:state") {
+      if (data.type === "mcui:state") {
         var url = new URL(global.location.href);
         var stale = [];
         url.searchParams.forEach(function (value, key) {
