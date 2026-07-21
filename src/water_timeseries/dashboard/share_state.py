@@ -319,7 +319,6 @@ def render_copy_link_button() -> None:
         <script>
         (function() {
             var CFG = __WT_CONFIG__;
-            var parentInfo = null;
 
             function currentParams() {
                 try {
@@ -337,27 +336,15 @@ def render_copy_link_button() -> None:
 
             function buildUrl() {
                 var params = currentParams();
-                if (parentInfo && parentInfo.href) {
-                    var u = new URL(parentInfo.href);
-                    var stale = [];
-                    u.searchParams.forEach(function(v, k) {
-                        if (k.indexOf(parentInfo.prefix) === 0) stale.push(k);
-                    });
-                    stale.forEach(function(k) { u.searchParams.delete(k); });
-                    Object.keys(params).forEach(function(k) {
-                        u.searchParams.set(parentInfo.prefix + k, params[k]);
-                    });
-                    return u.toString();
-                }
                 var base = CFG.fallbackAppUrl;
                 try { base = window.parent.location.href; } catch (e) {}
                 if (!base) return null;
-                var u2 = new URL(base);
-                u2.searchParams.delete("embed");
-                u2.searchParams.delete("embed_options");
-                CFG.stateKeys.forEach(function(k) { u2.searchParams.delete(k); });
-                Object.keys(params).forEach(function(k) { u2.searchParams.set(k, params[k]); });
-                return u2.toString();
+                var u = new URL(base);
+                u.searchParams.delete("embed");
+                u.searchParams.delete("embed_options");
+                CFG.stateKeys.forEach(function(k) { u.searchParams.delete(k); });
+                Object.keys(params).forEach(function(k) { u.searchParams.set(k, params[k]); });
+                return u.toString();
             }
 
             var btn = document.getElementById("wt-copy");
