@@ -265,7 +265,7 @@ def render_state_bridge() -> None:
         (function() {{
             try {{
                 window.top.postMessage(
-                    {{ type: "wt:state", version: 1, params: {params_json} }},
+                    {{ type: "mcui:state", version: 1, params: {params_json} }},
                     {target_json}
                 );
             }} catch (e) {{ /* not framed or origin mismatch: nothing to do */ }}
@@ -279,10 +279,8 @@ def render_state_bridge() -> None:
 def render_copy_link_button() -> None:
     """Sidebar "Copy link" button restoring the exact window state.
 
-    Standalone: copies the app's own URL (embed params stripped). Inside an
-    iframe on a cooperating parent page (which answers wt:hello with
-    wt:hello-ack), copies a parent-site URL carrying wt_-prefixed params.
-    Falls back to a selectable text input when the clipboard is unavailable.
+    Copies the app's own URL (embed params stripped). Falls back to a
+    selectable text input when the clipboard is unavailable.
     """
     fallback_params_json = json.dumps(current_state_params(), sort_keys=True)
     app_url = ""
@@ -322,16 +320,6 @@ def render_copy_link_button() -> None:
         (function() {
             var CFG = __WT_CONFIG__;
             var parentInfo = null;
-
-            window.addEventListener("message", function(ev) {
-                var d = ev.data;
-                if (!d || d.type !== "wt:hello-ack") return;
-                if (CFG.targetOrigin !== "*" && ev.origin !== CFG.targetOrigin) return;
-                parentInfo = { href: d.href, prefix: d.prefix || "wt_" };
-            });
-            try {
-                window.top.postMessage({ type: "wt:hello", version: 1 }, CFG.targetOrigin);
-            } catch (e) {}
 
             function currentParams() {
                 try {

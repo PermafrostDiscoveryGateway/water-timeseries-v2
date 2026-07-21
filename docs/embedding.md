@@ -47,13 +47,10 @@ The snippet:
 1. **On load**, copies `wt_`-prefixed params from the parent URL into the
    iframe `src` (unprefixed), plus `embed=true` — so a pasted parent link
    restores the embedded dashboard state.
-2. **Answers the handshake** (`wt:hello` → `wt:hello-ack`) so the dashboard's
-   copy button knows a cooperating parent exists and builds parent-site URLs
-   (state params carried with the `wt_` prefix to avoid collisions with the
-   parent page's own params).
-3. **Mirrors live state** (`wt:state` messages) onto the parent URL via
-   `history.replaceState`, so the parent address bar stays shareable as the
-   user pans, zooms, selects lakes, and flips toggles.
+2. **Mirrors live state** (`mcui:state` messages) onto the parent URL via
+   `history.replaceState` (state params carried with the `wt_` prefix to avoid
+   collisions with the parent page's own params), so the parent address bar
+   stays shareable as the user pans, zooms, selects lakes, and flips toggles.
 
 Requirements:
 
@@ -72,9 +69,8 @@ a single parent origin, set an environment variable on the dashboard host:
 WT_PARENT_ORIGIN=https://parent-site.example.org
 ```
 
-With this set, messages are only delivered to that origin and acks from other
-origins are ignored; framed by anyone else, the copy button falls back to
-producing the app's own direct URL.
+With this set, messages are only delivered to that origin; framed by anyone
+else, the message is silently dropped by the browser instead of leaking state.
 
 ## postMessage protocol reference
 
@@ -82,9 +78,7 @@ All messages are objects with `type` and `version: 1`.
 
 | Type | Direction | Payload |
 |---|---|---|
-| `wt:hello` | dashboard → parent (`window.top`) | `{}` — sent when the copy button mounts |
-| `wt:hello-ack` | parent → dashboard | `{ href, prefix }` — parent page URL and param prefix |
-| `wt:state` | dashboard → parent (`window.top`) | `{ params }` — current state params; absent keys mean "remove" |
+| `mcui:state` | dashboard → parent (`window.top`) | `{ params }` — current state params; absent keys mean "remove" |
 
 ## Local end-to-end test
 
