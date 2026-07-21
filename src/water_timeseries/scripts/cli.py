@@ -30,6 +30,7 @@ from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
 
 # Import NRT pre-computation
 from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
+from water_timeseries.scripts.repartition_parquet import repartition_parquet as repartition_parquet_file
 from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_archive
 from water_timeseries.utils.pmtiles_build import (
     build_pmtiles_drainage_year,
@@ -973,6 +974,24 @@ def aggregate_nrt(
     """
     logfile = setup_logging(logfile=logfile, verbose=verbose)
     aggregate_nrt_directory(nrt_dir, output_dir)
+
+
+@app.command(group="Analysis")
+def repartition_parquet(
+    input_file: Path,
+    output_file: Path,
+    sort_column: str = "id_geohash",
+    row_group_size: int = 2000,
+    logfile: Optional[str] = None,
+    verbose: int = 0,
+):
+    """Rewrite a vector parquet sorted by ``sort_column`` with small row groups.
+
+    One-time migration that makes per-lake filtered reads (dashboard lazy
+    loading) touch a single small row group instead of scanning ~1M rows.
+    """
+    logfile = setup_logging(logfile=logfile, verbose=verbose)
+    repartition_parquet_file(input_file, output_file, sort_column=sort_column, row_group_size=row_group_size)
 
 
 if __name__ == "__main__":

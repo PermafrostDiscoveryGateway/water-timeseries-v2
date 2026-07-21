@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Optional, Tuple
 
+import geopandas as gpd
 import pandas as pd
 import streamlit as st
 import xarray as xr
@@ -12,15 +13,35 @@ from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 
 
-@st.cache_data(ttl=3600, show_spinner="Loading GeoDataframe dataset from parquet...")
+@st.cache_resource(show_spinner="Loading GeoDataframe dataset from parquet...")
 def load_lake_polygons_cached(file_path: str):
     gdf = load_vector_dataset(file_path)
     return gdf
 
 
-@st.cache_data(ttl=3600, show_spinner="Loading xarray dataset")
+@st.cache_resource(show_spinner="Load lake's row")
+def load_lake_polygon_cached(file_path: str, id_geohash: str) -> gpd.GeoDataFrame:
+    """Load a single lake's row from the vector dataset without reading the full file.
+
+    For parquet files this uses predicate pushdown so only the row group(s)
+    containing the lake are read. Non-parquet formats fall back to a full read
+    plus filter.
+    """
+    if str(file_path).split("?")[0].split("#")[0].lower().endswith(".parquet"):
+        gdf = gpd.read_parquet(file_path, filters=[("id_geohash", "==", id_geohash)])
+    else:
+        gdf = load_vector_dataset(file_path)
+        gdf = gdf[gdf["id_geohash"] == id_geohash].copy()
+    if gdf.crs is None:
+        gdf = gdf.set_crs(epsg=4326)
+    return gdf
+
+
+# cache_resource (not cache_data) so the lazy xr.open_zarr handle is shared as-is
+# across sessions instead of being pickled (which would materialize the full cube).
+@st.cache_resource(show_spinner="Opening xarray dataset")
 def load_xarray_dataset_cached(file_path: str):
-    return load_xarray_dataset(file_path)
+    return load_xarray_dataset(file_path, chunks={})
 
 
 # loading slow for large datasets

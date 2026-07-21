@@ -222,3 +222,4 @@ docs/_templates/
 .DS_Store
 data/
 preprocessed/
+/.idea/
