@@ -262,44 +262,85 @@ def share_button_enabled() -> bool:
     return st.query_params.get("show_share", "true").strip().lower() not in ("false", "0")
 
 
+#: Dark-mode palette, sourced from the ADC/MetacatUI dark portal theme
+#: (NCEAS/metacatui src/css/portal-themes/dark.css) so embedded dark mode
+#: matches the parent site's own dark theme instead of inventing one.
+_DARK_PALETTE = {
+    "background": "#111827",  # --portal-col-bkg__deprecate
+    "surface": "#1f2937",  # --portal-col-bkg-lighter__deprecate
+    "sidebar_background": "#374151",  # --portal-col-bkg-active__deprecate
+    "text": "#f9fafb",  # --portal-col-text__deprecate
+    "text_subtle": "#9ca3af",  # --portal-col-text-subtle__deprecate
+    "accent": "#269fb9",  # --portal-col-highlight__deprecate
+    "accent_subtle": "#0c4e66",  # --portal-col-highlight-subtle__deprecate
+}
+
+
 def apply_theme_param() -> None:
-    """Force Streamlit's embed theme from a ``theme=light|dark`` query param.
+    """Force a dark color scheme from a ``theme=light|dark`` query param.
 
-    ``embed``/``embed_options`` are invisible to ``st.query_params`` (Streamlit's
-    frontend reads them straight off the URL before Python ever runs), so
-    forcing a theme requires a one-time client-side redirect that appends
-    ``embed_options=<theme>_theme`` (and ``embed=true``) to the URL. The JS
-    checks the *browser* URL (not st.query_params) before redirecting, so it
-    only fires once even though this runs on every rerun.
+    Streamlit's own ``embed_options=light_theme|dark_theme`` can't be used
+    for this: it's invisible to ``st.query_params`` (the frontend reads it
+    straight off the URL before Python ever runs) and previously required a
+    client-side redirect to inject, but that redirect ran inside a sandboxed
+    ``st.iframe`` (no ``allow-top-navigation``) targeting ``window.top`` --
+    which, once this app is itself framed on a parent site, is the *parent's*
+    page rather than this app, so the navigation was both refused by the
+    sandbox and aimed at the wrong document. Separately, Streamlit silently
+    ignores ``embed_options`` theme switching whenever a custom ``[theme]`` is
+    configured (streamlit/streamlit#13496, fixed in 1.53.0) -- and this app
+    always has one, since the light theme is our ADC branding.
 
-    Rendered via ``st.iframe`` (not ``st.markdown``): scripts injected through
-    ``st.markdown``'s HTML are inert (browsers don't execute ``<script>`` tags
-    inserted via innerHTML), while ``st.iframe`` renders a real document whose
-    scripts do run. The script itself targets ``window.top.location`` since it
-    executes inside that iframe, one level below the app page it needs to
-    redirect.
+    ``theme`` is a plain, non-reserved query param, so Python sees it
+    directly via ``st.query_params`` with no redirect needed. Dark mode is
+    applied ourselves via an injected stylesheet (recoloring the app's own
+    surfaces to the ADC/MetacatUI dark palette) rather than delegating to
+    Streamlit's theme engine, so it doesn't depend on that engine's behavior
+    at all.
     """
     theme = st.query_params.get("theme")
-    if theme not in _THEME_VALUES:
+    if theme != "dark":
         return
-    st.iframe(
+    p = _DARK_PALETTE
+    st.markdown(
         f"""
-        <script>
-        (function() {{
-            var params = new URLSearchParams(window.top.location.search);
-            if (params.getAll("embed_options").indexOf("{theme}_theme") === -1) {{
-                params.append("embed_options", "{theme}_theme");
-                if (params.getAll("embed").indexOf("true") === -1) {{
-                    params.append("embed", "true");
-                }}
-                window.top.location.replace(
-                    window.top.location.pathname + "?" + params.toString() + window.top.location.hash
-                );
-            }}
-        }})();
-        </script>
+        <style>
+        [data-testid="stApp"], [data-testid="stAppViewContainer"],
+        [data-testid="stMain"], [data-testid="stHeader"] {{
+            background-color: {p["background"]};
+            color: {p["text"]};
+        }}
+        [data-testid="stSidebar"], [data-testid="stSidebarContent"] {{
+            background-color: {p["sidebar_background"]};
+            color: {p["text"]};
+        }}
+        [data-testid="stMainBlockContainer"] [data-testid="stMarkdownContainer"],
+        [data-testid="stWidgetLabel"], [data-testid="stText"] {{
+            color: {p["text"]};
+        }}
+        [data-testid="stExpander"], [data-testid="stTab"] {{
+            background-color: {p["surface"]};
+            color: {p["text"]};
+        }}
+        [data-testid="stDialog"] > div > div {{
+            background-color: {p["surface"]} !important;
+            color: {p["text"]} !important;
+        }}
+        [data-testid^="stBaseButton-"] {{
+            background-color: {p["surface"]};
+            color: {p["text"]};
+            border-color: {p["accent_subtle"]};
+        }}
+        [data-testid^="stBaseButton-primary"] {{
+            background-color: {p["accent"]};
+            color: {p["text"]};
+        }}
+        a, [data-testid^="stBaseButton-"]:hover {{
+            color: {p["accent"]};
+        }}
+        </style>
         """,
-        height=1,
+        unsafe_allow_html=True,
     )
 
 
