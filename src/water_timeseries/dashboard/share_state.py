@@ -271,28 +271,35 @@ def apply_theme_param() -> None:
     ``embed_options=<theme>_theme`` (and ``embed=true``) to the URL. The JS
     checks the *browser* URL (not st.query_params) before redirecting, so it
     only fires once even though this runs on every rerun.
+
+    Rendered via ``st.iframe`` (not ``st.markdown``): scripts injected through
+    ``st.markdown``'s HTML are inert (browsers don't execute ``<script>`` tags
+    inserted via innerHTML), while ``st.iframe`` renders a real document whose
+    scripts do run. The script itself targets ``window.top.location`` since it
+    executes inside that iframe, one level below the app page it needs to
+    redirect.
     """
     theme = st.query_params.get("theme")
     if theme not in _THEME_VALUES:
         return
-    st.markdown(
+    st.iframe(
         f"""
         <script>
         (function() {{
-            var params = new URLSearchParams(window.location.search);
+            var params = new URLSearchParams(window.top.location.search);
             if (params.getAll("embed_options").indexOf("{theme}_theme") === -1) {{
                 params.append("embed_options", "{theme}_theme");
                 if (params.getAll("embed").indexOf("true") === -1) {{
                     params.append("embed", "true");
                 }}
-                window.location.replace(
-                    window.location.pathname + "?" + params.toString() + window.location.hash
+                window.top.location.replace(
+                    window.top.location.pathname + "?" + params.toString() + window.top.location.hash
                 );
             }}
         }})();
         </script>
         """,
-        unsafe_allow_html=True,
+        height=1,
     )
 
 
