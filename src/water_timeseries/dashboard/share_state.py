@@ -6,8 +6,12 @@ The dashboard keeps its restorable state in readable query params on its own URL
 
 Params at their default value are removed to keep URLs clean. When the app is
 embedded in an iframe on a cooperating parent site (see ``embed/``), the same
-params are mirrored onto the parent URL with a ``wt_`` prefix via postMessage,
-and the "Copy link" button produces a parent-site URL instead.
+params are mirrored onto the parent URL with a ``wt_`` prefix via postMessage.
+
+Two additional query params configure embedding behavior but are never part
+of the shareable state (set once by the embedding parent, not echoed back):
+``theme`` (``light``/``dark``, forces the color scheme) and ``show_share``
+(``false`` hides the "Copy link" button, e.g. when the parent offers its own).
 
 Map view state is two-tiered to avoid feedback loops with streamlit-folium:
 
@@ -41,6 +45,9 @@ PARENT_PARAM_PREFIX = "wt_"
 
 #: Env var restricting which parent origin the app will postMessage to.
 PARENT_ORIGIN_ENV = "WT_PARENT_ORIGIN"
+
+#: Valid values for the `theme` query param.
+_THEME_VALUES = ("light", "dark")
 
 _MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
 _GEOHASH_RE = re.compile(r"^[0-9a-zA-Z]{1,12}$")
@@ -246,6 +253,49 @@ def current_state_params() -> dict:
     return {key: st.query_params[key] for key in STATE_PARAM_KEYS if key in st.query_params}
 
 
+def share_button_enabled() -> bool:
+    """Whether the sidebar "Copy link" button should render.
+
+    An embedding parent that offers its own shareable link (e.g. MetacatUI,
+    see issue #2841) can pass ``show_share=false`` to hide this app's button.
+    """
+    return st.query_params.get("show_share", "true").strip().lower() not in ("false", "0")
+
+
+def apply_theme_param() -> None:
+    """Force Streamlit's embed theme from a ``theme=light|dark`` query param.
+
+    ``embed``/``embed_options`` are invisible to ``st.query_params`` (Streamlit's
+    frontend reads them straight off the URL before Python ever runs), so
+    forcing a theme requires a one-time client-side redirect that appends
+    ``embed_options=<theme>_theme`` (and ``embed=true``) to the URL. The JS
+    checks the *browser* URL (not st.query_params) before redirecting, so it
+    only fires once even though this runs on every rerun.
+    """
+    theme = st.query_params.get("theme")
+    if theme not in _THEME_VALUES:
+        return
+    st.markdown(
+        f"""
+        <script>
+        (function() {{
+            var params = new URLSearchParams(window.location.search);
+            if (params.getAll("embed_options").indexOf("{theme}_theme") === -1) {{
+                params.append("embed_options", "{theme}_theme");
+                if (params.getAll("embed").indexOf("true") === -1) {{
+                    params.append("embed", "true");
+                }}
+                window.location.replace(
+                    window.location.pathname + "?" + params.toString() + window.location.hash
+                );
+            }}
+        }})();
+        </script>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _target_origin() -> str:
     return os.environ.get(PARENT_ORIGIN_ENV) or "*"
 
@@ -342,6 +392,8 @@ def render_copy_link_button() -> None:
                 var u = new URL(base);
                 u.searchParams.delete("embed");
                 u.searchParams.delete("embed_options");
+                u.searchParams.delete("theme");
+                u.searchParams.delete("show_share");
                 CFG.stateKeys.forEach(function(k) { u.searchParams.delete(k); });
                 Object.keys(params).forEach(function(k) { u.searchParams.set(k, params[k]); });
                 return u.toString();

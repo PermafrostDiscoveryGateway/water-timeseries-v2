@@ -18,10 +18,12 @@ from streamlit_folium import st_folium
 
 from water_timeseries.dashboard.share_state import (
     adopt_live_view,
+    apply_theme_param,
     apply_url_state_once,
     render_copy_link_button,
     render_state_bridge,
     set_desired_view,
+    share_button_enabled,
     sync_flag_param,
     update_live_view,
 )
@@ -1105,6 +1107,9 @@ def create_app(
     if st.session_state.disable_popup_plot:
         logger.warning("Plot popup disabled!")
 
+    # Force the embed color scheme before any other content renders, if requested.
+    apply_theme_param()
+
     # Restore shared window state from URL (once per session), then adopt the
     # user's live panned/zoomed view so the map is rebuilt where they left it.
     apply_url_state_once()
@@ -1148,8 +1153,10 @@ def create_app(
         show_help_button(config_name=viz_configuration_name)
 
     # Copy-link button: copies a URL that restores the exact window state
-    with st.sidebar:
-        render_copy_link_button()
+    # (hidden via show_share=false, e.g. when an embedding parent has its own).
+    if share_button_enabled():
+        with st.sidebar:
+            render_copy_link_button()
 
     # Show offline mode indicator
     if offline_mode:
