@@ -24,6 +24,17 @@ https://dashboard.example.org/?selected_lake=b7zpm2xq4k9d&lat=66.512&lon=-164.08
 The visualization preset (`--viz-configuration`) is fixed per deployment and is
 not part of the URL.
 
+## Embed config params
+
+These configure how the app behaves when embedded; they're read once on load
+and are never part of the shareable state above (an embedding parent sets
+them, they're not echoed back via postMessage or included in copied links).
+
+| Param | Format | Meaning |
+|---|---|---|
+| `theme` | `light` \| `dark` | Forces the color scheme, overriding the browser's `prefers-color-scheme` |
+| `show_share` | `false` | Hides the sidebar **🔗 Copy link to this view** button (e.g. when the embedding parent offers its own shareable link) |
+
 ## Embedding in a parent site
 
 When the dashboard is embedded in an iframe, links must point at the *parent*
