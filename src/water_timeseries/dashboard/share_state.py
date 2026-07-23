@@ -28,6 +28,7 @@ import os
 import re
 from dataclasses import dataclass
 from typing import Mapping, Optional
+from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import pygeohash
 import streamlit as st
@@ -253,6 +254,23 @@ def current_state_params() -> dict:
     return {key: st.query_params[key] for key in STATE_PARAM_KEYS if key in st.query_params}
 
 
+def current_state_url() -> str:
+    """This app's own URL rebuilt with only the shareable state params.
+
+    Excludes embed-config params (``theme``, ``show_share``, ``embed``,
+    ``embed_options``) -- those are set once by the embedding parent and are
+    never echoed back into shared state.
+    """
+    try:
+        base = str(st.context.url or "")
+    except Exception:
+        base = ""
+    if not base:
+        return ""
+    scheme, netloc, path, _, _ = urlsplit(base)
+    return urlunsplit((scheme, netloc, path, urlencode(current_state_params()), ""))
+
+
 def share_button_enabled() -> bool:
     """Whether the sidebar "Copy link" button should render.
 
@@ -349,13 +367,17 @@ def _target_origin() -> str:
 
 
 def render_state_bridge() -> None:
-    """Post the current state params to a cooperating parent page (wt:state).
+    """Post this app's current state URL to a cooperating parent page (mcui:state).
 
     Rendered inside the map fragment so pan/zoom fragment reruns re-post. The
-    component only re-executes when its HTML (i.e. the params JSON) changes,
-    so unchanged state produces no message spam. Harmless when not framed.
+    component only re-executes when its HTML (i.e. the URL) changes, so
+    unchanged state produces no message spam. Harmless when not framed.
+
+    The parent receives a plain URL rather than a bespoke params object, so it
+    can extract and whitelist state itself (e.g. via an RFC 6570 URI template
+    it already owns) instead of MetacatUI hardcoding this app's param names.
     """
-    params_json = json.dumps(current_state_params(), sort_keys=True)
+    url_json = json.dumps(current_state_url())
     target_json = json.dumps(_target_origin())
     st.iframe(
         f"""
@@ -363,7 +385,7 @@ def render_state_bridge() -> None:
         (function() {{
             try {{
                 window.top.postMessage(
-                    {{ type: "mcui:state", version: 1, params: {params_json} }},
+                    {{ type: "mcui:state", version: 1, url: {url_json} }},
                     {target_json}
                 );
             }} catch (e) {{ /* not framed or origin mismatch: nothing to do */ }}
