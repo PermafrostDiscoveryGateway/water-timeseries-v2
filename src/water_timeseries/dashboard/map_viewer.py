@@ -456,12 +456,13 @@ class MapViewer:
         tile_layer_darkmatter = folium.TileLayer("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
         tile_layer_esriworld = folium.TileLayer("Esri.WorldImagery", name="ESRI World Imagery")
 
+        tooltip_columns = None
+
         if viz_configuration_name == "colored_historical":
             # Create style function based on whether NetChange_perc column exists
             if "NetChange_perc" in valid_gdf.columns:
                 # add tile layers
-                m.add_basemap("CartoDB.DarkMatter", name="Dark Matter (CartoDB)")
-                # tile_layer_darkmatter.add_to(m)
+                tile_layer_darkmatter.add_to(m)
                 tile_layer_esriworld.add_to(m)
                 tcvis_tile_layer.add_to(m)
 
