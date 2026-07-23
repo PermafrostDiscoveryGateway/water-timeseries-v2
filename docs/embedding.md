@@ -89,7 +89,17 @@ All messages are objects with `type` and `version: 1`.
 
 | Type | Direction | Payload |
 |---|---|---|
-| `mcui:state` | dashboard → parent (`window.top`) | `{ params }` — current state params; absent keys mean "remove" |
+| `mcui:state` | dashboard → parent (`window.top`) | `{ url }` — this app's own current URL (shareable state params only, no embed config); the parent extracts state from it directly |
+
+The dashboard posts its own URL rather than a bespoke params object so a parent
+doesn't need to hardcode this app's param names. A parent with a richer
+integration (e.g. one that already owns an RFC 6570 URI template for its
+iframe config, such as MetacatUI) can run that template's de-substitution
+against the incoming URL to extract and whitelist state instead of trusting
+it outright. The reference snippet here does the simpler equivalent: it
+copies the incoming URL's query params onto the parent URL under the `wt_`
+prefix, relying on the `event.origin` check above rather than a template
+whitelist.
 
 ## Local end-to-end test
 

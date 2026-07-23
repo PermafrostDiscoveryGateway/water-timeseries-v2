@@ -61,6 +61,13 @@
       if (!data || typeof data !== "object") return;
 
       if (data.type === "mcui:state") {
+        if (typeof data.url !== "string") return;
+        var incoming;
+        try {
+          incoming = new URL(data.url);
+        } catch (e) {
+          return;
+        }
         var url = new URL(global.location.href);
         var stale = [];
         url.searchParams.forEach(function (value, key) {
@@ -69,9 +76,8 @@
         stale.forEach(function (key) {
           url.searchParams.delete(key);
         });
-        var params = data.params || {};
-        Object.keys(params).forEach(function (key) {
-          url.searchParams.set(prefix + key, params[key]);
+        incoming.searchParams.forEach(function (value, key) {
+          url.searchParams.set(prefix + key, value);
         });
         global.history.replaceState(null, "", url.toString());
       }
