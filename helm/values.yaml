@@ -1,38 +1,82 @@
+## @section Global
+## Top-level settings that apply to the entire release.
+
+## @param replicaCount Number of dashboard pod replicas to run.
 replicaCount: 1
 
+## @section Image
+## Container image settings for the dashboard application.
+
 image:
+  ## @param image.repository Container image repository path.
   repository: ghcr.io/permafrostdiscoverygateway/water-timeseries-v2
-  tag: v0.14.1
+  ## @param image.tag Container image tag to deploy.
+  tag: v0.15.0
+  ## @param image.pullPolicy Image pull policy. Use 'Always' to force re-pulling on every pod start.
   pullPolicy: IfNotPresent
 
+## @param nameOverride Override the chart name used in resource labels. Leave empty to use the chart name.
 nameOverride: ""
+## @param fullnameOverride Override the fully-qualified app name used in resource names. Leave empty to auto-generate.
 fullnameOverride: ""
 
+## @section Dashboard
+## Configuration for the Streamlit dashboard application container.
+
 dashboard:
+  ## @param dashboard.port Port the dashboard container listens on.
   port: 8501
-  offlineMode: true
+  ## @param dashboard.offlineMode Run the dashboard without outbound network access (disables live Earth Engine calls).
+  offlineMode: false
+  ## @param dashboard.eeProject Google Earth Engine project ID used for authenticated GEE API calls.
   eeProject: "pdg-project-406720"
+  ## @param dashboard.eeSecretName Name of the Kubernetes secret containing the Earth Engine service account key.
   eeSecretName: "lostlakes-ee-sa-secret"
+  ## @param dashboard.configFile Path inside the container to the dashboard YAML config file (typically in a pvc mount).
   configFile: /data/dashboard-config.yaml
+  ## @param dashboard.pmtilesFile Explicit path to a .pmtiles file. If empty, the path is read from configFile.
   pmtilesFile: ""  # optional: explicit .pmtiles path; if empty, serve-tiles parses pmtiles_file from configFile
 
+## @section PMTiles server
+## Configuration for the PMTiles tile-serving sidecar deployment.
+
 pmtiles:
+  ## @param pmtiles.replicaCount Number of PMTiles server pod replicas to run.
   replicaCount: 1
+  ## @param pmtiles.resources [object] Resource requests and limits for the PMTiles server container.
   resources: {}
+  ## @param pmtiles.nodeSelector [object] Node label selector constraints for PMTiles server pod scheduling.
   nodeSelector: {}
+  ## @param pmtiles.affinity [object] Affinity and anti-affinity rules for PMTiles server pod scheduling.
   affinity: {}
+  ## @param pmtiles.tolerations [array] Tolerations for PMTiles server pod scheduling on tainted nodes.
   tolerations: []
 
+## @section Persistence
+## Persistent volume settings for mounting data into the dashboard and PMTiles containers.
+
 persistence:
+  ## @param persistence.enabled Enable persistent volume claim mounting.
   enabled: true
+  ## @param persistence.existingClaim Name of a pre-existing PVC to use. If set, no new PVC is created.
   existingClaim: "lostlakes-vardata"
+  ## @param persistence.mountPath Path inside the container where the volume is mounted.
   mountPath: /data
+  ## @param persistence.accessModes [array] Access modes for the persistent volume.
   accessModes:
     - ReadOnlyMany
+  ## @param persistence.size Requested storage size when creating a new PVC.
   size: 500Ti
+  ## @param persistence.storageClassName Storage class name for dynamic provisioning. Leave empty to use the cluster default.
   storageClassName: ""
+  ## @param persistence.annotations [object] Annotations to add to the PVC resource.
   annotations: {}
 
+## @section Services
+## Kubernetes Service definitions for the dashboard and PMTiles server.
+## Each entry creates a Service exposing the named component within the cluster.
+
+## @param services [array] List of service definitions. Each entry requires a name, type, and port.
 services:
   - name: dashboard
     type: ClusterIP
@@ -41,15 +85,24 @@ services:
     type: ClusterIP
     port: 8901
 
+## @section Workload scheduling
+## Resource, annotation, label, and scheduling settings applied to the dashboard deployment pods.
+
+## @param resources [object] Resource requests and limits for the dashboard container.
 resources: {}
 
+## @param podAnnotations [object] Annotations to add to dashboard pods.
 podAnnotations: {}
+## @param podLabels [object] Additional labels to add to dashboard pods.
 podLabels: {}
 
+## @param nodeSelector [object] Node label selector constraints for dashboard pod scheduling.
 nodeSelector: {}
 
+## @param tolerations [array] Tolerations for dashboard pod scheduling on tainted nodes.
 tolerations: []
 
+## @param affinity [object] Affinity and anti-affinity rules for dashboard pod scheduling.
 affinity: {}
 
 ## @section Ingress
@@ -58,13 +111,11 @@ affinity: {}
 ## pod via release name. The section establishing that service is above.
 ingress:
   ## @param ingress.enabled Enable ingress to allow web traffic. Ingress settings ignored if 'false'
-  ##
   enabled: true
   ## @param ingress.className The class of the ingress controller to use.
-  ##
   #className: traefik
   className: nginx
-  ## @param ingress.hosts Full ingress host/path subtree (advanced mode).
+  ## @param ingress.hosts [array] Full ingress host/path subtree (advanced mode).
   ## If provided (non-empty), this takes precedence over `ingress.hostname`.
   ## Example:
   ##  hosts:
@@ -78,7 +129,6 @@ ingress:
   ##                name: lostlakes
   ##                port:
   ##                  number: 80
-  ##
   hosts:
     - host: "lostlakes.arcticdata.io"
 
@@ -86,21 +136,17 @@ ingress:
   ## If true, and ingress.tls is empty, the ingress TLS entry will be inferred from ingress.hostname
   ## and the TLS secret name will be pulled from ingress.tlsSecretName.
   ## If true, and ingress.tls is NOT empty, that takes precedence over the inferred TLS settings.
-  ##
   tlsEnabled: true
   ## @param ingress.tlsSecretName Secret name used by inferred TLS when `ingress.tls` is empty.
-  ##
   tlsSecretName: ingress-nginx-tls-cert  # leave as-is until LetsEncrypt HTTP-01 working in traefik
 
   annotations:
-    ## @param ingress.annotations.cert-manager.io/cluster-issuer cert-manager cluster issuer
-    ## to use for provisioning certificates
-    ##
+    ## @param ingress.annotations.cert-manager.io/cluster-issuer cert-manager cluster issuer to use for provisioning certificates
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
 
-  ## @param ingress.tls Full TLS subtree (advanced mode). Ignored unless ingress.enabled is true.
+  ## @param ingress.tls [array] Full TLS subtree (advanced mode). Ignored unless ingress.enabled is true.
   ## If provided (non-empty), this takes precedence over inferred TLS from `ingress.hostname`.
-  ## If set, cert-manager will attempt to provision TLS certificates for the specified hosts
+  ## If set, cert-manager will attempt to provision TLS certificates for the specified hosts.
   ## ingress.tls.hosts: The hostname for TLS config
   ## ingress.tls.secretName: Name of the secret holding the TLS cert(s)
   ##
@@ -112,7 +158,6 @@ ingress:
   ##
   ## To disable TLS altogether (i.e. use http only), set:
   ##    tlsEnabled: false
-  ##
   tls:
     - hosts:
         - lostlakes.arcticdata.io
