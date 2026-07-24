@@ -69,6 +69,7 @@ def get_legend_html_net_change() -> str:
             z-index: 9999;
             font-size: 12px;
             background-color: white;
+            color: #222;
             padding: 10px;
             border-radius: 5px;
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
@@ -119,6 +120,7 @@ def get_legend_html_date_drainage_year() -> str:
             z-index: 9999;
             font-size: 12px;
             background-color: white;
+            color: #222;
             padding: 10px;
             border-radius: 5px;
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
@@ -164,6 +166,7 @@ def get_legend_html_nrt_drainage() -> str:
             z-index: 9999;
             font-size: 12px;
             background-color: white;
+            color: #222;
             padding: 10px;
             border-radius: 5px;
             box-shadow: 0 0 15px rgba(0,0,0,0.2);

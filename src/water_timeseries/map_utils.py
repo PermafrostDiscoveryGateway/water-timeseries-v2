@@ -62,6 +62,7 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     }
     .feature-row table td {
     padding: 4px 8px;
+    color: #222;
     }
     .feature-row table td:first-child {
     font-weight: 500;
