@@ -22,6 +22,58 @@ from water_timeseries.utils.visualization import (
 )
 
 
+class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
+    """PMTilesMapLibreLayer with a fix for the GL layer drifting away from the basemap.
+
+    maplibre-gl-leaflet only syncs the GL canvas on throttled Leaflet ``move``
+    events, so the final update of a drag (especially a fast one, or during
+    inertia) can be lost and the polygons stay offset from the basemap until
+    the next interaction. Registering an unthrottled ``moveend`` resync
+    guarantees the GL transform lands on the final map position. Also bumps
+    maplibre-gl-leaflet 0.0.17 -> 0.0.22, which rounds fractional container
+    positions (sub-pixel misalignment at certain window widths).
+    """
+
+    _template = branca.element.Template(
+        """
+            {% macro script(this, kwargs) -%}
+            if (!("pmtiles" in maplibregl.config.REGISTERED_PROTOCOLS)) {
+                var protocol = new pmtiles.Protocol();
+                maplibregl.addProtocol("pmtiles", protocol.tile);
+            }
+
+            // see: https://github.com/maplibre/maplibre-gl-leaflet/issues/19
+            {{ this._parent.get_name() }}.createPane('overlay_{{ this.get_name() }}');
+            {{ this._parent.get_name() }}.getPane('overlay_{{ this.get_name() }}').style.zIndex = 650;
+            {{ this._parent.get_name() }}.getPane('overlay_{{ this.get_name() }}').style.pointerEvents = 'none';
+
+            var {{ this.get_name() }} = L.maplibreGL({
+                pane: 'overlay_{{ this.get_name() }}',
+                style: {{ this.style|tojson}},
+                interactive: true,
+            }).addTo({{ this._parent.get_name() }});
+
+            // Hard resync after every pan/zoom so the GL polygons can never be
+            // left offset from the basemap by a lost throttled 'move' update.
+            {{ this._parent.get_name() }}.on('moveend', function () {
+                if ({{ this.get_name() }}._glMap) {
+                    {{ this.get_name() }}._update();
+                }
+            });
+            {%- endmacro %}
+            """
+    )
+
+    default_js = [
+        ("pmtiles", "https://unpkg.com/pmtiles@2.5.0/dist/index.js"),
+        ("maplibre-lib", "https://unpkg.com/maplibre-gl@2.2.1/dist/maplibre-gl.js"),
+        (
+            "maplibre-leaflet",
+            "https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.22/leaflet-maplibre-gl.js",
+        ),
+    ]
+
+
 class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.element.MacroElement):
     _template = branca.element.Template(
         """
@@ -354,7 +406,8 @@ def build_pmtiles_map(
         lakes_fill_layer["filter"] = nan_filter
         lakes_line_layer["filter"] = nan_filter
 
-    lake_layer = PMTilesMapLibreLayer(
+    # setup PMTiles Layer
+    lake_layer = PMTilesMapLibreLayerSynced(
         pmtiles_url,
         "Lakes",
         overlay=True,
