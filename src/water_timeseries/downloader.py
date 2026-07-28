@@ -397,7 +397,7 @@ class EarthEngineDownloader:
                 image = image.addBands(water_mask.select(self.jrc_bandnames[i]))
             return image
 
-        geom, reducer_dict = self._setup_jrc_reducer(gdf=gdf_chunk, feature_index_name=name_attribute, scale=scale)
+        _geom, reducer_dict = self._setup_jrc_reducer(gdf=gdf_chunk, feature_index_name=name_attribute, scale=scale)
         ic_water = image_collection.map(waterMaskArea)
         df = geemap.ee_to_gdf(ic_water.getTimeSeriesByRegions(**reducer_dict))
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
@@ -419,7 +419,7 @@ class EarthEngineDownloader:
             years = list(range(2016, current_year + 1))
         elif isinstance(years, list):
             pass  # already in correct format
-        elif isinstance(years, np.ndarray) or isinstance(years, range):
+        elif isinstance(years, (np.ndarray, range)):
             years = list(years)
         else:
             raise ValueError(
@@ -643,7 +643,7 @@ class EarthEngineDownloader:
             years = list(range(1984, 2022))
         elif isinstance(years, list):
             pass  # already in correct format
-        elif isinstance(years, np.ndarray) or isinstance(years, range):
+        elif isinstance(years, (np.ndarray, range)):
             years = list(years)
         else:
             raise ValueError(

@@ -152,7 +152,9 @@ class SimpleBreakpoint(BreakpointMethod):
         List of column names in the output DataFrame.
     """
 
-    def __init__(self, kwargs_break: dict = dict(window=3, method="median", threshold=-0.25)):
+    def __init__(self, kwargs_break: dict | None = None):
+        if kwargs_break is None:
+            kwargs_break = {"window": 3, "method": "median", "threshold": -0.25}
         super().__init__(method_name="simple")
         self.kwargs_break = kwargs_break
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
@@ -321,9 +323,11 @@ class BeastBreakpoint(BreakpointMethod):
 
     def __init__(
         self,
-        kwargs_break: dict = dict(trendMaxOrder=0, trendMinSepDist=1),
+        kwargs_break: dict | None = None,
         break_threshold: float = 0.5,
     ):
+        if kwargs_break is None:
+            kwargs_break = {"trendMaxOrder": 0, "trendMinSepDist": 1}
         super().__init__(method_name="rbeast")
         self.kwargs_break = kwargs_break
         self.break_threshold = break_threshold
@@ -465,7 +469,9 @@ class NRTBreakpoint(BreakpointMethod):
     >>> result = bp.calculate_break(dataset, analysis_date="2024-07")
     """
 
-    def __init__(self, kwargs_break: dict = dict()):
+    def __init__(self, kwargs_break: dict | None = None):
+        if kwargs_break is None:
+            kwargs_break = {}
         super().__init__(method_name="nrt")
         self.kwargs_break = kwargs_break
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
@@ -633,7 +639,7 @@ class NRTBreakpoint(BreakpointMethod):
 
         return ds_analysis_filtered, ds_historical_filtered, valid_ids, nan_ids
 
-    def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int = None, water_column: str = "water") -> pd.DataFrame:
+    def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int | None = None, water_column: str = "water") -> pd.DataFrame:
         """Calculate statistics for the given dataset."""
         if filter_month is not None:
             dataset = dataset.where(dataset.date.dt.month == filter_month, drop=True)

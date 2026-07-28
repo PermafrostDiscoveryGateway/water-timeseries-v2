@@ -6,15 +6,19 @@ import xarray as xr
 
 
 def calculate_water_area_after(
-    df_water, break_date_after, water_column: str, stats=["mean", "median", "std", "min", "max"]
+    df_water, break_date_after, water_column: str, stats=None
 ):
+    if stats is None:
+        stats = ["mean", "median", "std", "min", "max"]
     after = df_water.loc[break_date_after:][water_column].agg(stats)
     cols_out = [f"post_break_{col}" for col in after.index]
     after.index = cols_out
     return after
 
 
-def calculate_water_area_before(df_water, break_date, water_column: str, stats=["mean", "median", "std", "min", "max"]):
+def calculate_water_area_before(df_water, break_date, water_column: str, stats=None):
+    if stats is None:
+        stats = ["mean", "median", "std", "min", "max"]
     before = df_water.loc[:break_date][water_column].agg(stats)
     cols_out = [f"pre_break_{col}" for col in before.index]
     before.index = cols_out
@@ -49,7 +53,7 @@ def calculate_temporal_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str = None) -> xr.Dataset:
+def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str | None = None) -> xr.Dataset:
     """
     Annotates an xarray Dataset with units, description, author, and contact information.
 
@@ -79,7 +83,7 @@ def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str = None
     return ds
 
 
-def annotate_xr_dataset_dw(ds: xr.Dataset, input_vector_file: Path | str = None) -> xr.Dataset:
+def annotate_xr_dataset_dw(ds: xr.Dataset, input_vector_file: Path | str | None = None) -> xr.Dataset:
     """
     Annotates an xarray Dataset with units, description, author, and contact information.
 

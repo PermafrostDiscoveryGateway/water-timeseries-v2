@@ -49,7 +49,7 @@ def get_colored_style_function(
         # Normalize value and get color from colormap
         color = colormap(norm(value))
         # Convert RGBA to hex manually to avoid JSON serialization issues
-        r, g, b, a = color
+        r, g, b, _a = color
         hex_color = f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
         return {

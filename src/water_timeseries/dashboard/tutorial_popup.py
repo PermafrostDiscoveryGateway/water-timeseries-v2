@@ -148,7 +148,7 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
             unsafe_allow_html=True,
         )
 
-    col1, col2, col3 = st.columns([2, 1, 2])
+    _col1, col2, _col3 = st.columns([2, 1, 2])
     with col2:
         if st.button("Close!", key="tutorial_close", use_container_width=True):
             st.session_state["tutorial_visible"] = False

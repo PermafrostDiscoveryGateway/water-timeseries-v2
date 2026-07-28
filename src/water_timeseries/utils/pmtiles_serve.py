@@ -9,7 +9,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any
+from typing import Any, Self
 from urllib.parse import parse_qs, unquote, urlparse
 
 from loguru import logger
@@ -260,7 +260,7 @@ class PmtilesServer:
     def url_for(self, filename: str) -> str:
         return f"{self.base_url}/{Path(filename).name}"
 
-    def __enter__(self) -> PmtilesServer:
+    def __enter__(self) -> Self:
         return self.start()
 
     def __exit__(self, *args) -> None:

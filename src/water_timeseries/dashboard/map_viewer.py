@@ -655,7 +655,7 @@ class MapViewer:
         Removes the currently selected geohash from the session state,
         allowing the user to make a new selection.
         """
-        if "selected_lake" in st.query_params.keys():
+        if "selected_lake" in st.query_params:
             logger.info(f"Dropping ID {st.session_state.selected_geohash} from selection")
             st.query_params.pop("selected_lake", None)
         st.session_state.pop("selected_geohash", None)
@@ -703,7 +703,7 @@ def _render_drain_heatmap(
     precomputed_counts: pd.DataFrame,
     precomputed_breaks: pd.DataFrame | None,
     container=None,
-    selected_month: str = None,  #'YYYY-MM'
+    selected_month: str | None = None,  #'YYYY-MM'
 ) -> None:
     """Render an interactive month × year heatmap of drained lake counts.
 
@@ -761,7 +761,7 @@ def _render_drain_heatmap(
             text=text_values,
             texttemplate="%{text}",
             hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{z}<extra></extra>",
-            colorbar=dict(title="n", thickness=10, len=0.8),
+            colorbar={"title": "n", "thickness": 10, "len": 0.8},
             xgap=2,
             ygap=2,
         )
@@ -773,14 +773,14 @@ def _render_drain_heatmap(
             x=scatter_x,
             y=scatter_y,
             mode="markers",
-            marker=dict(
-                symbol="square",
-                size=22,
-                opacity=0.01,  # effectively invisible but still hittable
-                color=scatter_color,
-                colorscale="Blues",
-                showscale=False,
-            ),
+            marker={
+                "symbol": "square",
+                "size": 22,
+                "opacity": 0.01,  # effectively invisible but still hittable
+                "color": scatter_color,
+                "colorscale": "Blues",
+                "showscale": False,
+            },
             customdata=scatter_custom,
             text=scatter_text,
             hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{text}<extra></extra>",
@@ -789,10 +789,10 @@ def _render_drain_heatmap(
     )
 
     fig.update_layout(
-        xaxis=dict(side="bottom", tickfont=dict(size=10)),
-        yaxis=dict(type="category", tickfont=dict(size=10)),
+        xaxis={"side": "bottom", "tickfont": {"size": 10}},
+        yaxis={"type": "category", "tickfont": {"size": 10}},
         height=max(200, len(years) * 28 + 80),
-        margin=dict(l=40, r=40, t=10, b=30),
+        margin={"l": 40, "r": 40, "t": 10, "b": 30},
         plot_bgcolor="rgba(0,0,0,0)",
         dragmode=False,
         # modebar=dict(remove=["toImage", "sendDataToCloud", "editInChartStudio", "hoverCompare", "hoverClosest", "toggleSpikelines", "autoScale2d", "resetScale2d", "zoomIn2d", "zoomOut2d", "pan2d", "select2d", "lasso2d"]),
@@ -813,7 +813,7 @@ def _render_drain_heatmap(
                 x1=x_index + 0.5,
                 y0=y_index - 0.5,
                 y1=y_index + 0.5,
-                line=dict(color="orange", width=2),
+                line={"color": "orange", "width": 2},
                 fillcolor="rgba(0,0,0,0)",  # Keep it fully transparent inside
             )
         else:
@@ -1024,7 +1024,7 @@ def _load_precomputed_nrt(
             breaks_df = pd.read_parquet(breaks_path)
 
         if breaks_df is None:
-            monthly_files = sorted(list(nrt_dir.glob("nrt_*_drain_breaks.parquet")))
+            monthly_files = sorted(nrt_dir.glob("nrt_*_drain_breaks.parquet"))
             if monthly_files:
                 logger.info(f"Found {len(monthly_files)} individual NRT monthly files, aggregating...")
                 dfs = []
@@ -1374,7 +1374,7 @@ def create_app(
                 st.error(f"Error loading data: {e!s}")
                 return None, None
 
-        viewer, selected = map_viewer_section()
+        viewer, _selected = map_viewer_section()
 
         # Display selected features in sidebar
         st.sidebar.divider()
@@ -1554,48 +1554,47 @@ def create_app(
                             st.rerun()
                         else:
                             st.error("Download returned no data.")
-                    if not st.session_state.disable_jrc:
-                        if not id_available_jrc:
-                            # JRC Download
-                            logger.info(f"Downloading JRC data for lake: {current}")
-                            st.caption("Downloading JRC data ...")
-                            dsjrc_downloaded = downloader.download_jrc_annual(
-                                vector_dataset=data_path_input,
-                                name_attribute=id_column,
-                                id_list=[current],
-                                years=range(1984, 2022),
-                            )
+                    if not st.session_state.disable_jrc and not id_available_jrc:
+                        # JRC Download
+                        logger.info(f"Downloading JRC data for lake: {current}")
+                        st.caption("Downloading JRC data ...")
+                        dsjrc_downloaded = downloader.download_jrc_annual(
+                            vector_dataset=data_path_input,
+                            name_attribute=id_column,
+                            id_list=[current],
+                            years=range(1984, 2022),
+                        )
 
-                            # add dw dataset to session state
-                            if dsjrc_downloaded is not None:
-                                # Convert downloaded data to JRCDataset
-                                downloaded_dataset_jrc = JRCDataset(dsjrc_downloaded)
+                        # add dw dataset to session state
+                        if dsjrc_downloaded is not None:
+                            # Convert downloaded data to JRCDataset
+                            downloaded_dataset_jrc = JRCDataset(dsjrc_downloaded)
 
-                                # Merge with existing cached data if available
-                                if st.session_state.jrc_dataset is not None:
-                                    try:
-                                        st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
-                                            downloaded_dataset_jrc, how="id_geohash"
-                                        )
-                                    except Exception as merge_e:
-                                        # If merge fails, use downloaded data only
-                                        logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
-                                        st.sidebar.warning(f"Could not merge data: {merge_e}")
-                                        st.session_state.jrc_dataset = downloaded_dataset_jrc
-                                else:
+                            # Merge with existing cached data if available
+                            if st.session_state.jrc_dataset is not None:
+                                try:
+                                    st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
+                                        downloaded_dataset_jrc, how="id_geohash"
+                                    )
+                                except Exception as merge_e:
+                                    # If merge fails, use downloaded data only
+                                    logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
+                                    st.sidebar.warning(f"Could not merge data: {merge_e}")
                                     st.session_state.jrc_dataset = downloaded_dataset_jrc
-
-                                st.session_state.downloaded_dsjrc = dsjrc_downloaded
-                                id_available_jrc = True
-
-                                # Also set id_available_dw = True since DW data was also downloaded
-                                id_available_dw = True
-
-                                logger.info(f"Successfully downloaded DW and JRC data for lake: {current}")
-                                st.caption("Both DW and JRC data downloaded successfully!")
-                                st.rerun()
                             else:
-                                st.error("Download returned no data.")
+                                st.session_state.jrc_dataset = downloaded_dataset_jrc
+
+                            st.session_state.downloaded_dsjrc = dsjrc_downloaded
+                            id_available_jrc = True
+
+                            # Also set id_available_dw = True since DW data was also downloaded
+                            id_available_dw = True
+
+                            logger.info(f"Successfully downloaded DW and JRC data for lake: {current}")
+                            st.caption("Both DW and JRC data downloaded successfully!")
+                            st.rerun()
+                        else:
+                            st.error("Download returned no data.")
                 except Exception as e:
                     logger.error(f"Failed to download data for lake {current}: {e}")
                     st.error(f"Error downloading data: {e}")

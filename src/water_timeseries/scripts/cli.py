@@ -792,14 +792,14 @@ def breakpoint_analysis_nrt(
         lake_ids = gdf["id_geohash"].dropna().unique().tolist()
         logger.info(f"Loaded {len(lake_ids)} lake IDs from vector file: {vector_file}")
 
-    shared_kwargs = dict(
-        dataset_file=dataset_file,
-        drain_threshold=drain_threshold,
-        data_aggregation_period=data_aggregation_period,
-        lake_chunk_size=lake_chunk_size,
-        n_jobs=n_jobs,
-        lake_ids=lake_ids,
-    )
+    shared_kwargs = {
+        "dataset_file": dataset_file,
+        "drain_threshold": drain_threshold,
+        "data_aggregation_period": data_aggregation_period,
+        "lake_chunk_size": lake_chunk_size,
+        "n_jobs": n_jobs,
+        "lake_ids": lake_ids,
+    }
 
     # --- Single-month mode --------------------------------------------------
     if single_mode:

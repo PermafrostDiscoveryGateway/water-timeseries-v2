@@ -4,7 +4,7 @@ from pathlib import Path
 
 import geopandas as gpd
 import xarray as xr
-from loguru import logger as logger
+from loguru import logger
 
 
 def is_remote_path(path: str | Path) -> bool:

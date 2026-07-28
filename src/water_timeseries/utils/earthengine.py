@@ -34,7 +34,7 @@ def initialize_earth_engine(project: str | None = None, token_name: str = "EARTH
     # Service account mode takes priority
     if key_file is not None:
         try:
-            credentials, project_id = google.auth.default(
+            credentials, _project_id = google.auth.default(
                 scopes=["https://www.googleapis.com/auth/earthengine", 
                         "https://www.googleapis.com/auth/cloud-platform"]
             )
@@ -186,13 +186,13 @@ def calc_monthly_dw(
 
 def calc_dw_aggregate(
     polygons: ee.FeatureCollection,
-    start_date: str = None,
-    end_date: str = None,
-    year: int = None,
-    month: int = None,
+    start_date: str | None = None,
+    end_date: str | None = None,
+    year: int | None = None,
+    month: int | None = None,
     crs: str = "EPSG:3572",
     scale: float = 10,
-    timestamp_date: str = None,
+    timestamp_date: str | None = None,
 ) -> ee.Image:
     """
     Generate a Dynamic World composite for a date range or year/month.
@@ -258,7 +258,7 @@ def calc_dw_aggregate_v2(
     polygons: ee.FeatureCollection,
     crs: str = "EPSG:3572",
     scale: float = 10,
-    timestamp_date: str = None,
+    timestamp_date: str | None = None,
 ) -> ee.Image | None:
     """
     Generate a Dynamic World composite for a date range.

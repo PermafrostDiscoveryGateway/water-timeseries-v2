@@ -199,7 +199,7 @@ def build_pmtiles(
         base_flags = list(tippecanoe_args)
     else:
         for f in DEFAULT_TIPPECANOE_ARGS:
-            if f.startswith("--minimum-zoom") or f.startswith("--maximum-zoom") or f == "-l" or f == "lakes":
+            if f.startswith(("--minimum-zoom", "--maximum-zoom")) or f == "-l" or f == "lakes":
                 continue
             base_flags.append(f)
 

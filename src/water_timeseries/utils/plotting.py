@@ -74,9 +74,9 @@ def prepare_data_for_plot_dw(df: pd.DataFrame, group_vegetation: bool = True) ->
 def plot_water_time_series_dw(
     df: pd.DataFrame,
     first_break: pd.Timestamp | None,
-    plot_variables: list = None,
+    plot_variables: list | None = None,
     normalization_factor=None,
-    lake_id: str = None,
+    lake_id: str | None = None,
     save_path: str | Path | None = None,
 ) -> plt.figure:
     """
@@ -219,9 +219,9 @@ def plot_water_time_series_dw(
 def plot_water_time_series_jrc(
     df: pd.DataFrame,
     first_break: pd.Timestamp | None,
-    plot_variables: list = ["area_water_permanent", "area_water_seasonal", "area_land"],
-    normalization_factor: bool = None,
-    lake_id: str = None,
+    plot_variables: list | None = None,
+    normalization_factor: bool | None = None,
+    lake_id: str | None = None,
     save_path: str | Path | None = None,
 ) -> plt.figure:
     """
@@ -240,6 +240,8 @@ def plot_water_time_series_jrc(
         plt.figure: The matplotlib figure object.
     """
 
+    if plot_variables is None:
+        plot_variables = ["area_water_permanent", "area_water_seasonal", "area_land"]
     df["area_total"] = df[["area_data", "area_nodata"]].sum(axis=1)
     fig, ax1 = plt.subplots(figsize=(10, 5))
     color_map = {
