@@ -41,7 +41,7 @@ def setup_logging(logfile: str | None = None, verbose: int = 0):
             # sys.argv[0] is the script name, sys.argv[1] is the subcommand
             if len(sys.argv) >= 2:
                 subcommand = sys.argv[1].replace("-", "_")
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
                 logfile = f"{subcommand}_{timestamp}.log"
         except Exception:
             pass

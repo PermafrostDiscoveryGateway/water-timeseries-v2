@@ -1,7 +1,7 @@
 """Map Viewer dashboard component using Streamlit for mapping."""
 
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import folium
@@ -1278,9 +1278,8 @@ def create_app(
                 # Sync dropdown with heatmap click: consume the one-shot flag and write
                 # directly to the selectbox session-state key so Streamlit picks it up.
                 heatmap_pick = st.session_state.get("heatmap_selected_cell")
-                if st.session_state.pop("heatmap_sync_dropdown", False):
-                    if heatmap_pick and heatmap_pick in selectable_months:
-                        st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
+                if st.session_state.pop("heatmap_sync_dropdown", False) and heatmap_pick and heatmap_pick in selectable_months:
+                    st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
 
                 selected_analysis_month = heatmap_pick
 
@@ -1448,9 +1447,8 @@ def create_app(
             # never touches the cube.
             if st.session_state.dw_dataset_raw is None and zarr_path_input:
                 st.session_state.dw_dataset_raw = load_xarray_dataset_cached(zarr_path_input)
-            if not st.session_state.disable_jrc:
-                if st.session_state.jrc_dataset_raw is None and zarr_path_jrc_input:
-                    st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc_input)
+            if not st.session_state.disable_jrc and st.session_state.jrc_dataset_raw is None and zarr_path_jrc_input:
+                st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc_input)
 
             # Load datasets using unified helper function
             dw_dataset = st.session_state.get("dw_dataset")
@@ -1693,12 +1691,12 @@ def create_app(
                     )
 
                     # setup today's date and one year go
-                    today = datetime.now()
+                    today = datetime.now().astimezone()
                     if viz_configuration_name == "drainage_year":
                         local_gdf = load_lake_polygon_cached(data_path_input, current)
                         if local_gdf.empty or pd.isna(local_gdf.iloc[0]["date_break"]):
                             logger.info(f"No break available for lake {current}!")
-                            viz_dates = [datetime(2017, 7, 1), today]
+                            viz_dates = [datetime(2017, 7, 1, tzinfo=UTC), today]
                             spinner_text = (
                                 "Pulling satellite 2017 + latest satellite image... This may take a few seconds."
                             )

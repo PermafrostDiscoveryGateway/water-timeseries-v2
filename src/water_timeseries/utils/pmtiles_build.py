@@ -112,9 +112,8 @@ def parquet_to_geojsonseq(
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 df = table.to_pandas()
-                if geometry_column in df.columns:
-                    if len(df) > 0 and isinstance(df[geometry_column].iloc[0], bytes):
-                        df[geometry_column] = gpd.GeoSeries.from_wkb(df[geometry_column])
+                if geometry_column in df.columns and len(df) > 0 and isinstance(df[geometry_column].iloc[0], bytes):
+                    df[geometry_column] = gpd.GeoSeries.from_wkb(df[geometry_column])
                 gdf = gpd.GeoDataFrame(df)
 
             if geometry_column in gdf.columns:

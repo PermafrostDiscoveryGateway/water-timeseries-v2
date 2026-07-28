@@ -16,7 +16,6 @@ import joblib
 import numpy as np
 import pandas as pd
 import xarray as xr
-from loguru import logger
 from tqdm import tqdm
 
 from water_timeseries.utils.data import annotate_xr_dataset_dw, annotate_xr_dataset_jrc, dw_bandnames, jrc_bandnames
@@ -56,7 +55,7 @@ class EarthEngineDownloader:
         ee_project: str | None = None,
         output_dir: str | None = None,
         ee_auth: bool = True,
-        logger: logger | None = None,
+        logger=None,
     ):
         """
         Initialize the Earth Engine Downloader.

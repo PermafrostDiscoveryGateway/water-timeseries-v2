@@ -68,7 +68,7 @@ def setup_logging(logfile: str | None = None, verbose: int = 0):
             # sys.argv[0] is the script name, sys.argv[1] is the subcommand
             if len(sys.argv) >= 2:
                 subcommand = sys.argv[1].replace("-", "_")
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
                 logfile = f"{subcommand}_{timestamp}.log"
                 print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
         except Exception:
@@ -249,7 +249,7 @@ viz_configuration: The visualization configuration name for the map viewer.
         f"dw_start_month={dw_start_month}, dw_end_month={dw_end_month}, "
         f"logfile={logfile}"
     )
-    subprocess.run(cmd)
+    subprocess.run(cmd, check=False)
 
 
 @app.command(group="Visualization")

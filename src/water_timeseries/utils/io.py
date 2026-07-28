@@ -4,7 +4,6 @@ from pathlib import Path
 
 import geopandas as gpd
 import xarray as xr
-from loguru import logger
 
 
 def is_remote_path(path: str | Path) -> bool:
@@ -17,7 +16,7 @@ def is_remote_path(path: str | Path) -> bool:
 
 def load_vector_dataset(
     file_path: str | Path,
-    logger: logger | None = None,
+    logger=None,
 ) -> gpd.GeoDataFrame | None:
     """Load a vector dataset from file based on file extension.
 

@@ -130,7 +130,7 @@ def format_tooltip_columns(
             if orig_col in valid_gdf.columns:
                 display_col = f"{orig_col}_display"
                 valid_gdf[display_col] = valid_gdf[orig_col].apply(
-                    lambda x: f"{fmt.format(x)}{unit}" if pd.notna(x) else "N/A"
+                    lambda x, fmt=fmt, unit=unit: f"{fmt.format(x)}{unit}" if pd.notna(x) else "N/A"
                 )
                 display_columns.append(display_col)
                 alias_mapping.append(alias)

@@ -631,7 +631,9 @@ class NRTBreakpoint(BreakpointMethod):
         filtered_count = total_ids - valid_count
 
         # Log the filtering results
-        logging.info(f"Filtered {filtered_count} id_geohash(es) with NaN data, kept {valid_count} valid id_geohash(es)")
+        logging.getLogger(__name__).info(
+            f"Filtered {filtered_count} id_geohash(es) with NaN data, kept {valid_count} valid id_geohash(es)"
+        )
 
         # Filter both datasets to only include valid ids
         ds_analysis_filtered = ds_analysis.sel(id_geohash=valid_ids)

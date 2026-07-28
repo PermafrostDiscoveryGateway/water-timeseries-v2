@@ -1041,8 +1041,7 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") 
         - Y-axis aspect ratio is set to 'equal' for accurate spatial representation
     """
     fig, axes = plt.subplots(ncols=len(dates))
-    i = 0
-    for date in dates:
+    for i, date in enumerate(dates):
         date_string = date.strftime("%Y-%m-%d") if isinstance(date, datetime) else str(date)
         ax = axes[i]
         # check initial date and extract nearest date
@@ -1059,7 +1058,6 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") 
         ax.set_xlabel("")
         ax.set_xticklabels([])
         ax.set_yticklabels([])
-        i += 1
     return fig
 
 

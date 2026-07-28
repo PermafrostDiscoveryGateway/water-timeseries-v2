@@ -134,7 +134,7 @@ class BreakpointPipeline:
         parallel_backend: str = "ray",
         break_method: str = "beast",
         n_jobs: int = 1,
-        logger: logger | None = None,
+        logger=None,
         min_chunksize: int = 10,
         bbox_west: float | None = None,
         bbox_south: float | None = None,
