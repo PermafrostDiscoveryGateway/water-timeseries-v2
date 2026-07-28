@@ -3,6 +3,77 @@
 from typing import Optional
 
 import streamlit as st
+import streamlit.components.v1 as components
+
+# Close button rendered as plain HTML that triggers the dialog's built-in
+# dismissal (the "X") from the browser, instead of an st.button. An st.button
+# can only close the dialog via st.rerun(), which costs a websocket round trip
+# plus two full server script executions before Streamlit removes the dialog -
+# on a deployed server that is a multi-second delay. Native dismissal is pure
+# client-side (on_dismiss defaults to "ignore") and closes instantly; the
+# tutorial_dialog_shown session flag already prevents the dialog from
+# reopening on later reruns. Falls back to an Escape keypress if Streamlit's
+# dialog DOM changes.
+_CLOSE_BUTTON_HTML = """
+<style>
+    /* Mirrors the computed styles of st.button (stBaseButton-secondary) under
+       the ADC theme in .streamlit/config.toml - update if the theme changes. */
+    body { margin: 0; }
+    .tutorial-close-btn {
+        width: 100%;
+        min-height: 40px;
+        padding: 4px 12px;
+        font-family: "Source Sans", "Source Sans Pro", sans-serif;
+        font-size: 16px;
+        font-weight: 400;
+        line-height: 1.6;
+        color: #136682;
+        background-color: #ffffff;
+        border: 1px solid rgba(19, 102, 130, 0.2);
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .tutorial-close-btn:hover {
+        background-color: rgba(44, 124, 150, 0.15);
+    }
+    .tutorial-close-btn:active {
+        background-color: rgba(44, 124, 150, 0.25);
+    }
+</style>
+<button class="tutorial-close-btn" onclick="closeTutorialDialog()">Close!</button>
+<script>
+    // The iframe doesn't inherit the parent's webfonts (Streamlit registers
+    // "Source Sans" via the JS FontFace API, so it isn't in any stylesheet
+    // either). Find the non-italic Source Sans font file the parent already
+    // loaded (same-origin, so its resource entries are readable) and register
+    // it here too. On any failure the button keeps the sans-serif fallback.
+    (function adoptParentFont() {
+        try {
+            const url = window.parent.performance
+                .getEntriesByType("resource")
+                .map((e) => e.name)
+                .find((n) => /source-?sans/i.test(n) && !/italic/i.test(n) && /\.woff2?($|\?)/i.test(n));
+            if (!url) return;
+            const font = new FontFace("Source Sans", 'url("' + url + '")', { weight: "100 900" });
+            font.load().then(() => document.fonts.add(font));
+        } catch (e) { /* keep fallback font */ }
+    })();
+
+    function closeTutorialDialog() {
+        const doc = window.parent.document;
+        const dialog = doc.querySelector('[data-testid="stDialog"]');
+        const closeX = dialog && dialog.querySelector('button[aria-label="Close"]');
+        if (closeX) {
+            closeX.click();
+            return;
+        }
+        doc.dispatchEvent(new KeyboardEvent("keydown", {
+            key: "Escape", code: "Escape", keyCode: 27, which: 27, bubbles: true,
+        }));
+    }
+</script>
+"""
 
 
 # =============================================================================
@@ -151,9 +222,7 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
 
     col1, col2, col3 = st.columns([2, 1, 2])
     with col2:
-        if st.button("Close!", key="tutorial_close", use_container_width=True):
-            st.session_state["tutorial_visible"] = False
-            st.rerun()
+        components.html(_CLOSE_BUTTON_HTML, height=42)
 
 
 # =============================================================================
