@@ -50,7 +50,7 @@ def get_colored_style_function(
         color = colormap(norm(value))
         # Convert RGBA to hex manually to avoid JSON serialization issues
         r, g, b, a = color
-        hex_color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+        hex_color = f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
         return {
             "fillColor": hex_color,

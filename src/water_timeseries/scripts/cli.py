@@ -11,7 +11,6 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 import cyclopts
 import pandas as pd
@@ -46,7 +45,7 @@ app = cyclopts.App(name="water-timeseries", help="Water timeseries analysis tool
 # Helper function to configure logging
 
 
-def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
+def setup_logging(logfile: str | None = None, verbose: int = 0):
     """Configure logging with verbosity control.
 
     Args:
@@ -86,23 +85,23 @@ def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
 # Subcommand: dashboard
 @app.command(group="Visualization")
 def dashboard(
-    vector_file: Optional[str] = None,
-    dw_dataset_file: Optional[str] = None,
-    jrc_dataset_file: Optional[str] = None,
-    precomputed_nrt_dir: Optional[str] = None,
-    offline_mode: Optional[bool] = None,
-    ee_project: Optional[str] = None,
-    dw_start_year: Optional[int] = None,
-    dw_end_year: Optional[int] = None,
-    dw_start_month: Optional[int] = None,
-    dw_end_month: Optional[int] = None,
-    viz_configuration: Optional[str] = None,
-    pmtiles_file: Optional[str] = None,
-    pmtiles_url: Optional[str] = None,
-    port: Optional[int] = None,
-    logfile: Optional[str] = None,
+    vector_file: str | None = None,
+    dw_dataset_file: str | None = None,
+    jrc_dataset_file: str | None = None,
+    precomputed_nrt_dir: str | None = None,
+    offline_mode: bool | None = None,
+    ee_project: str | None = None,
+    dw_start_year: int | None = None,
+    dw_end_year: int | None = None,
+    dw_start_month: int | None = None,
+    dw_end_month: int | None = None,
+    viz_configuration: str | None = None,
+    pmtiles_file: str | None = None,
+    pmtiles_url: str | None = None,
+    port: int | None = None,
+    logfile: str | None = None,
     verbose: int = 0,
-    config_file: Optional[Path] = None,
+    config_file: Path | None = None,
 ):
     """Launch the Streamlit dashboard.
 
@@ -255,13 +254,13 @@ viz_configuration: The visualization configuration name for the map viewer.
 
 @app.command(group="Visualization")
 def build_pmtiles(
-    vector_file: Optional[Path] = None,
-    output_file: Optional[Path] = None,
-    viz_configuration: Optional[str] = None,
-    keep_geojsonl: Optional[bool] = None,
-    logfile: Optional[str] = None,
+    vector_file: Path | None = None,
+    output_file: Path | None = None,
+    viz_configuration: str | None = None,
+    keep_geojsonl: bool | None = None,
+    logfile: str | None = None,
     verbose: int = 0,
-    config_file: Optional[Path] = None,
+    config_file: Path | None = None,
 ):
     """Convert a lake GeoParquet file to a single .pmtiles archive for fast map rendering.
 
@@ -325,7 +324,7 @@ def serve_tiles(
     path: Path,
     host: str = "localhost",
     port: int = 8080,
-    logfile: Optional[str] = None,
+    logfile: str | None = None,
     verbose: int = 0,
 ):
     """Serve PMTiles over HTTP with Range request support.
@@ -367,22 +366,22 @@ def serve_tiles(
 # Subcommand: breakpoint analysis
 @app.command(group="Analysis")
 def breakpoint_analysis_historical(
-    water_dataset_file: Optional[Path] = None,
-    output_file: Optional[Path] = None,
-    config_file: Optional[Path] = None,
-    vector_dataset_file: Optional[Path] = None,
-    chunksize: Optional[int] = None,
-    parallel_backend: Optional[str] = None,
-    break_method: Optional[str] = None,
-    n_jobs: Optional[int] = None,
-    min_chunksize: Optional[int] = None,
-    bbox_west: Optional[float] = None,
-    bbox_south: Optional[float] = None,
-    bbox_east: Optional[float] = None,
-    bbox_north: Optional[float] = None,
+    water_dataset_file: Path | None = None,
+    output_file: Path | None = None,
+    config_file: Path | None = None,
+    vector_dataset_file: Path | None = None,
+    chunksize: int | None = None,
+    parallel_backend: str | None = None,
+    break_method: str | None = None,
+    n_jobs: int | None = None,
+    min_chunksize: int | None = None,
+    bbox_west: float | None = None,
+    bbox_south: float | None = None,
+    bbox_east: float | None = None,
+    bbox_north: float | None = None,
     output_geometry: bool = True,
     output_geometry_all: bool = True,
-    logfile: Optional[str] = None,
+    logfile: str | None = None,
     verbose: int = 0,
 ):
     """Run historical breakpoint analysis on water dataset.
@@ -579,13 +578,13 @@ def breakpoint_analysis_historical(
 # Subcommand: plot timeseries
 @app.command(group="Plotting")
 def plot_timeseries(
-    water_dataset_file: Optional[Path] = None,
-    lake_id: Optional[str] = None,
-    output_figure: Optional[Path] = None,
-    break_method: Optional[str] = None,
-    config_file: Optional[Path] = None,
+    water_dataset_file: Path | None = None,
+    lake_id: str | None = None,
+    output_figure: Path | None = None,
+    break_method: str | None = None,
+    config_file: Path | None = None,
     show: bool = True,
-    logfile: Optional[str] = None,
+    logfile: str | None = None,
     verbose: int = 0,
 ):
     """Plot time series for a specific lake.
@@ -659,19 +658,19 @@ def plot_timeseries(
 @app.command(group="Analysis")
 def breakpoint_analysis_nrt(
     dataset_file: Path,
-    analysis_date: Optional[str] = None,
-    analysis_date_start: Optional[str] = None,
-    analysis_date_end: Optional[str] = None,
-    output_file: Optional[Path] = None,
-    output_dir: Optional[Path] = None,
+    analysis_date: str | None = None,
+    analysis_date_start: str | None = None,
+    analysis_date_end: str | None = None,
+    output_file: Path | None = None,
+    output_dir: Path | None = None,
     no_resume: bool = False,
     drain_threshold: float = -0.25,
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
-    vector_file: Optional[Path] = None,
+    vector_file: Path | None = None,
     aggregate: bool = True,
-    logfile: Optional[str] = None,
+    logfile: str | None = None,
     verbose: int = 0,
 ):
     """Pre-compute near real-time drained-lake results for one month or a date range.
@@ -906,7 +905,7 @@ def breakpoint_analysis_nrt(
         aggregate_nrt_directory(resolved_output_dir)
 
 
-def aggregate_nrt_directory(nrt_dir: Path, output_dir: Optional[Path] = None) -> None:
+def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> None:
     """Aggregate individual monthly NRT files in a directory into consolidated parquet files."""
     if output_dir is None:
         output_dir = nrt_dir
@@ -963,8 +962,8 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Optional[Path] = None) ->
 @app.command(group="Analysis")
 def aggregate_nrt(
     nrt_dir: Path,
-    output_dir: Optional[Path] = None,
-    logfile: Optional[str] = None,
+    output_dir: Path | None = None,
+    logfile: str | None = None,
     verbose: int = 0,
 ):
     """Aggregate individual monthly NRT files in a directory into consolidated parquet files.
@@ -982,7 +981,7 @@ def repartition_parquet(
     output_file: Path,
     sort_column: str = "id_geohash",
     row_group_size: int = 2000,
-    logfile: Optional[str] = None,
+    logfile: str | None = None,
     verbose: int = 0,
 ):
     """Rewrite a vector parquet sorted by ``sort_column`` with small row groups.

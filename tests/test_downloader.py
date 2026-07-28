@@ -6,7 +6,7 @@ Dynamic World data, JRC data, and error handling.
 """
 
 import pathlib
-import unittest.mock as mock
+from unittest import mock
 
 import geopandas as gpd
 import pytest

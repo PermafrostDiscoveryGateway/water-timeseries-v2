@@ -5,7 +5,6 @@ import sys
 import warnings
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from loguru import logger
 
@@ -16,7 +15,7 @@ _DEFAULT_NRT_DIR = _REPO_ROOT / "precomputed" / "nrt"
 _TEST_NRT_DIR = _REPO_ROOT / "tests" / "data" / "nrt"
 
 
-def setup_logging(logfile: Optional[str] = None, verbose: int = 0):
+def setup_logging(logfile: str | None = None, verbose: int = 0):
     """Configure logging with verbosity control.
 
     Args:

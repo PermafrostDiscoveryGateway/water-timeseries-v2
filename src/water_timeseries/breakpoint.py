@@ -23,7 +23,6 @@ Example
 import logging
 import os
 import warnings
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -97,7 +96,6 @@ class BreakpointMethod:
         pd.DataFrame
             DataFrame containing breakpoint information.
         """
-        pass
 
     def calculate_breaks_batch(self, dataset: LakeDataset, progress_bar: bool = False) -> pd.DataFrame:
         """Run ``calculate_break`` for every lake in *dataset*.
@@ -698,8 +696,8 @@ class NRTBreakpoint(BreakpointMethod):
         dataset: LakeDataset,
         analysis_date: str | pd.Timestamp,
         data_aggregation_period: str = "all",
-        object_id: str | Optional[str] = None,
-        keep_nans: bool | Optional[bool] = False,
+        object_id: str | None = None,
+        keep_nans: bool | None = False,
     ) -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 

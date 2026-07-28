@@ -6,7 +6,6 @@
 # except:
 #     pass  # Fall back to default if TkAgg not available
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import typer
@@ -23,9 +22,9 @@ app = typer.Typer(help="Plot time series of dataset")
 @app.command()
 def main(
     water_dataset_file: str,
-    lake_id: Optional[str] = None,
-    output_figure: Optional[str] = None,
-    break_method: Optional[str] = None,
+    lake_id: str | None = None,
+    output_figure: str | None = None,
+    break_method: str | None = None,
     show: bool = True,
 ):
     """Plot time series for a lake.
@@ -42,9 +41,9 @@ def main(
 
 def plot_lake_timeseries(
     water_dataset_file: str,
-    lake_id: Optional[str] = None,
-    output_figure: Optional[str] = None,
-    break_method: Optional[str] = None,
+    lake_id: str | None = None,
+    output_figure: str | None = None,
+    break_method: str | None = None,
     show: bool = True,
 ):
     """Plot time series for a specific lake.
@@ -94,7 +93,7 @@ def plot_lake_timeseries(
         parent_dir = Path(output_figure).parent
         if not parent_dir.exists():
             if logger:
-                logger.info(f'Creating output_directory "{str(parent_dir)}"')
+                logger.info(f'Creating output_directory "{parent_dir!s}"')
             parent_dir.mkdir(exist_ok=True)
         fig.savefig(output_figure)
         if logger:

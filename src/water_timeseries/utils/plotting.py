@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
@@ -78,7 +77,7 @@ def plot_water_time_series_dw(
     plot_variables: list = None,
     normalization_factor=None,
     lake_id: str = None,
-    save_path: Optional[str | Path] = None,
+    save_path: str | Path | None = None,
 ) -> plt.figure:
     """
     Plots a time series of water area with a vertical line indicating a specified date.
@@ -223,7 +222,7 @@ def plot_water_time_series_jrc(
     plot_variables: list = ["area_water_permanent", "area_water_seasonal", "area_land"],
     normalization_factor: bool = None,
     lake_id: str = None,
-    save_path: Optional[str | Path] = None,
+    save_path: str | Path | None = None,
 ) -> plt.figure:
     """
     Plot water time series for JRC data.

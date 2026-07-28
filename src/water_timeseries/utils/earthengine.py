@@ -1,7 +1,7 @@
 import os
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional, Sequence, Tuple
 
 import ee
 import eemont  # noqa: F401
@@ -510,7 +510,7 @@ def monthly(start="2025-06-04", step=7, count=None, end_date=None, fmt="%Y-%m-%d
     return dates
 
 
-def setup_monthly_dates(years: List[int], months: List[int]) -> List[str]:
+def setup_monthly_dates(years: list[int], months: list[int]) -> list[str]:
     """Generate a list of monthly dates from the given years and months.
 
     Creates dates starting from the first day of each specified month.
@@ -534,10 +534,10 @@ def setup_monthly_dates(years: List[int], months: List[int]) -> List[str]:
 
 
 def setup_dates_from_options(
-    years: Optional[List[int]] = None,
-    months: Optional[List[int]] = None,
-    date_list: Optional[List[str]] = None,
-) -> List[str]:
+    years: list[int] | None = None,
+    months: list[int] | None = None,
+    date_list: list[str] | None = None,
+) -> list[str]:
     """Validate and generate a list of dates from either date_list OR (years AND months).
 
     This function enforces mutual exclusivity between date_list and (years, months).
@@ -588,7 +588,7 @@ def setup_dates_from_options(
         return setup_monthly_dates(years=years, months=months)
 
 
-def setup_annual_dates(years: Optional[List[int]] = None, date_list: Optional[List[str]] = None) -> List[str]:
+def setup_annual_dates(years: list[int] | None = None, date_list: list[str] | None = None) -> list[str]:
     """Generate a list of annual dates from the given years or date_list.
 
     Creates dates starting from January 1st of each specified year.
@@ -898,8 +898,8 @@ def get_rioxarray_ds_from_lake(
     end_date: str,
     max_cloud_cover: float = 20,
     buffer: float = 200,
-    bands: Optional[Sequence[str]] = None,
-    date_windows: Optional[Sequence[Tuple[str, str]]] = None,
+    bands: Sequence[str] | None = None,
+    date_windows: Sequence[tuple[str, str]] | None = None,
     grid_scale: float = 10,
 ) -> xr.Dataset:
     """
@@ -984,8 +984,8 @@ def cached_get_rioxarray_ds_from_lake(
     end_date: str,
     max_cloud_cover: float = 20,
     buffer: float = 200,
-    bands: Optional[Tuple[str, ...]] = None,
-    date_windows: Optional[Tuple[Tuple[str, str], ...]] = None,
+    bands: tuple[str, ...] | None = None,
+    date_windows: tuple[tuple[str, str], ...] | None = None,
     grid_scale: float = 10,
 ) -> xr.Dataset:
     """Cached wrapper around get_rioxarray_ds_from_lake.
@@ -1007,7 +1007,7 @@ def cached_get_rioxarray_ds_from_lake(
     )
 
 
-def visualize_s2_xee_cube(ds: xr.Dataset, dates: List[str], style: str = "rgb") -> plt.Figure:
+def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") -> plt.Figure:
     """
     Visualize Sentinel-2 acquisitions from an xarray Dataset for specified dates.
 
@@ -1064,7 +1064,7 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: List[str], style: str = "rgb") 
 
 
 @st.cache_resource(show_spinner=False)
-def cached_visualize_cube(_ds: xr.Dataset, dates: List[str], style: str = "rgb", id_geohash: Optional[str] = None):
+def cached_visualize_cube(_ds: xr.Dataset, dates: list[str], style: str = "rgb", id_geohash: str | None = None):
     # _ds is excluded from the cache key (underscore prefix), so id_geohash must be
     # part of the key — otherwise two lakes with the same dates share one figure.
     return visualize_s2_xee_cube(_ds, dates=tuple(dates), style=style)

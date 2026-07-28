@@ -1,6 +1,5 @@
 """Tutorial popup helper for map_viewer dashboard."""
 
-from typing import Optional
 
 import streamlit as st
 
@@ -207,7 +206,7 @@ CONFIG_TUTORIALS: dict[str, dict[str, str]] = {
 }
 
 
-def _get_tutorial_sections(config_name: Optional[str] = None) -> dict[str, str]:
+def _get_tutorial_sections(config_name: str | None = None) -> dict[str, str]:
     """Get tutorial sections for a configuration."""
     sections = dict(STANDARD_TUTORIAL)
     if config_name and config_name in CONFIG_TUTORIALS:
@@ -215,7 +214,7 @@ def _get_tutorial_sections(config_name: Optional[str] = None) -> dict[str, str]:
     return sections
 
 
-def show_tutorial_popup(config_name: Optional[str] = None, auto_show: bool = True) -> None:
+def show_tutorial_popup(config_name: str | None = None, auto_show: bool = True) -> None:
     """Display a tutorial popup.
 
     Args:
@@ -256,7 +255,7 @@ def show_tutorial_popup(config_name: Optional[str] = None, auto_show: bool = Tru
     _show_tutorial_dialog(sections)
 
 
-def show_help_button(config_name: Optional[str] = None, label: str = "Open Help") -> None:
+def show_help_button(config_name: str | None = None, label: str = "Open Help") -> None:
     """Add a help button to the sidebar that opens the tutorial popup.
 
     Args:
@@ -306,8 +305,7 @@ def get_config_tutorial(config_name: str) -> dict[str, str]:
 
 def clear_config_tutorial(config_name: str) -> None:
     """Remove custom tutorial content for a configuration."""
-    if config_name in CONFIG_TUTORIALS:
-        del CONFIG_TUTORIALS[config_name]
+    CONFIG_TUTORIALS.pop(config_name, None)
 
 
 def reset_all_tutorials() -> None:

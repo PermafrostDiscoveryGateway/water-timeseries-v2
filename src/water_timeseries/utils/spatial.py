@@ -1,6 +1,5 @@
 """Spatial utilities for working with geospatial data."""
 
-from typing import Optional, Tuple
 
 import geopandas as gpd
 import numpy as np
@@ -12,10 +11,10 @@ from tqdm import tqdm
 
 def filter_gdf_by_bbox(
     gdf: gpd.GeoDataFrame,
-    bbox_west: Optional[float] = None,
-    bbox_south: Optional[float] = None,
-    bbox_east: Optional[float] = None,
-    bbox_north: Optional[float] = None,
+    bbox_west: float | None = None,
+    bbox_south: float | None = None,
+    bbox_east: float | None = None,
+    bbox_north: float | None = None,
     id_column: str = "id_geohash",
 ) -> gpd.GeoDataFrame:
     """Filter a GeoDataFrame by bounding box coordinates.
@@ -158,8 +157,8 @@ def chunk_gdf_simple(gdf: gpd.GeoDataFrame, chunk_size: int) -> list[gpd.GeoData
 
 
 def create_longitude_latitude_grid(
-    lon_range: Tuple[float, float] = (-180.0, 180.0),
-    lat_range: Tuple[float, float] = (60.0, 80.0),
+    lon_range: tuple[float, float] = (-180.0, 180.0),
+    lat_range: tuple[float, float] = (60.0, 80.0),
     bbox_size_lon: float = 10.0,
     bbox_size_lat: float = 2.0,
 ) -> np.ndarray:

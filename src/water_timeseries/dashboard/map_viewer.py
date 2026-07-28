@@ -3,7 +3,6 @@
 import os
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
 
 import folium
 import geopandas as gpd
@@ -87,21 +86,21 @@ class MapViewer:
 
     def __init__(
         self,
-        gdf: Optional[gpd.GeoDataFrame] = None,
-        parquet_path: Optional[Path | str] = None,
+        gdf: gpd.GeoDataFrame | None = None,
+        parquet_path: Path | str | None = None,
         geometry_column: str = "geometry",
         id_column: str = "id_geohash",
-        hover_columns: Optional[List[str]] = None,
-        map_center: Optional[dict] = None,
+        hover_columns: list[str] | None = None,
+        map_center: dict | None = None,
         zoom: int = 10,
         map_backend: str = "folium",  # "folium" or "pmtiles"
-        max_features: Optional[int] = None,  # Limit features for faster loading
-        pmtiles_file: Optional[Path | str] = None,
-        pmtiles_url: Optional[str] = None,
-        drained_gdf: Optional[gpd.GeoDataFrame] = None,
-        drained_label: Optional[str] = None,
+        max_features: int | None = None,  # Limit features for faster loading
+        pmtiles_file: Path | str | None = None,
+        pmtiles_url: str | None = None,
+        drained_gdf: gpd.GeoDataFrame | None = None,
+        drained_label: str | None = None,
         show_main_layer: bool = True,
-        viz_configuration_name: Optional[str] = "colored_historical",
+        viz_configuration_name: str | None = "colored_historical",
         hide_stable_lakes: bool = False,
         logger=None,
     ):
@@ -204,7 +203,7 @@ class MapViewer:
         self.gdf = self._load_parquet(self._parquet_path)
         return self.gdf
 
-    def load_drained_gdf(self, drained_ids: List[str]) -> gpd.GeoDataFrame:
+    def load_drained_gdf(self, drained_ids: list[str]) -> gpd.GeoDataFrame:
         """Load only the subset of geometries for drained_ids using parquet filters."""
         if not drained_ids:
             return gpd.GeoDataFrame(columns=[self.id_column], geometry=[])
@@ -225,7 +224,7 @@ class MapViewer:
         gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
         return gdf
 
-    def find_lake_id_at_point(self, lat: float, lng: float) -> Optional[str]:
+    def find_lake_id_at_point(self, lat: float, lng: float) -> str | None:
         """Find the lake containing a clicked point without loading the full parquet.
 
         Since ``id_geohash`` encodes the lake's location, a geohash-prefix range
@@ -274,7 +273,7 @@ class MapViewer:
         matching = candidates[candidates.geometry.notna() & candidates.geometry.contains(click_point)]
         return matching.iloc[0][self.id_column] if not matching.empty else None
 
-    def render(self) -> Optional[str]:
+    def render(self) -> str | None:
         """Render the interactive map in Streamlit using the selected backend.
 
         Returns:
@@ -316,8 +315,8 @@ class MapViewer:
     def _render_pmtiles(
         self,
         # valid_gdf: gpd.GeoDataFrame,
-        viz_configuration_name: Optional[str] = "colored_historical",
-    ) -> Optional[str]:
+        viz_configuration_name: str | None = "colored_historical",
+    ) -> str | None:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
 
@@ -443,9 +442,9 @@ class MapViewer:
     def _render_folium(
         self,
         valid_gdf: gpd.GeoDataFrame,
-        layer_column: Optional[str] = None,
-        viz_configuration_name: Optional[str] = "colored_historical",
-    ) -> Optional[str]:
+        layer_column: str | None = None,
+        viz_configuration_name: str | None = "colored_historical",
+    ) -> str | None:
         """Render using folium with optional layer selection.
 
         Args:
@@ -634,7 +633,7 @@ class MapViewer:
 
         return None
 
-    def get_selected_geohash(self) -> Optional[str]:
+    def get_selected_geohash(self) -> str | None:
         """Get the currently selected geohash from session state.
 
         Returns:
@@ -642,7 +641,7 @@ class MapViewer:
         """
         return st.session_state.get("selected_geohash")
 
-    def get_clicked_features(self) -> List[str]:
+    def get_clicked_features(self) -> list[str]:
         """Get list of all clicked features.
 
         Returns:
@@ -702,7 +701,7 @@ _MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 def _render_drain_heatmap(
     precomputed_counts: pd.DataFrame,
-    precomputed_breaks: Optional[pd.DataFrame],
+    precomputed_breaks: pd.DataFrame | None,
     container=None,
     selected_month: str = None,  #'YYYY-MM'
 ) -> None:
@@ -827,7 +826,7 @@ def _render_drain_heatmap(
     )
 
     # Decode click – scatter overlay points carry analysis_month in customdata
-    selected_analysis_month: Optional[str] = None
+    selected_analysis_month: str | None = None
     if event and getattr(event, "selection", None) and event.selection.get("points"):
         pt = event.selection["points"][0]
         # Scatter points store the analysis_month string in customdata
@@ -924,8 +923,8 @@ def _render_drain_heatmap(
 
 
 def _load_precomputed_nrt(
-    precomputed_nrt_dir: Optional[Path | str],
-) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+    precomputed_nrt_dir: Path | str | None,
+) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load pre-computed NRT monthly results from *precomputed_nrt_dir*.
 
     Returns ``(counts_df, breaks_df)`` where either may be ``None`` if the
@@ -942,8 +941,8 @@ def _load_precomputed_nrt(
     path_str = str(precomputed_nrt_dir)
     is_remote = is_remote_path(path_str)
 
-    counts_df: Optional[pd.DataFrame] = None
-    breaks_df: Optional[pd.DataFrame] = None
+    counts_df: pd.DataFrame | None = None
+    breaks_df: pd.DataFrame | None = None
 
     if path_str.endswith(".parquet"):
         try:
@@ -1061,17 +1060,17 @@ def create_app(
     data_path: str | Path = "tests/data/lake_polygons.parquet",
     zarr_path: str | Path = "tests/data/lakes_dw_test.zarr",
     zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
-    precomputed_nrt_dir: Optional[str | Path] = None,
+    precomputed_nrt_dir: str | Path | None = None,
     offline_mode: bool = False,
-    ee_project: Optional[str] = None,
+    ee_project: str | None = None,
     dw_start_year: int = 2017,
     dw_end_year: int = 2025,
     dw_start_month: int = 6,
     dw_end_month: int = 9,
-    viz_configuration_name: Optional[str] = "colored_historical",
-    pmtiles_file: Optional[str | Path] = None,
-    pmtiles_url: Optional[str] = None,
-    logfile: Optional[str] = None,
+    viz_configuration_name: str | None = "colored_historical",
+    pmtiles_file: str | Path | None = None,
+    pmtiles_url: str | None = None,
+    logfile: str | None = None,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -1218,8 +1217,8 @@ def create_app(
         default_activate_historical = False
     else:
         default_activate_historical = False
-    precomputed_counts: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_counts
-    precomputed_breaks: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_breaks
+    precomputed_counts: pd.DataFrame | None = st.session_state.precomputed_nrt_counts
+    precomputed_breaks: pd.DataFrame | None = st.session_state.precomputed_nrt_breaks
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
@@ -1372,7 +1371,7 @@ def create_app(
 
                 return viewer, selected
             except Exception as e:
-                st.error(f"Error loading data: {str(e)}")
+                st.error(f"Error loading data: {e!s}")
                 return None, None
 
         viewer, selected = map_viewer_section()
@@ -1762,7 +1761,7 @@ def create_app(
             ###################### END Recent imagery plotter #############################
 
     except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
+        st.error(f"Error loading data: {e!s}")
         st.info("Please check the file path and ensure the parquet file exists.")
 
 

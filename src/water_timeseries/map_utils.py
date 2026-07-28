@@ -443,9 +443,9 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
     return _get_pmtiles_server(str(pmtiles_path)).url_for(pmtiles_path.name)
 
 
-@functools.lru_cache(maxsize=None)
+@functools.cache
 def _get_pmtiles_server(path_str: str):
-    from water_timeseries.utils.pmtiles_serve import PmtilesServer # noqa: F401, I001
+    from water_timeseries.utils.pmtiles_serve import PmtilesServer # noqa: I001
 
     return PmtilesServer(Path(path_str)).start()
 

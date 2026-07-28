@@ -9,7 +9,7 @@ import os
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import parse_qs, unquote, urlparse
 
 from loguru import logger
@@ -61,8 +61,8 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
         config_id = (query.get("config_id") or [None])[0]
         config_b64 = (query.get("config") or [None])[0]
 
-        if config_id and hasattr(self.server, "config_cache") and config_id in getattr(self.server, "config_cache"):
-            config = getattr(self.server, "config_cache")[config_id]
+        if config_id and hasattr(self.server, "config_cache") and config_id in self.server.config_cache:
+            config = self.server.config_cache[config_id]
         elif config_b64:
             try:
                 padding = "=" * (-len(config_b64) % 4)
@@ -168,10 +168,10 @@ class PmtilesServer:
 
     def __init__(
         self,
-        pmtiles_file: Optional[Path | str] = None,
+        pmtiles_file: Path | str | None = None,
         host: str = "0.0.0.0",
         port: int = 0,
-        public_host: Optional[str] = None,
+        public_host: str | None = None,
     ):
         if pmtiles_file is not None:
             path = Path(pmtiles_file).resolve()
@@ -200,8 +200,8 @@ class PmtilesServer:
         self.public_host: str = public_host or os.environ.get("PMTILES_HOST", "localhost")
         env_base_url = os.environ.get("PMTILES_BASE_URL")
         self.path_prefix = urlparse(env_base_url).path.rstrip("/") if env_base_url else ""
-        self._httpd: Optional[ThreadingHTTPServer] = None
-        self._thread: Optional[threading.Thread] = None
+        self._httpd: ThreadingHTTPServer | None = None
+        self._thread: threading.Thread | None = None
         self.config_cache: dict[str, Any] = {}
 
     @property
@@ -216,7 +216,7 @@ class PmtilesServer:
             return override.rstrip("/")
         return f"http://{self.public_host}:{self._httpd.server_port}"
 
-    def start(self) -> "PmtilesServer":
+    def start(self) -> PmtilesServer:
         self._httpd = ThreadingHTTPServer((self.host, self.port), _PmtilesHTTPRequestHandler)
         self._httpd.directory = self.directory
         self._httpd.pmtiles_filename = self.pmtiles_filename
@@ -260,7 +260,7 @@ class PmtilesServer:
     def url_for(self, filename: str) -> str:
         return f"{self.base_url}/{Path(filename).name}"
 
-    def __enter__(self) -> "PmtilesServer":
+    def __enter__(self) -> PmtilesServer:
         return self.start()
 
     def __exit__(self, *args) -> None:

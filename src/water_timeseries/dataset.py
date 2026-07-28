@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import geopandas as gpd
 import matplotlib.pyplot as plt
@@ -99,7 +99,6 @@ class LakeDataset:
         This method should be overridden in subclasses to implement data-source-specific
         preprocessing steps such as calculating composite indicators or adding derived fields.
         """
-        pass
 
     def _normalize_ds(self):
         """Normalize the dataset by dividing by maximum values.
@@ -117,7 +116,6 @@ class LakeDataset:
         This method should be overridden in subclasses to implement data-source-specific
         masking logic based on their quality thresholds and constraints.
         """
-        pass
 
     def _get_first_breakpoint(
         self,
@@ -233,7 +231,6 @@ class LakeDataset:
             id_geohash (str): The geohash identifier for the location.
             breakpoints (BreakpointMethod, optional): Breakpoint detection method to use.
         """
-        pass
 
     def calculate_changes(self, break_df: pd.DataFrame, id_geohash: str) -> pd.DataFrame:
 
@@ -241,9 +238,9 @@ class LakeDataset:
 
     def merge(
         self,
-        other: "LakeDataset",
+        other: LakeDataset,
         how: str = "both",
-    ) -> "LakeDataset":
+    ) -> LakeDataset:
         """Merge this LakeDataset with another LakeDataset.
 
         Combines the .ds attributes of both datasets. Both datasets must have the same
@@ -288,7 +285,7 @@ class LakeDataset:
         merged.mask_data = self.mask_data
         return merged
 
-    def _validate_merge(self, other: "LakeDataset", how: str):
+    def _validate_merge(self, other: LakeDataset, how: str):
         """Validate datasets before merging."""
 
         if how not in {"both", "date", "id_geohash"}:
@@ -427,8 +424,8 @@ class DWDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
-        plot_variables: Optional[list] = None,
-        save_path: Optional[str | Path] = None,
+        plot_variables: list | None = None,
+        save_path: str | Path | None = None,
     ) -> plt.Figure:
         """Plot the time series for a specific geohash using matplotlib.
 
@@ -495,8 +492,8 @@ class DWDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
-        plot_variables: Optional[list] = None,
-        save_path: Optional[str | Path] = None,
+        plot_variables: list | None = None,
+        save_path: str | Path | None = None,
     ) -> go.Figure:
         """Plot the interactive time series for a specific geohash using Plotly.
 
@@ -676,8 +673,8 @@ class JRCDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
-        plot_variables: Optional[list] = None,
-        save_path: Optional[str | Path] = None,
+        plot_variables: list | None = None,
+        save_path: str | Path | None = None,
     ) -> plt.Figure:
         """Plot the time series for a specific geohash using matplotlib.
 
@@ -745,8 +742,8 @@ class JRCDataset(LakeDataset):
         self,
         id_geohash: str,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
-        plot_variables: Optional[list] = None,
-        save_path: Optional[str | Path] = None,
+        plot_variables: list | None = None,
+        save_path: str | Path | None = None,
     ) -> go.Figure:
         """Plot the interactive time series for a specific geohash using Plotly.
 

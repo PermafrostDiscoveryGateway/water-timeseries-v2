@@ -1,7 +1,6 @@
 """Dynamic plotting utilities using Plotly for interactive visualizations."""
 
 from pathlib import Path
-from typing import List, Optional
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -32,12 +31,12 @@ JRC_COLOR_MAP = {
 def plot_water_time_series_dw_interactive(
     df: pd.DataFrame,
     first_break: pd.Timestamp | None = None,
-    plot_variables: List[str] = None,
-    normalization_factor: Optional[float] = None,
-    lake_id: Optional[str] = None,
+    plot_variables: list[str] = None,
+    normalization_factor: float | None = None,
+    lake_id: str | None = None,
     height: int = 500,
-    width: Optional[int] = None,
-    save_path: Optional[str | Path] = None,
+    width: int | None = None,
+    save_path: str | Path | None = None,
 ) -> go.Figure:
     """
     Create an interactive time series plot for Dynamic World data using Plotly.
@@ -200,12 +199,12 @@ def plot_water_time_series_dw_interactive(
 def plot_water_time_series_jrc_interactive(
     df: pd.DataFrame,
     first_break: pd.Timestamp | None = None,
-    plot_variables: List[str] = None,
-    normalization_factor: Optional[float] = None,
-    lake_id: Optional[str] = None,
+    plot_variables: list[str] = None,
+    normalization_factor: float | None = None,
+    lake_id: str | None = None,
     height: int = 500,
-    width: Optional[int] = None,
-    save_path: Optional[str | Path] = None,
+    width: int | None = None,
+    save_path: str | Path | None = None,
 ) -> go.Figure:
     """
     Create an interactive time series plot for JRC data using Plotly.
