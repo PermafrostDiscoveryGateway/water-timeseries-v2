@@ -1,6 +1,6 @@
 """Visualization utilities for GeoDataFrames and map rendering."""
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -199,7 +199,7 @@ def get_legend_html_nrt_drainage() -> str:
 
 def build_hover_template(
     id_column: str,
-    hover_fields: List[str],
+    hover_fields: list[str],
     extra_template: str = "",
 ) -> str:
     """
@@ -232,8 +232,8 @@ def build_hover_template(
 def prepare_custom_data_for_plotly(
     df: pd.DataFrame,
     id_column: str,
-    hover_fields: List[str],
-) -> List[tuple]:
+    hover_fields: list[str],
+) -> list[tuple]:
     """
     Prepare custom data for Plotly hover tooltips.
 
@@ -274,7 +274,7 @@ def get_z_values_for_coloring(
     column: str = "NetChange_perc",
     clip_range: tuple = (-50, 50),
     default_value: float = 0,
-) -> List[float]:
+) -> list[float]:
     """
     Extract and prepare z-values for polygon coloring.
 
@@ -299,8 +299,8 @@ def get_z_values_for_coloring(
 def get_colorbar_config(
     title: str = "Value",
     color_scale: str = "RdYlBu",
-    zmid: Optional[float] = 0,
-) -> Dict[str, Any]:
+    zmid: float | None = 0,
+) -> dict[str, Any]:
     """
     Get colorbar configuration for Plotly maps.
 
@@ -325,7 +325,7 @@ def get_colorbar_config(
     return config
 
 
-def gdf_to_geojson_feature_collection(gdf: pd.DataFrame) -> Dict:
+def gdf_to_geojson_feature_collection(gdf: pd.DataFrame) -> dict:
     """
     Convert GeoDataFrame to GeoJSON feature collection.
 

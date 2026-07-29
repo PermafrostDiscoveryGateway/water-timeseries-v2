@@ -1,6 +1,5 @@
 """Tutorial popup helper for map_viewer dashboard."""
 
-from typing import Optional
 
 import streamlit as st
 import streamlit.components.v1 as components
@@ -220,7 +219,7 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
             unsafe_allow_html=True,
         )
 
-    col1, col2, col3 = st.columns([2, 1, 2])
+    _col1, col2, _col3 = st.columns([2, 1, 2])
     with col2:
         components.html(_CLOSE_BUTTON_HTML, height=42)
 
@@ -276,7 +275,7 @@ CONFIG_TUTORIALS: dict[str, dict[str, str]] = {
 }
 
 
-def _get_tutorial_sections(config_name: Optional[str] = None) -> dict[str, str]:
+def _get_tutorial_sections(config_name: str | None = None) -> dict[str, str]:
     """Get tutorial sections for a configuration."""
     sections = dict(STANDARD_TUTORIAL)
     if config_name and config_name in CONFIG_TUTORIALS:
@@ -284,7 +283,7 @@ def _get_tutorial_sections(config_name: Optional[str] = None) -> dict[str, str]:
     return sections
 
 
-def show_tutorial_popup(config_name: Optional[str] = None, auto_show: bool = True) -> None:
+def show_tutorial_popup(config_name: str | None = None, auto_show: bool = True) -> None:
     """Display a tutorial popup.
 
     Args:
@@ -325,7 +324,7 @@ def show_tutorial_popup(config_name: Optional[str] = None, auto_show: bool = Tru
     _show_tutorial_dialog(sections)
 
 
-def show_help_button(config_name: Optional[str] = None, label: str = "Open Help") -> None:
+def show_help_button(config_name: str | None = None, label: str = "Open Help") -> None:
     """Add a help button to the sidebar that opens the tutorial popup.
 
     Args:
@@ -375,8 +374,7 @@ def get_config_tutorial(config_name: str) -> dict[str, str]:
 
 def clear_config_tutorial(config_name: str) -> None:
     """Remove custom tutorial content for a configuration."""
-    if config_name in CONFIG_TUTORIALS:
-        del CONFIG_TUTORIALS[config_name]
+    CONFIG_TUTORIALS.pop(config_name, None)
 
 
 def reset_all_tutorials() -> None:

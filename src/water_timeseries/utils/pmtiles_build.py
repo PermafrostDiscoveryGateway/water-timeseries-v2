@@ -6,8 +6,8 @@ import json
 import shutil
 import subprocess
 import warnings
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 import geopandas as gpd
 import pandas as pd
@@ -39,7 +39,7 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
 )
 
 
-def find_tippecanoe() -> Optional[str]:
+def find_tippecanoe() -> str | None:
     """Return path to tippecanoe executable, or None if not installed."""
     return shutil.which("tippecanoe")
 
@@ -75,7 +75,7 @@ def parquet_to_geojsonseq(
     property_columns: Sequence[str] = DEFAULT_TILE_PROPERTIES,
     geometry_column: str = "geometry",
     generate_points: bool = True,
-) -> tuple[Path, Optional[Path]]:
+) -> tuple[Path, Path | None]:
     """Export a GeoParquet file to newline-delimited GeoJSON for tippecanoe.
 
     Reads in chunks to prevent memory issues. Can optionally generate a second
@@ -112,9 +112,8 @@ def parquet_to_geojsonseq(
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 df = table.to_pandas()
-                if geometry_column in df.columns:
-                    if len(df) > 0 and isinstance(df[geometry_column].iloc[0], bytes):
-                        df[geometry_column] = gpd.GeoSeries.from_wkb(df[geometry_column])
+                if geometry_column in df.columns and len(df) > 0 and isinstance(df[geometry_column].iloc[0], bytes):
+                    df[geometry_column] = gpd.GeoSeries.from_wkb(df[geometry_column])
                 gdf = gpd.GeoDataFrame(df)
 
             if geometry_column in gdf.columns:
@@ -158,8 +157,8 @@ def build_pmtiles(
     output_path: Path | str,
     *,
     property_columns: Sequence[str] = DEFAULT_TILE_PROPERTIES,
-    tippecanoe_args: Optional[Sequence[str]] = None,
-    tippecanoe_bin: Optional[str] = None,
+    tippecanoe_args: Sequence[str] | None = None,
+    tippecanoe_bin: str | None = None,
     keep_geojsonl: bool = False,
     delete_tempdir: bool = True,
 ) -> Path:
@@ -199,7 +198,7 @@ def build_pmtiles(
         base_flags = list(tippecanoe_args)
     else:
         for f in DEFAULT_TIPPECANOE_ARGS:
-            if f.startswith("--minimum-zoom") or f.startswith("--maximum-zoom") or f == "-l" or f == "lakes":
+            if f.startswith(("--minimum-zoom", "--maximum-zoom")) or f == "-l" or f == "lakes":
                 continue
             base_flags.append(f)
 

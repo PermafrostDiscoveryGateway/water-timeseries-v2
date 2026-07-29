@@ -23,7 +23,6 @@ Example
 import logging
 import os
 import warnings
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -97,7 +96,6 @@ class BreakpointMethod:
         pd.DataFrame
             DataFrame containing breakpoint information.
         """
-        pass
 
     def calculate_breaks_batch(self, dataset: LakeDataset, progress_bar: bool = False) -> pd.DataFrame:
         """Run ``calculate_break`` for every lake in *dataset*.
@@ -154,7 +152,9 @@ class SimpleBreakpoint(BreakpointMethod):
         List of column names in the output DataFrame.
     """
 
-    def __init__(self, kwargs_break: dict = dict(window=3, method="median", threshold=-0.25)):
+    def __init__(self, kwargs_break: dict | None = None):
+        if kwargs_break is None:
+            kwargs_break = {"window": 3, "method": "median", "threshold": -0.25}
         super().__init__(method_name="simple")
         self.kwargs_break = kwargs_break
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
@@ -323,9 +323,11 @@ class BeastBreakpoint(BreakpointMethod):
 
     def __init__(
         self,
-        kwargs_break: dict = dict(trendMaxOrder=0, trendMinSepDist=1),
+        kwargs_break: dict | None = None,
         break_threshold: float = 0.5,
     ):
+        if kwargs_break is None:
+            kwargs_break = {"trendMaxOrder": 0, "trendMinSepDist": 1}
         super().__init__(method_name="rbeast")
         self.kwargs_break = kwargs_break
         self.break_threshold = break_threshold
@@ -467,7 +469,9 @@ class NRTBreakpoint(BreakpointMethod):
     >>> result = bp.calculate_break(dataset, analysis_date="2024-07")
     """
 
-    def __init__(self, kwargs_break: dict = dict()):
+    def __init__(self, kwargs_break: dict | None = None):
+        if kwargs_break is None:
+            kwargs_break = {}
         super().__init__(method_name="nrt")
         self.kwargs_break = kwargs_break
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
@@ -627,7 +631,9 @@ class NRTBreakpoint(BreakpointMethod):
         filtered_count = total_ids - valid_count
 
         # Log the filtering results
-        logging.info(f"Filtered {filtered_count} id_geohash(es) with NaN data, kept {valid_count} valid id_geohash(es)")
+        logging.getLogger(__name__).info(
+            f"Filtered {filtered_count} id_geohash(es) with NaN data, kept {valid_count} valid id_geohash(es)"
+        )
 
         # Filter both datasets to only include valid ids
         ds_analysis_filtered = ds_analysis.sel(id_geohash=valid_ids)
@@ -635,7 +641,7 @@ class NRTBreakpoint(BreakpointMethod):
 
         return ds_analysis_filtered, ds_historical_filtered, valid_ids, nan_ids
 
-    def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int = None, water_column: str = "water") -> pd.DataFrame:
+    def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int | None = None, water_column: str = "water") -> pd.DataFrame:
         """Calculate statistics for the given dataset."""
         if filter_month is not None:
             dataset = dataset.where(dataset.date.dt.month == filter_month, drop=True)
@@ -698,8 +704,8 @@ class NRTBreakpoint(BreakpointMethod):
         dataset: LakeDataset,
         analysis_date: str | pd.Timestamp,
         data_aggregation_period: str = "all",
-        object_id: str | Optional[str] = None,
-        keep_nans: bool | Optional[bool] = False,
+        object_id: str | None = None,
+        keep_nans: bool | None = False,
     ) -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 

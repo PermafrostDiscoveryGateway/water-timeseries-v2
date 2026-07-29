@@ -1,9 +1,8 @@
 """Map Viewer dashboard component using Streamlit for mapping."""
 
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import List, Optional
 
 import folium
 import geopandas as gpd
@@ -87,21 +86,21 @@ class MapViewer:
 
     def __init__(
         self,
-        gdf: Optional[gpd.GeoDataFrame] = None,
-        parquet_path: Optional[Path | str] = None,
+        gdf: gpd.GeoDataFrame | None = None,
+        parquet_path: Path | str | None = None,
         geometry_column: str = "geometry",
         id_column: str = "id_geohash",
-        hover_columns: Optional[List[str]] = None,
-        map_center: Optional[dict] = None,
+        hover_columns: list[str] | None = None,
+        map_center: dict | None = None,
         zoom: int = 10,
         map_backend: str = "folium",  # "folium" or "pmtiles"
-        max_features: Optional[int] = None,  # Limit features for faster loading
-        pmtiles_file: Optional[Path | str] = None,
-        pmtiles_url: Optional[str] = None,
-        drained_gdf: Optional[gpd.GeoDataFrame] = None,
-        drained_label: Optional[str] = None,
+        max_features: int | None = None,  # Limit features for faster loading
+        pmtiles_file: Path | str | None = None,
+        pmtiles_url: str | None = None,
+        drained_gdf: gpd.GeoDataFrame | None = None,
+        drained_label: str | None = None,
         show_main_layer: bool = True,
-        viz_configuration_name: Optional[str] = "colored_historical",
+        viz_configuration_name: str | None = "colored_historical",
         hide_stable_lakes: bool = False,
         logger=None,
     ):
@@ -204,7 +203,7 @@ class MapViewer:
         self.gdf = self._load_parquet(self._parquet_path)
         return self.gdf
 
-    def load_drained_gdf(self, drained_ids: List[str]) -> gpd.GeoDataFrame:
+    def load_drained_gdf(self, drained_ids: list[str]) -> gpd.GeoDataFrame:
         """Load only the subset of geometries for drained_ids using parquet filters."""
         if not drained_ids:
             return gpd.GeoDataFrame(columns=[self.id_column], geometry=[])
@@ -225,7 +224,7 @@ class MapViewer:
         gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
         return gdf
 
-    def find_lake_id_at_point(self, lat: float, lng: float) -> Optional[str]:
+    def find_lake_id_at_point(self, lat: float, lng: float) -> str | None:
         """Find the lake containing a clicked point without loading the full parquet.
 
         Since ``id_geohash`` encodes the lake's location, a geohash-prefix range
@@ -274,7 +273,7 @@ class MapViewer:
         matching = candidates[candidates.geometry.notna() & candidates.geometry.contains(click_point)]
         return matching.iloc[0][self.id_column] if not matching.empty else None
 
-    def render(self) -> Optional[str]:
+    def render(self) -> str | None:
         """Render the interactive map in Streamlit using the selected backend.
 
         Returns:
@@ -316,8 +315,8 @@ class MapViewer:
     def _render_pmtiles(
         self,
         # valid_gdf: gpd.GeoDataFrame,
-        viz_configuration_name: Optional[str] = "colored_historical",
-    ) -> Optional[str]:
+        viz_configuration_name: str | None = "colored_historical",
+    ) -> str | None:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
 
@@ -443,9 +442,9 @@ class MapViewer:
     def _render_folium(
         self,
         valid_gdf: gpd.GeoDataFrame,
-        layer_column: Optional[str] = None,
-        viz_configuration_name: Optional[str] = "colored_historical",
-    ) -> Optional[str]:
+        layer_column: str | None = None,
+        viz_configuration_name: str | None = "colored_historical",
+    ) -> str | None:
         """Render using folium with optional layer selection.
 
         Args:
@@ -634,7 +633,7 @@ class MapViewer:
 
         return None
 
-    def get_selected_geohash(self) -> Optional[str]:
+    def get_selected_geohash(self) -> str | None:
         """Get the currently selected geohash from session state.
 
         Returns:
@@ -642,7 +641,7 @@ class MapViewer:
         """
         return st.session_state.get("selected_geohash")
 
-    def get_clicked_features(self) -> List[str]:
+    def get_clicked_features(self) -> list[str]:
         """Get list of all clicked features.
 
         Returns:
@@ -656,7 +655,7 @@ class MapViewer:
         Removes the currently selected geohash from the session state,
         allowing the user to make a new selection.
         """
-        if "selected_lake" in st.query_params.keys():
+        if "selected_lake" in st.query_params:
             logger.info(f"Dropping ID {st.session_state.selected_geohash} from selection")
             st.query_params.pop("selected_lake", None)
         st.session_state.pop("selected_geohash", None)
@@ -702,9 +701,9 @@ _MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 
 def _render_drain_heatmap(
     precomputed_counts: pd.DataFrame,
-    precomputed_breaks: Optional[pd.DataFrame],
+    precomputed_breaks: pd.DataFrame | None,
     container=None,
-    selected_month: str = None,  #'YYYY-MM'
+    selected_month: str | None = None,  #'YYYY-MM'
 ) -> None:
     """Render an interactive month × year heatmap of drained lake counts.
 
@@ -762,7 +761,7 @@ def _render_drain_heatmap(
             text=text_values,
             texttemplate="%{text}",
             hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{z}<extra></extra>",
-            colorbar=dict(title="n", thickness=10, len=0.8),
+            colorbar={"title": "n", "thickness": 10, "len": 0.8},
             xgap=2,
             ygap=2,
         )
@@ -774,14 +773,14 @@ def _render_drain_heatmap(
             x=scatter_x,
             y=scatter_y,
             mode="markers",
-            marker=dict(
-                symbol="square",
-                size=22,
-                opacity=0.01,  # effectively invisible but still hittable
-                color=scatter_color,
-                colorscale="Blues",
-                showscale=False,
-            ),
+            marker={
+                "symbol": "square",
+                "size": 22,
+                "opacity": 0.01,  # effectively invisible but still hittable
+                "color": scatter_color,
+                "colorscale": "Blues",
+                "showscale": False,
+            },
             customdata=scatter_custom,
             text=scatter_text,
             hovertemplate="<b>%{y} – %{x}</b><br>Lakes drained: %{text}<extra></extra>",
@@ -790,10 +789,10 @@ def _render_drain_heatmap(
     )
 
     fig.update_layout(
-        xaxis=dict(side="bottom", tickfont=dict(size=10)),
-        yaxis=dict(type="category", tickfont=dict(size=10)),
+        xaxis={"side": "bottom", "tickfont": {"size": 10}},
+        yaxis={"type": "category", "tickfont": {"size": 10}},
         height=max(200, len(years) * 28 + 80),
-        margin=dict(l=40, r=40, t=10, b=30),
+        margin={"l": 40, "r": 40, "t": 10, "b": 30},
         plot_bgcolor="rgba(0,0,0,0)",
         dragmode=False,
         # modebar=dict(remove=["toImage", "sendDataToCloud", "editInChartStudio", "hoverCompare", "hoverClosest", "toggleSpikelines", "autoScale2d", "resetScale2d", "zoomIn2d", "zoomOut2d", "pan2d", "select2d", "lasso2d"]),
@@ -814,7 +813,7 @@ def _render_drain_heatmap(
                 x1=x_index + 0.5,
                 y0=y_index - 0.5,
                 y1=y_index + 0.5,
-                line=dict(color="orange", width=2),
+                line={"color": "orange", "width": 2},
                 fillcolor="rgba(0,0,0,0)",  # Keep it fully transparent inside
             )
         else:
@@ -827,7 +826,7 @@ def _render_drain_heatmap(
     )
 
     # Decode click – scatter overlay points carry analysis_month in customdata
-    selected_analysis_month: Optional[str] = None
+    selected_analysis_month: str | None = None
     if event and getattr(event, "selection", None) and event.selection.get("points"):
         pt = event.selection["points"][0]
         # Scatter points store the analysis_month string in customdata
@@ -924,8 +923,8 @@ def _render_drain_heatmap(
 
 
 def _load_precomputed_nrt(
-    precomputed_nrt_dir: Optional[Path | str],
-) -> tuple[Optional[pd.DataFrame], Optional[pd.DataFrame]]:
+    precomputed_nrt_dir: Path | str | None,
+) -> tuple[pd.DataFrame | None, pd.DataFrame | None]:
     """Load pre-computed NRT monthly results from *precomputed_nrt_dir*.
 
     Returns ``(counts_df, breaks_df)`` where either may be ``None`` if the
@@ -942,8 +941,8 @@ def _load_precomputed_nrt(
     path_str = str(precomputed_nrt_dir)
     is_remote = is_remote_path(path_str)
 
-    counts_df: Optional[pd.DataFrame] = None
-    breaks_df: Optional[pd.DataFrame] = None
+    counts_df: pd.DataFrame | None = None
+    breaks_df: pd.DataFrame | None = None
 
     if path_str.endswith(".parquet"):
         try:
@@ -1025,7 +1024,7 @@ def _load_precomputed_nrt(
             breaks_df = pd.read_parquet(breaks_path)
 
         if breaks_df is None:
-            monthly_files = sorted(list(nrt_dir.glob("nrt_*_drain_breaks.parquet")))
+            monthly_files = sorted(nrt_dir.glob("nrt_*_drain_breaks.parquet"))
             if monthly_files:
                 logger.info(f"Found {len(monthly_files)} individual NRT monthly files, aggregating...")
                 dfs = []
@@ -1061,17 +1060,17 @@ def create_app(
     data_path: str | Path = "tests/data/lake_polygons.parquet",
     zarr_path: str | Path = "tests/data/lakes_dw_test.zarr",
     zarr_path_jrc: str | Path = "tests/data/lakes_jrc_test.zarr",
-    precomputed_nrt_dir: Optional[str | Path] = None,
+    precomputed_nrt_dir: str | Path | None = None,
     offline_mode: bool = False,
-    ee_project: Optional[str] = None,
+    ee_project: str | None = None,
     dw_start_year: int = 2017,
     dw_end_year: int = 2025,
     dw_start_month: int = 6,
     dw_end_month: int = 9,
-    viz_configuration_name: Optional[str] = "colored_historical",
-    pmtiles_file: Optional[str | Path] = None,
-    pmtiles_url: Optional[str] = None,
-    logfile: Optional[str] = None,
+    viz_configuration_name: str | None = "colored_historical",
+    pmtiles_file: str | Path | None = None,
+    pmtiles_url: str | None = None,
+    logfile: str | None = None,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -1218,8 +1217,8 @@ def create_app(
         default_activate_historical = False
     else:
         default_activate_historical = False
-    precomputed_counts: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_counts
-    precomputed_breaks: Optional[pd.DataFrame] = st.session_state.precomputed_nrt_breaks
+    precomputed_counts: pd.DataFrame | None = st.session_state.precomputed_nrt_counts
+    precomputed_breaks: pd.DataFrame | None = st.session_state.precomputed_nrt_breaks
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
@@ -1279,9 +1278,8 @@ def create_app(
                 # Sync dropdown with heatmap click: consume the one-shot flag and write
                 # directly to the selectbox session-state key so Streamlit picks it up.
                 heatmap_pick = st.session_state.get("heatmap_selected_cell")
-                if st.session_state.pop("heatmap_sync_dropdown", False):
-                    if heatmap_pick and heatmap_pick in selectable_months:
-                        st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
+                if st.session_state.pop("heatmap_sync_dropdown", False) and heatmap_pick and heatmap_pick in selectable_months:
+                    st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
 
                 selected_analysis_month = heatmap_pick
 
@@ -1372,10 +1370,10 @@ def create_app(
 
                 return viewer, selected
             except Exception as e:
-                st.error(f"Error loading data: {str(e)}")
+                st.error(f"Error loading data: {e!s}")
                 return None, None
 
-        viewer, selected = map_viewer_section()
+        viewer, _selected = map_viewer_section()
 
         # Display selected features in sidebar
         st.sidebar.divider()
@@ -1449,9 +1447,8 @@ def create_app(
             # never touches the cube.
             if st.session_state.dw_dataset_raw is None and zarr_path_input:
                 st.session_state.dw_dataset_raw = load_xarray_dataset_cached(zarr_path_input)
-            if not st.session_state.disable_jrc:
-                if st.session_state.jrc_dataset_raw is None and zarr_path_jrc_input:
-                    st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc_input)
+            if not st.session_state.disable_jrc and st.session_state.jrc_dataset_raw is None and zarr_path_jrc_input:
+                st.session_state.jrc_dataset_raw = load_xarray_dataset_cached(zarr_path_jrc_input)
 
             # Load datasets using unified helper function
             dw_dataset = st.session_state.get("dw_dataset")
@@ -1555,48 +1552,47 @@ def create_app(
                             st.rerun()
                         else:
                             st.error("Download returned no data.")
-                    if not st.session_state.disable_jrc:
-                        if not id_available_jrc:
-                            # JRC Download
-                            logger.info(f"Downloading JRC data for lake: {current}")
-                            st.caption("Downloading JRC data ...")
-                            dsjrc_downloaded = downloader.download_jrc_annual(
-                                vector_dataset=data_path_input,
-                                name_attribute=id_column,
-                                id_list=[current],
-                                years=range(1984, 2022),
-                            )
+                    if not st.session_state.disable_jrc and not id_available_jrc:
+                        # JRC Download
+                        logger.info(f"Downloading JRC data for lake: {current}")
+                        st.caption("Downloading JRC data ...")
+                        dsjrc_downloaded = downloader.download_jrc_annual(
+                            vector_dataset=data_path_input,
+                            name_attribute=id_column,
+                            id_list=[current],
+                            years=range(1984, 2022),
+                        )
 
-                            # add dw dataset to session state
-                            if dsjrc_downloaded is not None:
-                                # Convert downloaded data to JRCDataset
-                                downloaded_dataset_jrc = JRCDataset(dsjrc_downloaded)
+                        # add dw dataset to session state
+                        if dsjrc_downloaded is not None:
+                            # Convert downloaded data to JRCDataset
+                            downloaded_dataset_jrc = JRCDataset(dsjrc_downloaded)
 
-                                # Merge with existing cached data if available
-                                if st.session_state.jrc_dataset is not None:
-                                    try:
-                                        st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
-                                            downloaded_dataset_jrc, how="id_geohash"
-                                        )
-                                    except Exception as merge_e:
-                                        # If merge fails, use downloaded data only
-                                        logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
-                                        st.sidebar.warning(f"Could not merge data: {merge_e}")
-                                        st.session_state.jrc_dataset = downloaded_dataset_jrc
-                                else:
+                            # Merge with existing cached data if available
+                            if st.session_state.jrc_dataset is not None:
+                                try:
+                                    st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
+                                        downloaded_dataset_jrc, how="id_geohash"
+                                    )
+                                except Exception as merge_e:
+                                    # If merge fails, use downloaded data only
+                                    logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
+                                    st.sidebar.warning(f"Could not merge data: {merge_e}")
                                     st.session_state.jrc_dataset = downloaded_dataset_jrc
-
-                                st.session_state.downloaded_dsjrc = dsjrc_downloaded
-                                id_available_jrc = True
-
-                                # Also set id_available_dw = True since DW data was also downloaded
-                                id_available_dw = True
-
-                                logger.info(f"Successfully downloaded DW and JRC data for lake: {current}")
-                                st.caption("Both DW and JRC data downloaded successfully!")
-                                st.rerun()
                             else:
-                                st.error("Download returned no data.")
+                                st.session_state.jrc_dataset = downloaded_dataset_jrc
+
+                            st.session_state.downloaded_dsjrc = dsjrc_downloaded
+                            id_available_jrc = True
+
+                            # Also set id_available_dw = True since DW data was also downloaded
+                            id_available_dw = True
+
+                            logger.info(f"Successfully downloaded DW and JRC data for lake: {current}")
+                            st.caption("Both DW and JRC data downloaded successfully!")
+                            st.rerun()
+                        else:
+                            st.error("Download returned no data.")
                 except Exception as e:
                     logger.error(f"Failed to download data for lake {current}: {e}")
                     st.error(f"Error downloading data: {e}")
@@ -1695,12 +1691,12 @@ def create_app(
                     )
 
                     # setup today's date and one year go
-                    today = datetime.now()
+                    today = datetime.now().astimezone()
                     if viz_configuration_name == "drainage_year":
                         local_gdf = load_lake_polygon_cached(data_path_input, current)
                         if local_gdf.empty or pd.isna(local_gdf.iloc[0]["date_break"]):
                             logger.info(f"No break available for lake {current}!")
-                            viz_dates = [datetime(2017, 7, 1), today]
+                            viz_dates = [datetime(2017, 7, 1, tzinfo=UTC), today]
                             spinner_text = (
                                 "Pulling satellite 2017 + latest satellite image... This may take a few seconds."
                             )
@@ -1762,7 +1758,7 @@ def create_app(
             ###################### END Recent imagery plotter #############################
 
     except Exception as e:
-        st.error(f"Error loading data: {str(e)}")
+        st.error(f"Error loading data: {e!s}")
         st.info("Please check the file path and ensure the parquet file exists.")
 
 

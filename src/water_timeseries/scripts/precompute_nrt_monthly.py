@@ -43,7 +43,6 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -97,7 +96,7 @@ def _run_nrt_for_month(
     data_aggregation_period: str,
     lake_chunk_size: int,
     n_jobs: int,
-) -> Optional[pd.DataFrame]:
+) -> pd.DataFrame | None:
     """Run NRT breakpoint detection for one analysis month.
 
     Each chunk of ``lake_chunk_size`` lakes is materialised from the dask-backed
@@ -175,7 +174,7 @@ def precompute_nrt_monthly(
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
-    lake_ids: Optional[list[str]] = None,
+    lake_ids: list[str] | None = None,
 ) -> pd.DataFrame:
     """Pre-compute NRT drained-lake results for a single analysis month.
 

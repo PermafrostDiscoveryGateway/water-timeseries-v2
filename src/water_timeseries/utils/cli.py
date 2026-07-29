@@ -1,12 +1,11 @@
 # imports
 import json
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
 
-def load_config(config_path: Optional[Path], logger) -> dict:
+def load_config(config_path: Path | None, logger) -> dict:
     """Load configuration from YAML or JSON file.
 
     Args:

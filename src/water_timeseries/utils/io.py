@@ -1,14 +1,12 @@
 """Input/Output utilities for water timeseries data."""
 
 from pathlib import Path
-from typing import Optional, Union
 
 import geopandas as gpd
 import xarray as xr
-from loguru import logger as logger
 
 
-def is_remote_path(path: Union[str, Path]) -> bool:
+def is_remote_path(path: str | Path) -> bool:
     """Check if path is a remote URL/URI (e.g. gs://, s3://, http://, https://)."""
     if isinstance(path, Path):
         return False
@@ -17,9 +15,9 @@ def is_remote_path(path: Union[str, Path]) -> bool:
 
 
 def load_vector_dataset(
-    file_path: Union[str, Path],
-    logger: Optional[logger] = None,
-) -> Optional[gpd.GeoDataFrame]:
+    file_path: str | Path,
+    logger=None,
+) -> gpd.GeoDataFrame | None:
     """Load a vector dataset from file based on file extension.
 
     Supports GeoPackage, Shapefile, GeoJSON, and Parquet formats.
@@ -67,8 +65,8 @@ def load_vector_dataset(
 
 def save_xarray_dataset(
     ds: xr.Dataset,
-    save_path: Union[str, Path],
-    output_dir: Optional[Union[str, Path]] = None,
+    save_path: str | Path,
+    output_dir: str | Path | None = None,
     logger=None,
 ) -> Path:
     """Save xarray dataset to file.
@@ -132,8 +130,8 @@ def save_xarray_dataset(
 
 
 def load_xarray_dataset(
-    path: Union[str, Path],
-    format: Optional[str] = None,
+    path: str | Path,
+    format: str | None = None,
     **kwargs,
 ) -> xr.Dataset:
     """Load xarray dataset from file.

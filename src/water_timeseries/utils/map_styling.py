@@ -49,8 +49,8 @@ def get_colored_style_function(
         # Normalize value and get color from colormap
         color = colormap(norm(value))
         # Convert RGBA to hex manually to avoid JSON serialization issues
-        r, g, b, a = color
-        hex_color = "#{:02x}{:02x}{:02x}".format(int(r * 255), int(g * 255), int(b * 255))
+        r, g, b, _a = color
+        hex_color = f"#{int(r * 255):02x}{int(g * 255):02x}{int(b * 255):02x}"
 
         return {
             "fillColor": hex_color,
@@ -130,7 +130,7 @@ def format_tooltip_columns(
             if orig_col in valid_gdf.columns:
                 display_col = f"{orig_col}_display"
                 valid_gdf[display_col] = valid_gdf[orig_col].apply(
-                    lambda x: f"{fmt.format(x)}{unit}" if pd.notna(x) else "N/A"
+                    lambda x, fmt=fmt, unit=unit: f"{fmt.format(x)}{unit}" if pd.notna(x) else "N/A"
                 )
                 display_columns.append(display_col)
                 alias_mapping.append(alias)

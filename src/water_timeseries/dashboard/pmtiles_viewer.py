@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import geopandas as gpd
 import streamlit as st
@@ -73,15 +73,15 @@ def _get_html_server() -> PmtilesServer:
 
 def _build_map_config(
     *,
-    pmtiles_file: Optional[Path | str] = None,
-    pmtiles_url: Optional[str] = None,
-    vector_file_for_bounds: Optional[Path | str] = None,
+    pmtiles_file: Path | str | None = None,
+    pmtiles_url: str | None = None,
+    vector_file_for_bounds: Path | str | None = None,
     id_column: str = "id_geohash",
     viz_configuration: str = "colored_historical",
     height: int = 620,
-    center: Optional[list[float]] = None,
-    zoom: Optional[float] = None,
-    drained_data: Optional[dict[str, Any]] = None,
+    center: list[float] | None = None,
+    zoom: float | None = None,
+    drained_data: dict[str, Any] | None = None,
     show_main_layer: bool = True,
 ) -> dict[str, Any]:
     bounds = None
@@ -136,15 +136,15 @@ def _build_map_config(
 
 def render_pmtiles_map(
     *,
-    pmtiles_file: Optional[Path | str] = None,
-    pmtiles_url: Optional[str] = None,
-    vector_file_for_bounds: Optional[Path | str] = None,
+    pmtiles_file: Path | str | None = None,
+    pmtiles_url: str | None = None,
+    vector_file_for_bounds: Path | str | None = None,
     id_column: str = "id_geohash",
     viz_configuration: str = "colored_historical",
     height: int = 620,
-    center: Optional[list[float]] = None,
-    zoom: Optional[float] = None,
-    drained_data: Optional[dict[str, Any]] = None,
+    center: list[float] | None = None,
+    zoom: float | None = None,
+    drained_data: dict[str, Any] | None = None,
     show_main_layer: bool = True,
 ) -> None:
     """Embed a MapLibre map that loads lake polygons from PMTiles on demand.
@@ -235,7 +235,7 @@ def render_pmtiles_map(
         components.iframe(map_url, height=height)
 
 
-def _query_param_lake_id() -> Optional[str]:
+def _query_param_lake_id() -> str | None:
     raw = st.query_params.get("selected_lake")
     if raw is None:
         return None
@@ -244,7 +244,7 @@ def _query_param_lake_id() -> Optional[str]:
     return str(raw)
 
 
-def sync_query_param_selection(id_column: str = "id_geohash") -> Optional[str]:
+def sync_query_param_selection(id_column: str = "id_geohash") -> str | None:
     """Read ``selected_lake`` from URL query params into session state."""
     selected = _query_param_lake_id()
     if not selected:

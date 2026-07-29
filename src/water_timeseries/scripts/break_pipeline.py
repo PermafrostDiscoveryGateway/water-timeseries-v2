@@ -3,7 +3,6 @@ import json
 import os
 import threading
 from pathlib import Path
-from typing import Optional
 
 import joblib
 import pandas as pd
@@ -19,7 +18,7 @@ from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
 
 
-def load_config(config_path: Optional[Path]) -> dict:
+def load_config(config_path: Path | None) -> dict:
     """Load configuration from YAML or JSON file.
 
     Args:
@@ -129,18 +128,18 @@ class BreakpointPipeline:
         self,
         water_dataset_file: str,
         output_file: str,
-        vector_dataset_file: Optional[str] = None,
+        vector_dataset_file: str | None = None,
         n_chunks: int = 1,
         chunksize: int = 100,
         parallel_backend: str = "ray",
         break_method: str = "beast",
         n_jobs: int = 1,
-        logger: Optional[logger] = None,
+        logger=None,
         min_chunksize: int = 10,
-        bbox_west: Optional[float] = None,
-        bbox_south: Optional[float] = None,
-        bbox_east: Optional[float] = None,
-        bbox_north: Optional[float] = None,
+        bbox_west: float | None = None,
+        bbox_south: float | None = None,
+        bbox_east: float | None = None,
+        bbox_north: float | None = None,
         output_geometry: bool = True,
         output_geometry_all: bool = False,
     ):

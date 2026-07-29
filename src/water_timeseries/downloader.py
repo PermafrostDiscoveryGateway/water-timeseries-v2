@@ -7,7 +7,6 @@ into Dynamic World or JRC format.
 
 import os
 from pathlib import Path
-from typing import List, Optional
 
 import ee
 import eemont  # noqa: F401
@@ -17,7 +16,6 @@ import joblib
 import numpy as np
 import pandas as pd
 import xarray as xr
-from loguru import logger
 from tqdm import tqdm
 
 from water_timeseries.utils.data import annotate_xr_dataset_dw, annotate_xr_dataset_jrc, dw_bandnames, jrc_bandnames
@@ -54,10 +52,10 @@ class EarthEngineDownloader:
 
     def __init__(
         self,
-        ee_project: Optional[str] = None,
-        output_dir: Optional[str] = None,
+        ee_project: str | None = None,
+        output_dir: str | None = None,
         ee_auth: bool = True,
-        logger: Optional[logger] = None,
+        logger=None,
     ):
         """
         Initialize the Earth Engine Downloader.
@@ -130,7 +128,7 @@ class EarthEngineDownloader:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         return self.output_dir
 
-    def _check_ee_product_name_setup(self, ee_project: Optional[str] = None) -> str:
+    def _check_ee_product_name_setup(self, ee_project: str | None = None) -> str:
         """Check and return the Earth Engine project ID.
 
         Checks the ee_project parameter first, and if None, falls back to
@@ -272,7 +270,7 @@ class EarthEngineDownloader:
         self._log_info(f"Split {n_features} features into {len(chunks)} chunks (chunk_size={chunk_size})")
         return chunks
 
-    def _apply_id_filter(self, gdf, id_list: Optional[List], name_attribute: str) -> gpd.GeoDataFrame:
+    def _apply_id_filter(self, gdf, id_list: list | None, name_attribute: str) -> gpd.GeoDataFrame:
         """Apply ID filter to the GeoDataFrame.
 
         Args:
@@ -313,7 +311,7 @@ class EarthEngineDownloader:
         self._log_info(f"After ID filter: {n_after_id_filter} features")
         return gdf_filtered
 
-    def _extract_time_series(self, dates: List[str], gdf_chunk, name_attribute: str, scale: float = 10) -> pd.DataFrame:
+    def _extract_time_series(self, dates: list[str], gdf_chunk, name_attribute: str, scale: float = 10) -> pd.DataFrame:
         """Extract time series data for a single chunk.
 
         Processes each date within this method to avoid memory issues with large imlists.
@@ -363,7 +361,7 @@ class EarthEngineDownloader:
         return df_out  # .set_index([name_attribute, "date"])
 
     def _extract_jrc_time_series(
-        self, gdf_chunk, name_attribute: str, years: List[int], scale: float = 30
+        self, gdf_chunk, name_attribute: str, years: list[int], scale: float = 30
     ) -> pd.DataFrame:
         """Extract JRC time series data for a single chunk.
 
@@ -398,14 +396,14 @@ class EarthEngineDownloader:
                 image = image.addBands(water_mask.select(self.jrc_bandnames[i]))
             return image
 
-        geom, reducer_dict = self._setup_jrc_reducer(gdf=gdf_chunk, feature_index_name=name_attribute, scale=scale)
+        _geom, reducer_dict = self._setup_jrc_reducer(gdf=gdf_chunk, feature_index_name=name_attribute, scale=scale)
         ic_water = image_collection.map(waterMaskArea)
         df = geemap.ee_to_gdf(ic_water.getTimeSeriesByRegions(**reducer_dict))
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
 
         return df.drop(columns=["geometry"])
 
-    def _validate_years_dw(self, years) -> List[int]:
+    def _validate_years_dw(self, years) -> list[int]:
         """Validate the years parameter for Dynamic World download.
 
         Args:
@@ -420,7 +418,7 @@ class EarthEngineDownloader:
             years = list(range(2016, current_year + 1))
         elif isinstance(years, list):
             pass  # already in correct format
-        elif isinstance(years, np.ndarray) or isinstance(years, range):
+        elif isinstance(years, (np.ndarray, range)):
             years = list(years)
         else:
             raise ValueError(
@@ -442,23 +440,23 @@ class EarthEngineDownloader:
 
     def download_dw_monthly(
         self,
-        vector_dataset: Optional[str | Path] = None,
-        gdf: Optional[gpd.GeoDataFrame] = None,
+        vector_dataset: str | Path | None = None,
+        gdf: gpd.GeoDataFrame | None = None,
         name_attribute: str = "id_geohash",
-        years: Optional[List[int]] = None,
-        months: Optional[List[int]] = None,
-        date_list: Optional[List[str]] = None,
+        years: list[int] | None = None,
+        months: list[int] | None = None,
+        date_list: list[str] | None = None,
         bbox_west: float = -180,
         bbox_east: float = 180,
         bbox_north: float = 90,
         bbox_south: float = -90,
-        id_list: Optional[List] = None,
+        id_list: list | None = None,
         scale: float = 10,
         max_total_requests: int = 500,
         n_parallel: int = 1,
         chunk_method: str = "simple",
         no_download: bool = False,
-        save_to_file: Optional[str] = None,
+        save_to_file: str | None = None,
     ) -> xr.Dataset:
         """Download monthly Dynamic World land cover data for specified periods.
 
@@ -630,7 +628,7 @@ class EarthEngineDownloader:
 
         return ds
 
-    def _validate_years_jrc(self, years) -> List[int]:
+    def _validate_years_jrc(self, years) -> list[int]:
         """Validate the years parameter for JRC download.
 
         Args:
@@ -644,7 +642,7 @@ class EarthEngineDownloader:
             years = list(range(1984, 2022))
         elif isinstance(years, list):
             pass  # already in correct format
-        elif isinstance(years, np.ndarray) or isinstance(years, range):
+        elif isinstance(years, (np.ndarray, range)):
             years = list(years)
         else:
             raise ValueError(
@@ -662,21 +660,21 @@ class EarthEngineDownloader:
 
     def download_jrc_annual(
         self,
-        vector_dataset: Optional[str | Path] = None,
-        gdf: Optional[gpd.GeoDataFrame] = None,
+        vector_dataset: str | Path | None = None,
+        gdf: gpd.GeoDataFrame | None = None,
         name_attribute: str = "id_geohash",
-        years: Optional[List[int] | np.ndarray | range] = None,
+        years: list[int] | np.ndarray | range | None = None,
         bbox_west: float = -180,
         bbox_east: float = 180,
         bbox_north: float = 90,
         bbox_south: float = -90,
-        id_list: Optional[List] = None,
+        id_list: list | None = None,
         scale: float = 30,
         max_total_requests: int = 500,
         n_parallel: int = 1,
         chunk_method: str = "simple",
         no_download: bool = False,
-        save_to_file: Optional[str] = None,
+        save_to_file: str | None = None,
     ) -> xr.Dataset:
         """Download annual JRC (Joint Research Centre) water classification data.
 

@@ -6,7 +6,7 @@ Dynamic World data, JRC data, and error handling.
 """
 
 import pathlib
-import unittest.mock as mock
+from unittest import mock
 
 import geopandas as gpd
 import pytest
@@ -245,7 +245,7 @@ class TestJRCDownloader:
         gdf = gpd.read_parquet(VECTOR_DATASET)
 
         # Setup reducer
-        fc, reducer_dict = downloader._setup_jrc_reducer(gdf, feature_index_name="id_geohash", scale=30)
+        _fc, reducer_dict = downloader._setup_jrc_reducer(gdf, feature_index_name="id_geohash", scale=30)
 
         # Verify reducer configuration
         assert "reducer" in reducer_dict

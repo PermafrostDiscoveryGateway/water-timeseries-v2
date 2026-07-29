@@ -1,7 +1,6 @@
 """Dashboard helper functions to reduce code duplication in map_viewer.py."""
 
 from pathlib import Path
-from typing import Optional, Tuple
 
 import geopandas as gpd
 import pandas as pd
@@ -49,9 +48,9 @@ def load_xarray_dataset_cached(file_path: str):
 def load_dataset(
     dataset_type: str,
     zarr_path: str | Path,
-    downloaded_data: Optional[object] = None,
-    dataset_obj: Optional[DWDataset | JRCDataset] = None,
-) -> Tuple[DWDataset | JRCDataset | None, bool]:
+    downloaded_data: object | None = None,
+    dataset_obj: DWDataset | JRCDataset | None = None,
+) -> tuple[DWDataset | JRCDataset | None, bool]:
     """
     Load a dataset with fallback logic: downloaded data > cached dataset > zarr file.
 
@@ -88,7 +87,7 @@ def load_dataset(
         return None, False
 
 
-def check_dataset_availability(dataset: Optional[DWDataset | JRCDataset], id_geohash: str) -> bool:
+def check_dataset_availability(dataset: DWDataset | JRCDataset | None, id_geohash: str) -> bool:
     """Check if the specific ID is available in the dataset."""
     if dataset is None:
         return False
@@ -103,14 +102,14 @@ def check_dataset_availability_ds_raw(dataset: xr.Dataset, id_geohash: str) -> b
 
 
 def plot_time_series_data(
-    dataset: Optional[DWDataset | JRCDataset],
+    dataset: DWDataset | JRCDataset | None,
     id_geohash: str,
     dataset_type: str,
     is_interactive: bool = True,
     show_success: bool = True,
     show_caption: bool = True,
-    break_date: Optional[str | pd.Timestamp] = None,
-    plot_variables: Optional[list] = None,
+    break_date: str | pd.Timestamp | None = None,
+    plot_variables: list | None = None,
 ) -> bool:
     """
     Unified function to plot time series data with automatic format handling.
@@ -172,11 +171,11 @@ def plot_time_series_data(
 
 
 def plot_timeseries_with_fallback(
-    dataset: Optional[DWDataset | JRCDataset],
+    dataset: DWDataset | JRCDataset | None,
     id_geohash: str,
     dataset_type: str,
     zarr_path: str | Path,
-    downloaded_data: Optional[object] = None,
+    downloaded_data: object | None = None,
     is_interactive: bool = True,
     show_download: bool = True,
     layer_title: str | None = None,
@@ -209,10 +208,10 @@ def download_dataset_if_needed(
     dataset_type: str,
     data_path: str | Path,
     id_column: str,
-    dataset_obj: Optional[DWDataset | JRCDataset] = None,
-    downloaded_data: Optional[object] = None,
+    dataset_obj: DWDataset | JRCDataset | None = None,
+    downloaded_data: object | None = None,
     download_func=None,
-) -> Tuple[Optional[object], DWDataset | JRCDataset | None, bool]:
+) -> tuple[object | None, DWDataset | JRCDataset | None, bool]:
     """
     Download dataset data for a specific ID if not already available.
 
@@ -269,7 +268,7 @@ def create_timelapse_handler(
     end_date: str,
     buffer: int = 100,
     gif_outdir: str = "gifs",
-) -> Optional[Path]:
+) -> Path | None:
     """
     Create a timelapse GIF and return its path.
 
@@ -310,7 +309,7 @@ def create_timelapse_handler(
 
 
 def display_gif_row(
-    gif_path_s2: Optional[Path], gif_path_landsat: Optional[Path], current: str, gif_dir: Path = Path("gifs")
+    gif_path_s2: Path | None, gif_path_landsat: Path | None, current: str, gif_dir: Path = Path("gifs")
 ):
     """
     Display GIFs in a two-column layout.
@@ -413,10 +412,10 @@ def display_existing_gifs(current: str, gif_dir: Path = Path("gifs")):
 
 
 def plot_jrc_timeseries(
-    jrc_dataset: Optional[JRCDataset],
+    jrc_dataset: JRCDataset | None,
     id_geohash: str,
     zarr_path_jrc: str | Path,
-    downloaded_dsjrc: Optional[object],
+    downloaded_dsjrc: object | None,
     is_interactive: bool = True,
 ) -> bool:
     """

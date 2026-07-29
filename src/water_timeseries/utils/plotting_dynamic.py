@@ -1,7 +1,6 @@
 """Dynamic plotting utilities using Plotly for interactive visualizations."""
 
 from pathlib import Path
-from typing import List, Optional
 
 import pandas as pd
 import plotly.graph_objects as go
@@ -32,12 +31,12 @@ JRC_COLOR_MAP = {
 def plot_water_time_series_dw_interactive(
     df: pd.DataFrame,
     first_break: pd.Timestamp | None = None,
-    plot_variables: List[str] = None,
-    normalization_factor: Optional[float] = None,
-    lake_id: Optional[str] = None,
+    plot_variables: list[str] | None = None,
+    normalization_factor: float | None = None,
+    lake_id: str | None = None,
     height: int = 500,
-    width: Optional[int] = None,
-    save_path: Optional[str | Path] = None,
+    width: int | None = None,
+    save_path: str | Path | None = None,
 ) -> go.Figure:
     """
     Create an interactive time series plot for Dynamic World data using Plotly.
@@ -103,8 +102,8 @@ def plot_water_time_series_dw_interactive(
                 y=data["value"],
                 name=variable.replace("_", " ").title(),
                 mode="lines+markers",
-                line=dict(color=color, width=line_width),
-                marker=dict(size=marker_size, symbol="circle"),
+                line={"color": color, "width": line_width},
+                marker={"size": marker_size, "symbol": "circle"},
                 connectgaps=True,
                 customdata=customdata,
                 hovertemplate="%{y:.2f} ha | %{customdata:.1f}%<extra></extra>"
@@ -117,19 +116,19 @@ def plot_water_time_series_dw_interactive(
     # Update layout
     title = f"Lake {lake_id}" if lake_id else "Water Time Series"
     fig.update_layout(
-        title=dict(text=title, x=0.5),
+        title={"text": title, "x": 0.5},
         xaxis_title="Date",
         yaxis_title="Area [ha]",
         height=height,
         width=width,
         hovermode="x unified",
-        hoverlabel=dict(namelength=-1),  # Show all trace names in hover
-        legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=1.02,
-        ),
+        hoverlabel={"namelength": -1},  # Show all trace names in hover
+        legend={
+            "yanchor": "top",
+            "y": 0.99,
+            "xanchor": "left",
+            "x": 1.02,
+        },
         template="plotly_white",
     )
 
@@ -150,7 +149,7 @@ def plot_water_time_series_dw_interactive(
                 y=[],
                 name="Normalized",
                 mode="lines",
-                line=dict(color="gray", width=1, dash="dot"),
+                line={"color": "gray", "width": 1, "dash": "dot"},
                 showlegend=False,
             ),
             secondary_y=True,
@@ -170,7 +169,7 @@ def plot_water_time_series_dw_interactive(
                     x=[first_break, first_break],
                     y=[min(y_vals), max(y_vals)],
                     mode="lines",
-                    line=dict(width=3, dash="dash", color="black"),
+                    line={"width": 3, "dash": "dash", "color": "black"},
                     name="Breakpoint",
                     showlegend=True,
                     hoverinfo="x",
@@ -200,12 +199,12 @@ def plot_water_time_series_dw_interactive(
 def plot_water_time_series_jrc_interactive(
     df: pd.DataFrame,
     first_break: pd.Timestamp | None = None,
-    plot_variables: List[str] = None,
-    normalization_factor: Optional[float] = None,
-    lake_id: Optional[str] = None,
+    plot_variables: list[str] | None = None,
+    normalization_factor: float | None = None,
+    lake_id: str | None = None,
     height: int = 500,
-    width: Optional[int] = None,
-    save_path: Optional[str | Path] = None,
+    width: int | None = None,
+    save_path: str | Path | None = None,
 ) -> go.Figure:
     """
     Create an interactive time series plot for JRC data using Plotly.
@@ -266,8 +265,8 @@ def plot_water_time_series_jrc_interactive(
                 y=df[variable],
                 name=display_name,
                 mode="lines+markers",
-                line=dict(color=color, width=line_width),
-                marker=dict(size=marker_size, symbol="circle"),
+                line={"color": color, "width": line_width},
+                marker={"size": marker_size, "symbol": "circle"},
                 fill=None,  # No fill for any variable
                 connectgaps=True,
                 customdata=customdata,
@@ -281,19 +280,19 @@ def plot_water_time_series_jrc_interactive(
     # Update layout
     title = f"Lake {lake_id}" if lake_id else "JRC Water Time Series"
     fig.update_layout(
-        title=dict(text=title, x=0.5),
+        title={"text": title, "x": 0.5},
         xaxis_title="Date",
         yaxis_title="Area [ha]",
         height=height,
         width=width,
         hovermode="x unified",
-        hoverlabel=dict(namelength=-1),  # Show all trace names in hover
-        legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=1.02,
-        ),
+        hoverlabel={"namelength": -1},  # Show all trace names in hover
+        legend={
+            "yanchor": "top",
+            "y": 0.99,
+            "xanchor": "left",
+            "x": 1.02,
+        },
         template="plotly_white",
     )
 
@@ -314,7 +313,7 @@ def plot_water_time_series_jrc_interactive(
                 y=[],
                 name="Normalized",
                 mode="lines",
-                line=dict(color="gray", width=1, dash="dot"),
+                line={"color": "gray", "width": 1, "dash": "dot"},
                 showlegend=False,
             ),
             secondary_y=True,
@@ -334,7 +333,7 @@ def plot_water_time_series_jrc_interactive(
                     x=[first_break, first_break],
                     y=[min(y_vals), max(y_vals)],
                     mode="lines",
-                    line=dict(width=3, dash="dash", color="black"),
+                    line={"width": 3, "dash": "dash", "color": "black"},
                     name="Breakpoint",
                     showlegend=True,
                     hoverinfo="x",
@@ -398,8 +397,8 @@ def create_comparison_plot(
                 y=data["value"],
                 name=var,
                 mode="lines+markers",
-                line=dict(color=color, width=2),
-                marker=dict(size=6),
+                line={"color": color, "width": 2},
+                marker={"size": 6},
                 legendgroup="dw",
                 showlegend=True,
             ),
@@ -421,8 +420,8 @@ def create_comparison_plot(
                 y=df_jrc[var],
                 name=display_name,
                 mode="lines+markers",
-                line=dict(color=color, width=2),
-                marker=dict(size=6),
+                line={"color": color, "width": 2},
+                marker={"size": 6},
                 legendgroup="jrc",
                 showlegend=True,
             ),
@@ -431,15 +430,15 @@ def create_comparison_plot(
         )
 
     fig.update_layout(
-        title=dict(text=f"Lake {lake_id} - Comparison", x=0.5),
+        title={"text": f"Lake {lake_id} - Comparison", "x": 0.5},
         height=height,
         hovermode="x unified",
-        legend=dict(
-            yanchor="top",
-            y=0.99,
-            xanchor="left",
-            x=1.02,
-        ),
+        legend={
+            "yanchor": "top",
+            "y": 0.99,
+            "xanchor": "left",
+            "x": 1.02,
+        },
         template="plotly_white",
     )
 
