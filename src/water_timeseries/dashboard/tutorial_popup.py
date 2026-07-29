@@ -52,7 +52,7 @@ _CLOSE_BUTTON_HTML = """
             const url = window.parent.performance
                 .getEntriesByType("resource")
                 .map((e) => e.name)
-                .find((n) => /source-?sans/i.test(n) && !/italic/i.test(n) && /\.woff2?($|\?)/i.test(n));
+                .find((n) => /source-?sans/i.test(n) && !/italic/i.test(n) && /\\.woff2?($|\\?)/i.test(n));
             if (!url) return;
             const font = new FontFace("Source Sans", 'url("' + url + '")', { weight: "100 900" });
             font.load().then(() => document.fonts.add(font));
