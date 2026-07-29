@@ -71,7 +71,7 @@ def setup_logging(logfile: str | None = None, verbose: int = 0):
                 timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
                 logfile = f"{subcommand}_{timestamp}.log"
                 print(f"Using default logfile: {logfile}")  # Use print to avoid circular logging
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         # If no logfile set, log to console only
         if logfile is None:
@@ -888,7 +888,7 @@ def breakpoint_analysis_nrt(
                 **shared_kwargs,
             )
             total_drained += len(breaks_df)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
             logger.warning(f"Failed for {month_str}: {exc}")
             failed += 1
 
@@ -926,7 +926,7 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
         try:
             df = pd.read_parquet(file_path)
             dfs.append(df)
-        except Exception as e:
+        except (OSError, ValueError) as e:
             logger.warning(f"Failed to read {file_path}: {e}")
 
     if not dfs:

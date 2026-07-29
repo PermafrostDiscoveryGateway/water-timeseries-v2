@@ -70,7 +70,7 @@ def load_dataset(
     if downloaded_data is not None:
         try:
             return dataset_class(downloaded_data), True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             st.error(f"Error processing downloaded {dataset_type.upper()} data: {e}")
             return None, False
 
@@ -82,7 +82,7 @@ def load_dataset(
     try:
         ds = load_xarray_dataset(str(zarr_path))
         return dataset_class(ds), True
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         st.error(f"Error loading {dataset_type.upper()} time series data: {e}")
         return None, False
 
@@ -164,7 +164,7 @@ def plot_time_series_data(
 
         return True
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         st.error(f"Error plotting {dataset_type.upper()} time series: {e}")
         return False
     return id_geohash in dataset.object_ids_
@@ -244,7 +244,7 @@ def download_dataset_if_needed(
                     merged_dataset = dataset_obj.merge(new_dataset, how="id_geohash")
                     st.session_state[f"downloaded_ds{dataset_type}"] = new_data
                     return new_data, merged_dataset, True
-                except Exception as merge_e:
+                except Exception as merge_e:  # noqa: BLE001
                     st.sidebar.warning(f"Could not merge {dataset_type.upper()} data: {merge_e}")
 
             st.session_state[f"downloaded_ds{dataset_type}"] = new_data
@@ -252,7 +252,7 @@ def download_dataset_if_needed(
 
         return downloaded_data, dataset_obj, False
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         st.error(f"Error downloading {dataset_type.upper()} data: {e}")
         return downloaded_data, dataset_obj, False
 
@@ -303,7 +303,7 @@ def create_timelapse_handler(
             overwrite_exists=False,
         )
         return Path(gif_path) if gif_path else None
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         st.error(f"Error creating {source.upper()} timelapse: {e}")
         return None
 

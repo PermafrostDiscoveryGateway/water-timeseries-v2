@@ -23,7 +23,7 @@ def load_config(config_path: Path | None, logger) -> dict:
                 return yaml.safe_load(f) or {}
             elif config_path.suffix == ".json":
                 return json.load(f)
-    except Exception as e:
+    except (OSError, ValueError, yaml.YAMLError) as e:
         logger.warning(f"Failed to load config file {config_path}: {e}")
     return {}
 

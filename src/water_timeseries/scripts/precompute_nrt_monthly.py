@@ -143,7 +143,7 @@ def _run_nrt_for_month(
                 )
                 if result is not None and not result.empty:
                     chunk_results.append(result)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "%s chunk [%d:%d] failed: %s",
                     month_ts.strftime("%Y-%m"),

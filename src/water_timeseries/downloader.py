@@ -171,7 +171,7 @@ class EarthEngineDownloader:
             self.ee_is_initialized = ee.data is not None and hasattr(ee.data, "getInfo")
             if not self.ee_is_initialized:
                 self._log_warning("Earth Engine may not be properly initialized")
-        except Exception:
+        except AttributeError:
             self.ee_is_initialized = False
             self._log_warning("Earth Engine initialization check failed")
         return self.ee_is_initialized
@@ -340,7 +340,7 @@ class EarthEngineDownloader:
                 # Create masks for land cover classes
                 im_classes = create_dw_classes_mask(ee.Image(im))
                 imlist.append(im_classes)
-            except Exception:
+            except Exception:  # noqa: BLE001
                 # Skip dates with errors
                 continue
 

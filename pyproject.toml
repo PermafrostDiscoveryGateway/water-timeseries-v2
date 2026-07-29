@@ -115,9 +115,9 @@ exclude = [".venv", "build", "dist", "__pycache__"]
 
 [tool.ruff.lint]
 extend-select = ["I"]
-# BLE001: broad except clauses are deliberate resilience in the dashboard/pipeline code.
+# BLE001 is enforced: deliberate broad catches carry a per-line noqa instead.
 # S110/S112: the silent handlers guard optional cleanup where logging adds noise.
-extend-ignore = ["E203", "BLE001", "S110", "S112"]
+extend-ignore = ["E203", "S110", "S112"]
 
 [tool.pytest.ini_options]
 # Pytest configuration for water-timeseries

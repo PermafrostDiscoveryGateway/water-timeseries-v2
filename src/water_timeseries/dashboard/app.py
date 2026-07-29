@@ -43,7 +43,7 @@ def setup_logging(logfile: str | None = None, verbose: int = 0):
                 subcommand = sys.argv[1].replace("-", "_")
                 timestamp = datetime.now().astimezone().strftime("%Y%m%d_%H%M%S")
                 logfile = f"{subcommand}_{timestamp}.log"
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     # Add console output with nice formatting

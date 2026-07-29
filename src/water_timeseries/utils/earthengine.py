@@ -177,7 +177,7 @@ def calc_monthly_dw(
             warnings.warn(f"No data available for start_date: {start_date.getInfo()}")
             return None
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001
         warnings.warn(f"No data available for start_date: {start_date.getInfo()}")
         return None
 
