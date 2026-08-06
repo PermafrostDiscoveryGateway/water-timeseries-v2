@@ -1,10 +1,15 @@
-# CONFIG File for PMTILES config - near-real-time lake drainage
-# Matches the production NRT config; use via DASHBOARD_CONFIG=configs/dashboard_nrt.yaml.
+# CONFIG File for PMTILES config - near-real-time lake drainage, pan-arctic
+# Use via DASHBOARD_CONFIG=configs/dashboard_nrt.yaml.
 
 ee_project: pdg-project-406720
 
-vector_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_subset.parquet
-pmtiles_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_subset.pmtiles
+# Repartitioned copy (sorted by id_geohash, small row groups) for fast per-lake reads.
+# Generate it with:
+#   uv run water-timeseries repartition-parquet \
+#     data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3.parquet \
+#     data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3_repartitioned.parquet
+vector_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3_repartitioned.parquet
+pmtiles_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3.pmtiles
 
 # Zarr copy of the dataset production reads as .nc; both come from
 # gs://pdg-storage-default/workflows_optimization/lake_change_detection/
@@ -18,4 +23,4 @@ dw_start_month: 6
 dw_end_month: 9
 
 viz_configuration: nrt_drainage
-logfile: logs/dashboard_nrt_subset.log
+logfile: logs/dashboard_nrt_panarctic.log
