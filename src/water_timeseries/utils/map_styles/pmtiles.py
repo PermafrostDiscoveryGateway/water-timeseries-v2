@@ -91,116 +91,116 @@ def get_style_pmtiles_drainage_year(hide_stable_lakes: bool = False) -> tuple:
 
 
 def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
-    # Helper expressions for NaN (empty string or actual NaN) vs zero
+    # Helper expressions for NaN vs zero
     is_nan = [
         "any",
         ["==", ["to-string", ["get", "drainage_confidence"]], ""],
         ["==", ["to-string", ["get", "drainage_confidence"]], "NaN"],
     ]
 
+    # UPDATED COLORS:
+    # 1: Saturated Gold (#f9c80e) - Much clearer than the previous pale gold.
+    # 2: Deep Amber (#e67e22) - Distinctly darker and more orange.
+    # 3: Strong Red (#d73027) - High-risk anchor.
     fill_color = [
         "case",
         is_nan,
-        "#aaaaaa",  # grey for NaN
+        "#9e9e9e",  # Medium grey for NaN (Visible but neutral)
         [
             "interpolate",
             ["linear"],
             ["to-number", ["get", "drainage_confidence"]],
             1,
-            "#3b6a8c",
+            "#f9c80e",
             2,
-            "#9eb45c",
+            "#e67e22",
             3,
-            "#f0d6a8",
+            "#d73027",
         ],
     ]
 
-    # fill_color_no_date = "#ADD8E6"
     if hide_stable_lakes:
         fill_opacity = [
             "case",
             is_nan,
-            0,  # completely hide NaN
+            0,  # Hide NaN
             ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            0,  # completely hide stable lakes (confidence 0)
-            0.2,
+            0,  # Hide stable
+            0.2,  # Show drained lakes
         ]
     else:
         fill_opacity = [
             "case",
             is_nan,
-            0,  # completely transparent fill for NaN
+            0.5,  # Show NaN at medium opacity
             ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            0.05,  # lower opacity for stable lakes (confidence 0)
-            0.2,
+            0.15,  # Stable lakes (Very faint)
+            0.2,  # Drained lakes
         ]
 
     line_color = [
         "case",
         is_nan,
-        "#888888",  # grey for NaN
+        "#9e9e9e",  # Medium grey for NaN
         ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-        "#aaaaaa",  # light grey for confidence 0 (stable lakes)
+        "#bdbdbd",  # Light grey for stable lakes (Distinct from NaN)
         [
             "interpolate",
             ["linear"],
             ["to-number", ["get", "drainage_confidence"]],
             1,
-            "#3b6a8c",
+            "#f9c80e",
             2,
-            "#4b9379",
+            "#e67e22",
             3,
-            "#fbf7b3",
+            "#d73027",
         ],
     ]
-    # line opacity: depends on hide_stable_lakes
+
     if hide_stable_lakes:
         line_opacity = [
             "case",
             is_nan,
-            0,  # hide NaN
+            0,  # Hide NaN line
             ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            0,  # hide confidence 0
-            1,
+            0,  # Hide stable line
+            1,  # Show drained lake lines
         ]
-    else:
-        line_opacity = [
-            "case",
-            is_nan,
-            0.5,  # lower opacity for NaN
-            1,
-        ]
-    # switch to disable non drained lakes (stable lakes) from being displayed on the map
-    # line width: 0.5 for NaN, 1 for confidence 0, 1 for 1-2, 3 for 3
-    if hide_stable_lakes:
         line_width = [
             "case",
             is_nan,
-            0,
+            0,  # Width 0 for NaN
             ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            0,
+            0,  # Width 0 for stable
             [
                 "case",
                 ["==", ["to-number", ["get", "drainage_confidence"]], 1],
                 1,
                 ["==", ["to-number", ["get", "drainage_confidence"]], 2],
                 1,
-                3,  # confidence 3
+                3,  # Width 3 for confidence 3
             ],
         ]
     else:
+        line_opacity = [
+            "case",
+            is_nan,
+            0.5,  # Show NaN lines
+            1,  # Show all others at full opacity
+        ]
         line_width = [
             "case",
             is_nan,
-            0.5,  # width 0.5 for NaN
+            0.5,  # Width 0.5 for NaN
             ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            1,  # width 1 for confidence 0
+            1,  # Width 1 for stable
             ["==", ["to-number", ["get", "drainage_confidence"]], 1],
-            1,
+            1,  # Width 1 for confidence 1
             ["==", ["to-number", ["get", "drainage_confidence"]], 2],
-            1,
-            3,  # confidence 3
+            1,  # Width 1 for confidence 2
+            3,  # Width 3 for confidence 3
         ]
+
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
