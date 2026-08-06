@@ -1,0 +1,20 @@
+# CONFIG File for PMTILES config - historical breakpoint across the arctic
+# Default config for docker compose; matches the production historical config.
+
+ee_project: pdg-project-406720
+
+vector_file: data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet
+pmtiles_file: data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.pmtiles
+
+dw_dataset_file: data/lakes_dw_V2d_2016-2026-06_gapfilled_chunked.nc
+# or from here gs://pdg-storage-default/workflows_optimization/lake_change_detection/lakes_dw_V2d_2016-2026-06_gapfilled_chunked.zarr
+
+precomputed_nrt_dir: data/DW_historicalbp_simple_merged_breaks_nogeoms_v4
+
+dw_start_year: 2017
+dw_end_year: 2026
+dw_start_month: 6
+dw_end_month: 9
+
+viz_configuration: drainage_year
+logfile: logs/dashboard_historical_panarctic.log
