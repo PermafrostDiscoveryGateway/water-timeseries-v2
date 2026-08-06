@@ -5,9 +5,7 @@ import pandas as pd
 import xarray as xr
 
 
-def calculate_water_area_after(
-    df_water, break_date_after, water_column: str, stats=None
-):
+def calculate_water_area_after(df_water, break_date_after, water_column: str, stats=None):
     if stats is None:
         stats = ["mean", "median", "std", "min", "max"]
     after = df_water.loc[break_date_after:][water_column].agg(stats)

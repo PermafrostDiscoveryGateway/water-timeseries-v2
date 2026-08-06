@@ -1,6 +1,5 @@
 """Tutorial popup helper for map_viewer dashboard."""
 
-
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -13,7 +12,7 @@ import streamlit.components.v1 as components
 # tutorial_dialog_shown session flag already prevents the dialog from
 # reopening on later reruns. Falls back to an Escape keypress if Streamlit's
 # dialog DOM changes.
-_CLOSE_BUTTON_HTML = """
+_CLOSE_BUTTON_HTML = r"""
 <style>
     /* Mirrors the computed styles of st.button (stBaseButton-secondary) under
        the ADC theme in .streamlit/config.toml - update if the theme changes. */

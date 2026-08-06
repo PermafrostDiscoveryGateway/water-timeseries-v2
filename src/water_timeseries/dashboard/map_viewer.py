@@ -257,9 +257,7 @@ class MapViewer:
 
         # 'z' is the last character of the geohash base32 alphabet, so padding
         # with 'z' gives an inclusive upper bound for each prefix range.
-        filters = [
-            [(self.id_column, ">=", p), (self.id_column, "<=", p + "z" * 8)] for p in sorted(prefixes)
-        ]
+        filters = [[(self.id_column, ">=", p), (self.id_column, "<=", p + "z" * 8)] for p in sorted(prefixes)]
         try:
             candidates = gpd.read_parquet(self._parquet_path, filters=filters)
         except Exception as e:
@@ -1278,7 +1276,11 @@ def create_app(
                 # Sync dropdown with heatmap click: consume the one-shot flag and write
                 # directly to the selectbox session-state key so Streamlit picks it up.
                 heatmap_pick = st.session_state.get("heatmap_selected_cell")
-                if st.session_state.pop("heatmap_sync_dropdown", False) and heatmap_pick and heatmap_pick in selectable_months:
+                if (
+                    st.session_state.pop("heatmap_sync_dropdown", False)
+                    and heatmap_pick
+                    and heatmap_pick in selectable_months
+                ):
                     st.session_state["nrt_month_selector"] = month_labels[selectable_months.index(heatmap_pick)]
 
                 selected_analysis_month = heatmap_pick
@@ -1710,7 +1712,9 @@ def create_app(
 
                     else:
                         one_year_ago = today - timedelta(days=366)
-                        spinner_text = "Pulling most recent satellite image + one year ago... This may take a few seconds."
+                        spinner_text = (
+                            "Pulling most recent satellite image + one year ago... This may take a few seconds."
+                        )
                         viz_dates = [one_year_ago, today]
 
                     # Day-precision strings keep the Streamlit cache keys stable across
