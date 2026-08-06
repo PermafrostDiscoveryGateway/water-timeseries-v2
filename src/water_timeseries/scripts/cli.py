@@ -17,19 +17,11 @@ import pandas as pd
 import yaml
 from loguru import logger
 
-# Import pipeline and utilities from break_pipeline
-from water_timeseries.scripts.break_pipeline import (
-    BreakpointPipeline,
-    load_config,
-    merge_config_with_args,
-)
-
-# Import plotting function from plot_pipeline
-from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
-
-# Import NRT pre-computation
-from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
+# Analysis modules (break_pipeline, plot_pipeline, precompute_nrt_monthly) are
+# imported lazily inside their subcommands: they pull in Rbeast's C extension,
+# which is unavailable on some platforms, and must not block e.g. `dashboard`.
 from water_timeseries.scripts.repartition_parquet import repartition_parquet as repartition_parquet_file
+from water_timeseries.utils.cli import load_config, merge_config_with_args
 from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_archive
 from water_timeseries.utils.pmtiles_build import (
     build_pmtiles_drainage_year,
@@ -143,7 +135,7 @@ viz_configuration: The visualization configuration name for the map viewer.
         water-timeseries dashboard --config-file configs/dashboard_config.yaml
     """
     # Load config file if provided"
-    config_dict = load_config(config_file) if config_file else {}
+    config_dict = load_config(config_file, logger) if config_file else {}
 
     # Debug: Log loaded config
     logger.debug(f"Loaded config from {config_file}: {config_dict}")
@@ -273,7 +265,7 @@ def build_pmtiles(
         water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
     """
     # Load config file if provided
-    config_dict = load_config(config_file) if config_file else {}
+    config_dict = load_config(config_file, logger) if config_file else {}
 
     # Merge config with CLI args
     config_dict = merge_config_with_args(
@@ -491,7 +483,7 @@ def breakpoint_analysis_historical(
             --bbox-west 100 --bbox-south 20 --bbox-east 110 --bbox-north 30
     """
     # Load config file if provided
-    config_dict = load_config(config_file) if config_file else {}
+    config_dict = load_config(config_file, logger) if config_file else {}
 
     # Merge config with CLI args (CLI takes priority)
     config_dict = merge_config_with_args(
@@ -531,6 +523,8 @@ def breakpoint_analysis_historical(
     logfile = setup_logging(logfile=logfile_val, verbose=verbose_val)
 
     # Run the pipeline
+    from water_timeseries.scripts.break_pipeline import BreakpointPipeline
+
     pipeline = BreakpointPipeline(
         water_dataset_file=water_dataset_file,
         output_file=output_file,
@@ -604,7 +598,7 @@ def plot_timeseries(
         water-timeseries plot-timeseries --config-file configs/plot_config.yaml
     """
     # Load config file if provided
-    config_dict = load_config(config_file) if config_file else {}
+    config_dict = load_config(config_file, logger) if config_file else {}
 
     # Merge config with CLI args (CLI takes priority)
     # Note: show is handled separately since it's a bool
@@ -644,7 +638,8 @@ def plot_timeseries(
         f"show={show}"
     )
 
-    # Use the imported function
+    from water_timeseries.scripts.plot_pipeline import plot_lake_timeseries
+
     plot_lake_timeseries(
         water_dataset_file=water_dataset_file,
         lake_id=lake_id,
@@ -759,6 +754,8 @@ def breakpoint_analysis_nrt(
             --output-dir precomputed/nrt \\
             --no-resume
     """
+    from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
+
     logfile = setup_logging(logfile=logfile, verbose=verbose)
 
     # --- Validate mode selection -------------------------------------------
