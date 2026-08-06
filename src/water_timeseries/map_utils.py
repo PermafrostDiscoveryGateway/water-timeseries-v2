@@ -13,12 +13,14 @@ from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
     get_style_pmtiles_generic_water,
+    get_style_pmtiles_nrt_confidence_featurestate,
     get_style_pmtiles_nrt_drainage,
 )
 from water_timeseries.utils.visualization import (
     get_legend_html_date_drainage_year,
     get_legend_html_net_change,
     get_legend_html_nrt_drainage,
+    get_legend_html_nrt_drainage_magnitude,
 )
 
 
@@ -84,6 +86,7 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     autoPanPadding: [50, 50]
     });
     var columnAliases_{{ this.get_name() }} = {{ this.column_aliases_json }};
+    var propertyOverrides_{{ this.get_name() }} = {{ this.property_overrides_json }};
     var filterLayers_{{ this.get_name() }} = {{ this.filter_layers_json }};
     var minZoom_{{ this.get_name() }} = {{ this.min_zoom_json }};
     var maxZoom_{{ this.get_name() }} = {{ this.max_zoom_json }};
@@ -109,10 +112,13 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     const {lng, lat}  = e.lngLat;
     const coordinates = [lng, lat]
     const aliases = columnAliases_{{ this.get_name() }};
-    const html = features.map(f=>`
+    const overrides = propertyOverrides_{{ this.get_name() }};
+    const html = features.map(f=>{
+    const props = Object.assign({}, f.properties, overrides[f.properties["id_geohash"]] || {});
+    return `
     <div class="feature-row">
     <table>
-    ${Object.entries(f.properties).map(([key, value]) => {
+    ${Object.entries(props).map(([key, value]) => {
     let displayKey = aliases[key] || key;
     let displayVal = value;
     if (typeof value === 'number') {
@@ -124,7 +130,8 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     }).join("")}
     </table>
     </div>
-    `).join("")
+    `;
+    }).join("")
     if(features.length){
     popup.setLngLat(e.lngLat).setHTML(html).addTo(mlMap);
     } else {
@@ -145,7 +152,16 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     """
     )
 
-    def __init__(self, name=None, column_aliases=None, filter_layers=None, min_zoom=None, max_zoom=None, **kwargs):
+    def __init__(
+        self,
+        name=None,
+        column_aliases=None,
+        filter_layers=None,
+        min_zoom=None,
+        max_zoom=None,
+        property_overrides=None,
+        **kwargs,
+    ):
         # Pop custom kwargs before passing to parent
         kwargs.pop("column_aliases", None)
         kwargs.pop("filter_layers", None)
@@ -157,6 +173,16 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
         self.filter_layers = filter_layers if filter_layers else []
         self.min_zoom = min_zoom
         self.max_zoom = max_zoom
+        # Per-feature tooltip content overrides, keyed by id_geohash: the
+        # matching feature's tile-baked properties are merged with (and
+        # superseded by) the given key/value pairs at hover time.
+        self.property_overrides = property_overrides if property_overrides else {}
+
+    @property
+    def property_overrides_json(self):
+        import json
+
+        return json.dumps(self.property_overrides)
 
     @property
     def column_aliases_json(self):
@@ -183,6 +209,73 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
         return json.dumps(self.max_zoom)
 
 
+class PMTilesMapLibreFeatureState(branca.element.MacroElement):
+    """Push per-feature ``feature-state`` values into a PMTiles MapLibre layer.
+
+    Must be added as a child of a ``PMTilesMapLibreLayer`` so that
+    ``this._parent`` resolves to the layer (same wiring as
+    ``PMTilesMapLibreTooltipWithRounding``), and the layer's source must
+    declare ``promoteId`` so features have a stable string id to address.
+
+    ``state_by_id`` maps a feature id (``id_geohash``) to the state object to
+    set for it, e.g. ``{"b7g0abc12345": {"confidence": 2}}``. Any state left
+    over from a previous push is cleared first, so features absent from the
+    current mapping fall back to the paint expression's no-state default.
+    """
+
+    _template = branca.element.Template(
+        """
+    {% macro script(this, kwargs) -%}
+    var stateById_{{ this.get_name() }} = {{ this.state_by_id_json }};
+    function applyFeatureState_{{ this.get_name() }}(maplibreLayer) {
+    var mlMap = maplibreLayer.getMaplibreMap();
+    function pushState() {
+    mlMap.removeFeatureState({source: {{ this.source_json }}, sourceLayer: {{ this.source_layer_json }}});
+    for (const [id, state] of Object.entries(stateById_{{ this.get_name() }})) {
+    mlMap.setFeatureState(
+    {source: {{ this.source_json }}, sourceLayer: {{ this.source_layer_json }}, id: id},
+    state
+    );
+    }
+    }
+    if (mlMap.isStyleLoaded()) { pushState(); } else { mlMap.on("load", pushState); }
+    }
+    // maplibre map object
+    applyFeatureState_{{ this.get_name() }}({{ this._parent.get_name() }});
+    // leaflet map object
+    {{ this._parent._parent.get_name() }}.on("layeradd", (e) => {
+    applyFeatureState_{{ this.get_name() }}({{ this._parent.get_name() }});
+    });
+    {%- endmacro %}
+    """
+    )
+
+    def __init__(self, state_by_id, source="lakes_pmtiles", source_layer="lakes", name=None, **kwargs):
+        super().__init__(**kwargs)
+        self._name = name if name else "PMTilesFeatureState"
+        self.state_by_id = state_by_id if state_by_id else {}
+        self.source = source
+        self.source_layer = source_layer
+
+    @property
+    def state_by_id_json(self):
+        import json
+
+        return json.dumps(self.state_by_id)
+
+    @property
+    def source_json(self):
+        import json
+
+        return json.dumps(self.source)
+
+    @property
+    def source_layer_json(self):
+        import json
+
+        return json.dumps(self.source_layer)
+
+
 def build_pmtiles_map(
     pmtiles_url: str,
     center: tuple[float, float] = (70.0, -140.0),
@@ -194,8 +287,25 @@ def build_pmtiles_map(
     min_zoom=4,
     max_zoom=15,
     hide_stable_lakes: bool = False,
+    nrt_confidence_by_id: dict[str, int | None] | None = None,
+    nrt_tooltip_overrides: dict[str, dict] | None = None,
+    nrt_magnitude_by_id: dict[str, float] | None = None,
 ) -> folium.Map:
-    """Return a Folium map with a PMTiles vector layer for lake polygons."""
+    """Return a Folium map with a PMTiles vector layer for lake polygons.
+
+    When ``nrt_confidence_by_id`` is given (``nrt_drainage`` viz only), the
+    lakes are colored by that per-month mapping of ``id_geohash`` to drainage
+    confidence (1-3, or ``None`` for "drained, confidence unknown") instead of
+    the tile-baked ``drainage_confidence`` property. The values are delivered
+    via MapLibre ``feature-state``, so the tiles and paint expressions stay
+    static across month switches. ``nrt_tooltip_overrides`` optionally swaps
+    hovered features' tooltip content by ``id_geohash`` to match.
+
+    ``nrt_magnitude_by_id`` carries ``water_change_perc`` (relative water
+    loss, negative) for unknown-confidence lakes: those render as a red
+    intensity gradient by loss magnitude instead of flat red, and the map
+    legend switches to the gradient variant.
+    """
 
     m = leafmap.Map(
         location=center,
@@ -271,14 +381,30 @@ def build_pmtiles_map(
             "water_predicted_ci_absolute": "Predicted water area range [ha]",
             "water_residual_absolute": "Difference of lake area from prediction [ha]",
             "drainage_confidence": "Confidence of drainage detection [0 (low) to 3 (high)]",
+            "water_change_ha": "Change of water area [ha]",
+            "water_change_perc": "Change of water area [%]",
+            "pre_break_median": "Lake area before break [ha]",
+            "post_break_median": "Lake area after break [ha]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(
-            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
+            column_aliases=aliases,
+            filter_layers=["lakes-fill"],
+            min_zoom=8,
+            max_zoom=14,
+            property_overrides=nrt_tooltip_overrides,
         )
-        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_drainage(
-            hide_stable_lakes=hide_stable_lakes
-        )
-        legend = get_legend_html_nrt_drainage()
+        if nrt_confidence_by_id is not None:
+            # Monthly overlay: static feature-state paint, values pushed at
+            # runtime by PMTilesMapLibreFeatureState (added below).
+            fill_color, fill_opacity, line_color, line_width, line_opacity = (
+                get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes=hide_stable_lakes)
+            )
+        else:
+            # Convert to number to handle string values in PMTiles
+            fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_drainage(
+                hide_stable_lakes=hide_stable_lakes
+            )
+        legend = get_legend_html_nrt_drainage_magnitude() if nrt_magnitude_by_id else get_legend_html_nrt_drainage()
 
         tile_layer_darkmatter.add_to(m)
         tcvis_tile_layer.add_to(m)
@@ -364,6 +490,9 @@ def build_pmtiles_map(
                 "lakes_pmtiles": {
                     "type": "vector",
                     "url": "pmtiles://" + pmtiles_url,
+                    # Stable per-feature identity for setFeatureState, consistent
+                    # across zoom levels/tiles.
+                    "promoteId": "id_geohash",
                 }
             },
             "layers": [lakes_fill_layer, lakes_line_layer],
@@ -374,6 +503,46 @@ def build_pmtiles_map(
     # --- FIXED LINE BELOW ---
     lake_layer.add_to(m)
     # ------------------------
+
+    if viz_configuration_name == "nrt_drainage" and not drained_ids and nrt_confidence_by_id is not None:
+        # None means "drained, confidence unknown" — encoded as 0 (rendered as
+        # a red gradient by water_change_perc when available, else mid red).
+        state_by_id = {
+            gid: {"confidence": 0 if conf is None else int(conf)} for gid, conf in nrt_confidence_by_id.items()
+        }
+        for gid, perc in (nrt_magnitude_by_id or {}).items():
+            if gid in state_by_id:
+                state_by_id[gid]["water_change_perc"] = perc
+        PMTilesMapLibreFeatureState(
+            state_by_id=state_by_id,
+            source="lakes_pmtiles",
+            source_layer=source_layer,
+        ).add_to(lake_layer)
+
+        # The flagged lakes are a few hundred small polygons scattered across
+        # the whole Arctic — the tiles drop them at low zoom, so without
+        # markers they are undiscoverable by panning (same problem the
+        # Historical Drainage overlay solves with its marker group).
+        if nrt_confidence_by_id:
+            month_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
+            for gid in nrt_confidence_by_id:
+                try:
+                    lat, lon = pygeohash.decode(gid)
+                except ValueError:
+                    continue
+                perc = (nrt_magnitude_by_id or {}).get(gid)
+                marker_tooltip = f"{gid}" + (f" · {perc}% water loss" if perc is not None else "")
+                folium.CircleMarker(
+                    location=[lat, lon],
+                    radius=6,
+                    color="darkred",
+                    weight=1,
+                    fill=True,
+                    fill_color="red",
+                    fill_opacity=0.5,
+                    tooltip=marker_tooltip,
+                ).add_to(month_markers)
+            month_markers.add_to(m)
 
     if drained_ids:
         drained_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)

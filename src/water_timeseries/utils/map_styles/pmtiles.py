@@ -204,6 +204,103 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
+def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = False) -> tuple:
+    """Static paint for the NRT monthly drainage overlay driven by feature-state.
+
+    The per-month, per-lake confidence values are pushed into the map at
+    runtime via ``map.setFeatureState`` (see ``PMTilesMapLibreFeatureState``
+    in ``map_utils.py``), so this paint tuple never changes between months —
+    it reads ``["feature-state", "confidence"]`` instead of a baked tile
+    property. Features with no state set are stable lakes for the selected
+    month. Confidence 0 means "drained, confidence unknown" (no real
+    ``drainage_confidence`` available for this month) and is rendered as a
+    red intensity gradient by the ``water_change_perc`` feature-state value
+    (relative water loss, -25 to -100 in the production breaks data); when
+    that value is absent too, it falls back to a mid-range red.
+    """
+    conf = ["coalesce", ["feature-state", "confidence"], -1]
+    unknown_conf_fill = [
+        "interpolate",
+        ["linear"],
+        ["coalesce", ["feature-state", "water_change_perc"], -70],
+        -100,
+        "#67000d",  # near-total water loss
+        -75,
+        "#de2d26",
+        -50,
+        "#fb6a4a",
+        -25,
+        "#fcae91",  # smallest loss that still counts as drained
+    ]
+
+    fill_color = [
+        "match",
+        conf,
+        0,
+        unknown_conf_fill,
+        1,
+        "#3b6a8c",
+        2,
+        "#9eb45c",
+        3,
+        "#f0d6a8",
+        "#aaaaaa",  # stable lake (no state set this month)
+    ]
+    fill_opacity = [
+        "match",
+        conf,
+        0,
+        0.85,
+        1,
+        0.85,
+        2,
+        0.85,
+        3,
+        0.85,
+        0 if hide_stable_lakes else 0.05,
+    ]
+    line_color = [
+        "match",
+        conf,
+        0,
+        "#7f0000",  # dark red border for unknown-confidence drained
+        1,
+        "#3b6a8c",
+        2,
+        "#4b9379",
+        3,
+        "#fbf7b3",
+        "#aaaaaa",
+    ]
+    line_width = [
+        "match",
+        conf,
+        0,
+        2.0,
+        1,
+        1,
+        2,
+        1,
+        3,
+        3,
+        0 if hide_stable_lakes else 0.5,
+    ]
+    line_opacity = [
+        "match",
+        conf,
+        0,
+        1,
+        1,
+        1,
+        2,
+        1,
+        3,
+        1,
+        0 if hide_stable_lakes else 0.5,
+    ]
+    return fill_color, fill_opacity, line_color, line_width, line_opacity
+
+
 def get_style_pmtiles_generic_water() -> tuple:
     fill_color = "#ADD8E6"
     fill_opacity = 0.7
