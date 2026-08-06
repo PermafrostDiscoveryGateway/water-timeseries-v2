@@ -28,15 +28,14 @@ def initialize_earth_engine(project: str | None = None, token_name: str = "EARTH
         project = os.environ.get("EE_PROJECT") or None
     if project == "":
         project = None
-    
+
     key_file = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") or None
-    
+
     # Service account mode takes priority
     if key_file is not None:
         try:
             credentials, _project_id = google.auth.default(
-                scopes=["https://www.googleapis.com/auth/earthengine", 
-                        "https://www.googleapis.com/auth/cloud-platform"]
+                scopes=["https://www.googleapis.com/auth/earthengine", "https://www.googleapis.com/auth/cloud-platform"]
             )
             ee.Initialize(credentials, project=project)
             logger.info("Successfully authenticated with Earth Engine Service Account!")
@@ -44,21 +43,22 @@ def initialize_earth_engine(project: str | None = None, token_name: str = "EARTH
         except (google.auth.exceptions.GoogleAuthError, ValueError) as e:
             logger.error(f"Failed to authenticate with service account: {e}")
             raise
-    
+
     # OAuth/persisted credentials mode
     # geemap >= 0.37 moved ``ee_initialize`` to ``geemap.coreutils``; older releases
     # expose it on the top-level ``geemap`` module.
     try:
         from geemap.coreutils import ee_initialize as _geemap_ee_initialize
+
         _geemap_ee_initialize(token_name=token_name, project=project)
         return
     except (ImportError, AttributeError):
         pass
-    
+
     if hasattr(geemap, "ee_initialize"):
         geemap.ee_initialize(token_name=token_name, project=project)
         return
-    
+
     # Fall back to persisted credentials
     ee.Initialize(project=project)
 

@@ -641,7 +641,9 @@ class NRTBreakpoint(BreakpointMethod):
 
         return ds_analysis_filtered, ds_historical_filtered, valid_ids, nan_ids
 
-    def _get_ds_stats(self, dataset: xr.Dataset, filter_month: int | None = None, water_column: str = "water") -> pd.DataFrame:
+    def _get_ds_stats(
+        self, dataset: xr.Dataset, filter_month: int | None = None, water_column: str = "water"
+    ) -> pd.DataFrame:
         """Calculate statistics for the given dataset."""
         if filter_month is not None:
             dataset = dataset.where(dataset.date.dt.month == filter_month, drop=True)

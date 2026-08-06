@@ -1,6 +1,5 @@
 """Spatial utilities for working with geospatial data."""
 
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
