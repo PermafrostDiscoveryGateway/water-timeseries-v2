@@ -19,11 +19,11 @@ Example
 .. code-block:: bash
 
     uv run water-timeseries repartition-parquet \\
-        downloads/..._allGeoms_v3.parquet \\
-        downloads/..._allGeoms_v3_repartitioned.parquet \\
+        data/DW_NRT/.../..._allGeoms_v3.parquet \\
+        data/DW_NRT/.../..._allGeoms_v3_repartitioned.parquet \\
         --row-group-size 2000
 
-Afterwards point ``vector_file`` in ``downloads/dashboard_nrt.yaml`` at the
+Afterwards point ``vector_file`` in ``configs/dashboard_nrt.yaml`` at the
 repartitioned file.
 """
 
