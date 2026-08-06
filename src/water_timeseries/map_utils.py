@@ -6,6 +6,7 @@ import folium
 import folium.elements
 import leafmap.foliumap as leafmap
 import pygeohash
+from branca.element import Element  # <--- Added this import
 from folium_pmtiles.vector import PMTilesMapLibreLayer
 
 from water_timeseries.utils.map_styles.pmtiles import (
@@ -202,8 +203,7 @@ def build_pmtiles_map(
         min_zoom=min_zoom,
         max_zoom=max_zoom,
     )
-    # m.clear_layers()
-    # logger.info("running render pmtiles")
+
     # Add background map types
     wms_url = "https://maps.awi.de/services/common/permafrost/ows"
     tcvis_tile_layer = folium.WmsTileLayer(
@@ -236,7 +236,6 @@ def build_pmtiles_map(
         )
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
-        # Use only one basemap to avoid overlap
         tile_layer_darkmatter.add_to(m)
         tile_layer_esriworld.add_to(m)
         tcvis_tile_layer.add_to(m)
@@ -254,13 +253,11 @@ def build_pmtiles_map(
         tooltip = PMTilesMapLibreTooltipWithRounding(
             column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
         )
-        # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year(
             hide_stable_lakes=hide_stable_lakes
         )
         legend = get_legend_html_date_drainage_year()
 
-        # Use only one basemap to avoid overlap
         tile_layer_darkmatter.add_to(m)
         tcvis_tile_layer.add_to(m)
         tile_layer_esriworld.add_to(m)
@@ -278,30 +275,24 @@ def build_pmtiles_map(
         tooltip = PMTilesMapLibreTooltipWithRounding(
             column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
         )
-        # Convert to number to handle string values in PMTiles
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_drainage(
             hide_stable_lakes=hide_stable_lakes
         )
         legend = get_legend_html_nrt_drainage()
 
-        # Use only one basemap to avoid overlap
         tile_layer_darkmatter.add_to(m)
         tcvis_tile_layer.add_to(m)
         tile_layer_esriworld.add_to(m)
 
     else:
         tooltip = PMTilesMapLibreTooltipWithRounding(filter_layers=["lakes-fill"])
-        # Define default paint values
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_generic_water()
-        # legend = get_legend_html_net_change()
         legend = None
-        # Add background tiles
         tile_layer_darkmatter.add_to(m)
         tcvis_tile_layer.add_to(m)
         tile_layer_esriworld.add_to(m)
 
     if drained_ids:
-        # Highlight drained lakes in red, dim others
         fill_color = [
             "match",
             ["get", "id_geohash"],
@@ -331,7 +322,6 @@ def build_pmtiles_map(
             0.5,  # Default border width
         ]
 
-    # Build layer definitions
     lakes_fill_layer = {
         "id": "lakes-fill",
         "source": "lakes_pmtiles",
@@ -354,7 +344,6 @@ def build_pmtiles_map(
         },
     }
 
-    # Apply filter for drainage_year viz to hide stable lakes
     if viz_configuration_name == "drainage_year" and hide_stable_lakes:
         nan_filter = [
             "all",
@@ -365,7 +354,6 @@ def build_pmtiles_map(
         lakes_fill_layer["filter"] = nan_filter
         lakes_line_layer["filter"] = nan_filter
 
-    # setup PMTiles Layer
     lake_layer = PMTilesMapLibreLayer(
         pmtiles_url,
         "Lakes",
@@ -382,14 +370,15 @@ def build_pmtiles_map(
         },
         tooltip=tooltip,
     )
-    m.add_child(lake_layer)
+
+    # --- FIXED LINE BELOW ---
+    lake_layer.add_to(m)
+    # ------------------------
 
     if drained_ids:
         drained_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
         for gid in drained_ids:
-            # Decode the geohash into latitude and longitude coordinates
             lat, lon = pygeohash.decode(gid)
-            # set marker
             marker = folium.CircleMarker(
                 location=[lat, lon],
                 radius=6,
@@ -400,20 +389,36 @@ def build_pmtiles_map(
                 border_width=0.5,
                 icon=folium.Icon(color="red", icon="tint", prefix="fa"),
             )
-            # add to group
             marker.add_to(drained_markers)
 
-        # add marker to map
         drained_markers.add_to(m)
-        # get bounds of layer
         ul, lr = drained_markers.get_bounds()
         print(ul, lr)
-    # -----------------------------------------------
 
-    # m.add_child(lake_layer)
     folium.LayerControl().add_to(m)
 
-    m.get_root().html.add_child(folium.Element(legend))
+    # Injecting the legend
+    if legend is not None:
+        m.get_root().html.add_child(folium.Element(legend))
+
+    # --- UPDATED CSS INJECTION FOR ATTRIBUTION BAR ---
+    style = """
+    <style>
+        .leaflet-control-attribution {
+            font-size: 10px !important;
+            opacity: 0.6;
+            padding: 3px !important;
+            
+            /* Positioning logic */
+            right: 0 !important;         /* Anchor to the right edge */
+            left: auto !important;        /* Ensure it's not stretched left */
+            width: 70% !important;       /* Occupy only 70% of the width */
+            text-align: right !important; /* Align text inside that 70% block to the right */
+        }
+    </style>
+    """
+    m.get_root().html.add_child(Element(style))
+
     return m
 
 
