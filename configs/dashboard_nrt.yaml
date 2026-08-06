@@ -6,7 +6,9 @@ ee_project: pdg-project-406720
 vector_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_subset.parquet
 pmtiles_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_subset.pmtiles
 
-dw_dataset_file: data/lakes_dw_V2d_2016-2026-06_gapfilled_chunked.nc
+# Zarr copy of the dataset production reads as .nc; both come from
+# gs://pdg-storage-default/workflows_optimization/lake_change_detection/
+dw_dataset_file: data/lakes_dw_V2d_2016-2026-06_gapfilled_chunked.zarr
 
 precomputed_nrt_dir: data/DW_historicalbp_simple_merged_breaks_nogeoms_v4
 
