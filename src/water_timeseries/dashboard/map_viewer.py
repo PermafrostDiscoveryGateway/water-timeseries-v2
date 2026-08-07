@@ -1451,36 +1451,39 @@ def create_app(
 
         clicked = viewer.get_clicked_features()
 
+        def _on_clicked_lake_dropdown_change():
+            selected_option = st.session_state.get("clicked_lakes_dropdown")
+            if selected_option and selected_option != st.session_state.get("selected_geohash"):
+                st.session_state.selected_geohash = selected_option
+                st.query_params["selected_lake"] = selected_option
+                clicked_lat, clicked_lon = pygeohash.decode(selected_option)
+                set_desired_view(clicked_lat, clicked_lon, 12)
+                st.session_state["_centered_selection"] = selected_option
+
         # Create a dropdown for selecting from previously clicked features
         if clicked:
             # Reverse to show latest clicked at the top
             options = list(reversed(clicked))
             current = viewer.get_selected_geohash()
 
-            # Set default index based on current selection
-            if current and current in options:
-                default_idx = options.index(current)
-            else:
-                default_idx = 0
+            # Keep the dropdown's own widget state in sync with selections made
+            # elsewhere (map click, clear button) since a keyed widget otherwise
+            # ignores `index` after its first render.
+            if current and current in options and st.session_state.get("clicked_lakes_dropdown") != current:
+                st.session_state["clicked_lakes_dropdown"] = current
 
-            selected_option = st.sidebar.selectbox(
+            default_idx = options.index(current) if current and current in options else 0
+
+            st.sidebar.selectbox(
                 "Previously clicked lakes:",
                 options,
                 index=default_idx,
                 label_visibility="collapsed",
                 help="Select a previously clicked lake",
                 format_func=lambda x: geohash_to_human_readable_name(x),
+                key="clicked_lakes_dropdown",
+                on_change=_on_clicked_lake_dropdown_change,
             )
-
-            # Update selection based on dropdown choice
-            if selected_option != st.session_state.selected_geohash:
-                st.session_state.selected_geohash = selected_option
-                st.query_params["selected_lake"] = selected_option
-                # change map params
-                clicked_lat, clicked_lon = pygeohash.decode(selected_option)
-                set_desired_view(clicked_lat, clicked_lon, 12)
-                st.session_state["_centered_selection"] = selected_option
-                st.rerun()
         else:
             st.sidebar.info("No features clicked yet. Click on a feature to select it.")
 
@@ -1490,6 +1493,9 @@ def create_app(
             st.sidebar.write(
                 f"**Current selection:** {geohash_to_human_readable_name(st.session_state.get('selected_geohash'))}"
             )
+            if st.sidebar.button("✖ Clear selection", key="clear_selected_lake"):
+                viewer.clear_selection()
+                st.rerun()
 
         # Time Series Plot Section
         if current:
