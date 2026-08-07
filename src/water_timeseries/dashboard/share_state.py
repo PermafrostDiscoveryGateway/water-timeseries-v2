@@ -1,0 +1,508 @@
+"""Shareable-link state: sync window state (map view, toggles, selection) with URL query params.
+
+The dashboard keeps its restorable state in readable query params on its own URL:
+
+    ?selected_lake=<geohash>&lat=<f>&lon=<f>&zoom=<f>&drained=1&month=YYYY-MM&hide_stable=1
+
+Params at their default value are removed to keep URLs clean. When the app is
+embedded in an iframe on a cooperating parent site (see ``embed/``), the same
+params are mirrored onto the parent URL with a ``wt_`` prefix via postMessage.
+
+Two additional query params configure embedding behavior but are never part
+of the shareable state (set once by the embedding parent, not echoed back):
+``theme`` (``light``/``dark``, forces the color scheme) and ``show_share``
+(``false`` hides the "Copy link" button, e.g. when the parent offers its own).
+
+Map view state is two-tiered to avoid feedback loops with streamlit-folium:
+
+- Construction keys (``map_center``/``zoom_level``) are baked into the folium
+  HTML; changing them remounts the Leaflet map, so they may only change on full
+  reruns (programmatic jumps, URL restore, live-view adoption).
+- Live keys (``live_map_center``/``live_map_zoom``) mirror what the user
+  actually sees (captured from ``st_folium``'s returned center/zoom on fragment
+  reruns); they feed the URL but never the fragment's map construction.
+"""
+
+import json
+import math
+import os
+import re
+from collections.abc import Mapping
+from dataclasses import dataclass
+from urllib.parse import urlencode, urlsplit, urlunsplit
+
+import pygeohash
+import streamlit as st
+
+# Defaults matching create_app's initial view; params equal to these are elided.
+DEFAULT_LAT = 66.5
+DEFAULT_LON = -164.1
+DEFAULT_ZOOM = 10.0
+
+#: All query-param keys owned by this module (plus the pre-existing selected_lake).
+STATE_PARAM_KEYS = ("selected_lake", "lat", "lon", "zoom", "drained", "month", "hide_stable")
+
+#: Prefix applied to state params when mirrored onto a parent site's URL.
+PARENT_PARAM_PREFIX = "wt_"
+
+#: Env var restricting which parent origin the app will postMessage to.
+PARENT_ORIGIN_ENV = "WT_PARENT_ORIGIN"
+
+#: Valid values for the `theme` query param.
+_THEME_VALUES = ("light", "dark")
+
+_MONTH_RE = re.compile(r"^\d{4}-\d{2}$")
+_GEOHASH_RE = re.compile(r"^[0-9a-zA-Z]{1,12}$")
+
+_COORD_EPS = 1e-5
+_ZOOM_EPS = 0.01
+
+
+@dataclass
+class UrlState:
+    """Decoded, validated window state from URL query params."""
+
+    lat: float | None = None
+    lon: float | None = None
+    zoom: float | None = None
+    selected_lake: str | None = None
+    drained: bool = False
+    month: str | None = None
+    hide_stable: bool = False
+
+
+def _parse_float(value: str | None) -> float | None:
+    if value is None:
+        return None
+    try:
+        result = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(result):  # NaN/inf guard
+        return None
+    return result
+
+
+def decode_url_state(params: Mapping[str, str]) -> UrlState:
+    """Parse query params into a UrlState, silently dropping malformed values."""
+    lat = _parse_float(params.get("lat"))
+    lon = _parse_float(params.get("lon"))
+    zoom = _parse_float(params.get("zoom"))
+    if lat is not None and not -90 <= lat <= 90:
+        lat = None
+    if lon is not None and not -180 <= lon <= 180:
+        lon = None
+    if zoom is not None and not 0 <= zoom <= 24:
+        zoom = None
+
+    selected_lake = params.get("selected_lake")
+    if selected_lake and not _GEOHASH_RE.match(str(selected_lake)):
+        selected_lake = None
+
+    month = params.get("month")
+    if month and not _MONTH_RE.match(str(month)):
+        month = None
+
+    return UrlState(
+        lat=lat,
+        lon=lon,
+        zoom=zoom,
+        selected_lake=str(selected_lake) if selected_lake else None,
+        drained=params.get("drained") == "1",
+        month=str(month) if month else None,
+        hide_stable=params.get("hide_stable") == "1",
+    )
+
+
+def _fmt(value: float, decimals: int) -> str:
+    text = f"{value:.{decimals}f}".rstrip("0").rstrip(".")
+    return text if text not in ("", "-0") else "0"
+
+
+def encode_view(lat: float, lon: float, zoom: float) -> dict:
+    """Round view values to URL precision (lat/lon 5 dp ~1 m, zoom 2 dp)."""
+    return {"lat": _fmt(lat, 5), "lon": _fmt(lon, 5), "zoom": _fmt(zoom, 2)}
+
+
+def _view_is_default(lat: float, lon: float, zoom: float) -> bool:
+    return (
+        abs(lat - DEFAULT_LAT) < _COORD_EPS
+        and abs(lon - DEFAULT_LON) < _COORD_EPS
+        and abs(zoom - DEFAULT_ZOOM) < _ZOOM_EPS
+    )
+
+
+def _write_view_params(lat: float, lon: float, zoom: float) -> None:
+    if _view_is_default(lat, lon, zoom):
+        for key in ("lat", "lon", "zoom"):
+            st.query_params.pop(key, None)
+        return
+    encoded = encode_view(lat, lon, zoom)
+    for key, value in encoded.items():
+        if st.query_params.get(key) != value:
+            st.query_params[key] = value
+
+
+def sync_flag_param(name: str, on: bool) -> None:
+    """Keep a boolean query param in sync: '1' when on, absent when off."""
+    if on:
+        if st.query_params.get(name) != "1":
+            st.query_params[name] = "1"
+    else:
+        st.query_params.pop(name, None)
+
+
+def set_desired_view(lat: float, lon: float, zoom: float) -> None:
+    """Programmatic jump: set construction keys, live keys, and URL params.
+
+    Single choke point for all programmatic view changes (lake selection, URL
+    restore). Writing the live keys too prevents a stale live view from
+    clobbering the jump when the next full run adopts live state.
+    """
+    st.session_state.map_center = {"lat": lat, "lon": lon}
+    st.session_state.zoom_level = zoom
+    st.session_state.live_map_center = {"lat": lat, "lon": lon}
+    st.session_state.live_map_zoom = zoom
+    _write_view_params(lat, lon, zoom)
+
+
+def update_live_view(center: Mapping | None, zoom: float | None) -> None:
+    """Record the user's live view (from st_folium) without touching map construction.
+
+    Called on fragment reruns after pan/zoom. Only updates live keys and URL
+    params, so the folium HTML is unchanged and the map does not remount.
+    """
+    if not center:
+        return
+    lat = center.get("lat")
+    lon = center.get("lng", center.get("lon"))
+    if lat is None or lon is None:
+        return
+    if zoom is None:
+        zoom = st.session_state.get("live_map_zoom", st.session_state.get("zoom_level", DEFAULT_ZOOM))
+
+    prev_center = st.session_state.get("live_map_center") or {}
+    prev_zoom = st.session_state.get("live_map_zoom")
+    unchanged = (
+        prev_zoom is not None
+        and abs(lat - prev_center.get("lat", 1e9)) < _COORD_EPS
+        and abs(lon - prev_center.get("lon", 1e9)) < _COORD_EPS
+        and abs(zoom - prev_zoom) < _ZOOM_EPS
+    )
+    if unchanged:
+        return
+
+    st.session_state.live_map_center = {"lat": lat, "lon": lon}
+    st.session_state.live_map_zoom = zoom
+    _write_view_params(lat, lon, zoom)
+
+
+def adopt_live_view() -> None:
+    """On a full run, rebuild the map at the user's live view (if it moved).
+
+    Copies live keys into construction keys so the rebuilt folium map is
+    already positioned where the user left it.
+    """
+    live_center = st.session_state.get("live_map_center")
+    live_zoom = st.session_state.get("live_map_zoom")
+    if live_center is not None:
+        st.session_state.map_center = dict(live_center)
+    if live_zoom is not None:
+        st.session_state.zoom_level = live_zoom
+
+
+def apply_url_state_once() -> None:
+    """Restore window state from URL query params (once per session).
+
+    Must run in create_app BEFORE the recenter-to-selection block and before
+    any widget it seeds (show_drained_toggle, toggle_hide_stable_lakes,
+    heatmap_selected_cell) is instantiated.
+    """
+    if st.session_state.get("_url_state_applied"):
+        return
+    st.session_state["_url_state_applied"] = True
+
+    state = decode_url_state(st.query_params)
+
+    if state.lat is not None and state.lon is not None:
+        set_desired_view(state.lat, state.lon, state.zoom if state.zoom is not None else DEFAULT_ZOOM)
+        if state.selected_lake:
+            # The shared live view wins over the automatic zoom-12 recenter.
+            st.session_state["_centered_selection"] = state.selected_lake
+    elif state.selected_lake:
+        try:
+            glat, glon = pygeohash.decode(state.selected_lake)
+            set_desired_view(glat, glon, 12)
+            st.session_state["_centered_selection"] = state.selected_lake
+        except Exception:  # noqa: BLE001
+            pass
+
+    if state.drained:
+        st.session_state["show_drained_toggle"] = True
+        # Suppress the one-time zoom-6 drainage-overview override on restore.
+        st.session_state["_prev_show_drained"] = True
+
+    if state.month:
+        st.session_state["heatmap_selected_cell"] = state.month
+        st.session_state["heatmap_sync_dropdown"] = True
+
+    if state.hide_stable:
+        st.session_state["toggle_hide_stable_lakes"] = True
+
+
+def current_state_params() -> dict:
+    """Current shareable-state params from the URL (source of truth for sharing)."""
+    return {key: st.query_params[key] for key in STATE_PARAM_KEYS if key in st.query_params}
+
+
+def current_state_url() -> str:
+    """This app's own URL rebuilt with only the shareable state params.
+
+    Excludes embed-config params (``theme``, ``show_share``, ``embed``,
+    ``embed_options``) -- those are set once by the embedding parent and are
+    never echoed back into shared state.
+    """
+    try:
+        base = str(st.context.url or "")
+    except Exception:  # noqa: BLE001
+        base = ""
+    if not base:
+        return ""
+    scheme, netloc, path, _, _ = urlsplit(base)
+    return urlunsplit((scheme, netloc, path, urlencode(current_state_params()), ""))
+
+
+def share_button_enabled() -> bool:
+    """Whether the sidebar "Copy link" button should render.
+
+    An embedding parent that offers its own shareable link (e.g. MetacatUI,
+    see issue #2841) can pass ``show_share=false`` to hide this app's button.
+    """
+    return st.query_params.get("show_share", "true").strip().lower() not in ("false", "0")
+
+
+#: Dark-mode palette, sourced from the ADC/MetacatUI dark portal theme
+#: (NCEAS/metacatui src/css/portal-themes/dark.css) so embedded dark mode
+#: matches the parent site's own dark theme instead of inventing one.
+_DARK_PALETTE = {
+    "background": "#111827",  # --portal-col-bkg__deprecate
+    "surface": "#1f2937",  # --portal-col-bkg-lighter__deprecate
+    "sidebar_background": "#374151",  # --portal-col-bkg-active__deprecate
+    "text": "#f9fafb",  # --portal-col-text__deprecate
+    "text_subtle": "#9ca3af",  # --portal-col-text-subtle__deprecate
+    "accent": "#269fb9",  # --portal-col-highlight__deprecate
+    "accent_subtle": "#0c4e66",  # --portal-col-highlight-subtle__deprecate
+}
+
+
+def apply_theme_param() -> None:
+    """Force a dark color scheme from a ``theme=light|dark`` query param.
+
+    Streamlit's own ``embed_options=light_theme|dark_theme`` can't be used
+    for this: it's invisible to ``st.query_params`` (the frontend reads it
+    straight off the URL before Python ever runs) and previously required a
+    client-side redirect to inject, but that redirect ran inside a sandboxed
+    ``st.iframe`` (no ``allow-top-navigation``) targeting ``window.top`` --
+    which, once this app is itself framed on a parent site, is the *parent's*
+    page rather than this app, so the navigation was both refused by the
+    sandbox and aimed at the wrong document. Separately, Streamlit silently
+    ignores ``embed_options`` theme switching whenever a custom ``[theme]`` is
+    configured (streamlit/streamlit#13496, fixed in 1.53.0) -- and this app
+    always has one, since the light theme is our ADC branding.
+
+    ``theme`` is a plain, non-reserved query param, so Python sees it
+    directly via ``st.query_params`` with no redirect needed. Dark mode is
+    applied ourselves via an injected stylesheet (recoloring the app's own
+    surfaces to the ADC/MetacatUI dark palette) rather than delegating to
+    Streamlit's theme engine, so it doesn't depend on that engine's behavior
+    at all.
+    """
+    theme = st.query_params.get("theme")
+    if theme != "dark":
+        return
+    p = _DARK_PALETTE
+    st.markdown(
+        f"""
+        <style>
+        [data-testid="stApp"], [data-testid="stAppViewContainer"],
+        [data-testid="stMain"], [data-testid="stHeader"] {{
+            background-color: {p["background"]};
+            color: {p["text"]};
+        }}
+        [data-testid="stSidebar"], [data-testid="stSidebarContent"] {{
+            background-color: {p["sidebar_background"]};
+            color: {p["text"]};
+        }}
+        [data-testid="stMainBlockContainer"] [data-testid="stMarkdownContainer"],
+        [data-testid="stWidgetLabel"], [data-testid="stText"] {{
+            color: {p["text"]};
+        }}
+        [data-testid="stExpander"], [data-testid="stTab"] {{
+            background-color: {p["surface"]};
+            color: {p["text"]};
+        }}
+        [data-testid="stDialog"] > div > div {{
+            background-color: {p["surface"]} !important;
+            color: {p["text"]} !important;
+        }}
+        [data-testid^="stBaseButton-"] {{
+            background-color: {p["surface"]};
+            color: {p["text"]};
+            border-color: {p["accent_subtle"]};
+        }}
+        [data-testid^="stBaseButton-primary"] {{
+            background-color: {p["accent"]};
+            color: {p["text"]};
+        }}
+        a, [data-testid^="stBaseButton-"]:hover {{
+            color: {p["accent"]};
+        }}
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+def _target_origin() -> str:
+    return os.environ.get(PARENT_ORIGIN_ENV) or "*"
+
+
+def render_state_bridge() -> None:
+    """Post this app's current state URL to a cooperating parent page (mcui:state).
+
+    Rendered inside the map fragment so pan/zoom fragment reruns re-post. The
+    component only re-executes when its HTML (i.e. the URL) changes, so
+    unchanged state produces no message spam. Harmless when not framed.
+
+    The parent receives a plain URL rather than a bespoke params object, so it
+    can extract and whitelist state itself (e.g. via an RFC 6570 URI template
+    it already owns) instead of MetacatUI hardcoding this app's param names.
+    """
+    url_json = json.dumps(current_state_url())
+    target_json = json.dumps(_target_origin())
+    st.iframe(
+        f"""
+        <script>
+        (function() {{
+            try {{
+                window.top.postMessage(
+                    {{ type: "mcui:state", version: 1, url: {url_json} }},
+                    {target_json}
+                );
+            }} catch (e) {{ /* not framed or origin mismatch: nothing to do */ }}
+        }})();
+        </script>
+        """,
+        height=1,
+    )
+
+
+def render_copy_link_button() -> None:
+    """Sidebar "Copy link" button restoring the exact window state.
+
+    Copies the app's own URL (embed params stripped). Falls back to a
+    selectable text input when the clipboard is unavailable.
+    """
+    fallback_params_json = json.dumps(current_state_params(), sort_keys=True)
+    app_url = ""
+    try:
+        app_url = str(st.context.url or "")
+    except Exception:  # noqa: BLE001
+        pass
+    config = json.dumps(
+        {
+            "fallbackParams": json.loads(fallback_params_json),
+            "fallbackAppUrl": app_url,
+            "targetOrigin": _target_origin(),
+            "stateKeys": list(STATE_PARAM_KEYS),
+        }
+    )
+    st.iframe(
+        """
+        <style>
+            body { margin: 0; font-family: "Source Sans Pro", sans-serif; }
+            #wt-copy {
+                width: 100%; padding: 0.4rem 0.75rem; cursor: pointer;
+                border: 1px solid rgba(49, 51, 63, 0.2); border-radius: 0.5rem;
+                background: transparent; color: inherit; font-size: 0.875rem;
+            }
+            #wt-copy:hover { border-color: #ff4b4b; color: #ff4b4b; }
+            #wt-url {
+                width: 100%; margin-top: 0.25rem; padding: 0.25rem;
+                font-size: 0.75rem; box-sizing: border-box; display: none;
+            }
+            @media (prefers-color-scheme: dark) {
+                #wt-copy { border-color: rgba(250, 250, 250, 0.2); color: #fafafa; }
+            }
+        </style>
+        <button id="wt-copy" title="Copy a link that restores this exact view">🔗 Copy link to this view</button>
+        <input id="wt-url" readonly>
+        <script>
+        (function() {
+            var CFG = __WT_CONFIG__;
+
+            function currentParams() {
+                try {
+                    var sp = new URLSearchParams(window.parent.location.search);
+                    var out = {};
+                    CFG.stateKeys.forEach(function(k) {
+                        var v = sp.get(k);
+                        if (v !== null) out[k] = v;
+                    });
+                    return out;
+                } catch (e) {
+                    return CFG.fallbackParams;
+                }
+            }
+
+            function buildUrl() {
+                var params = currentParams();
+                var base = CFG.fallbackAppUrl;
+                try { base = window.parent.location.href; } catch (e) {}
+                if (!base) return null;
+                var u = new URL(base);
+                u.searchParams.delete("embed");
+                u.searchParams.delete("embed_options");
+                u.searchParams.delete("theme");
+                u.searchParams.delete("show_share");
+                CFG.stateKeys.forEach(function(k) { u.searchParams.delete(k); });
+                Object.keys(params).forEach(function(k) { u.searchParams.set(k, params[k]); });
+                return u.toString();
+            }
+
+            var btn = document.getElementById("wt-copy");
+            var inp = document.getElementById("wt-url");
+            function flash(text) {
+                var old = "🔗 Copy link to this view";
+                btn.textContent = text;
+                setTimeout(function() { btn.textContent = old; }, 1600);
+            }
+            function showFallback(url) {
+                inp.style.display = "block";
+                inp.value = url;
+                inp.focus();
+                inp.select();
+                try {
+                    document.execCommand("copy");
+                    flash("✓ Copied!");
+                } catch (e) {
+                    flash("Press Ctrl/Cmd+C to copy");
+                }
+            }
+            btn.addEventListener("click", function() {
+                var url = buildUrl();
+                if (!url) { flash("No URL available"); return; }
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText(url).then(
+                        function() { flash("✓ Copied!"); },
+                        function() { showFallback(url); }
+                    );
+                } else {
+                    showFallback(url);
+                }
+            });
+        })();
+        </script>
+        """.replace("__WT_CONFIG__", config),
+        height=70,
+    )
