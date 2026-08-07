@@ -103,7 +103,7 @@ def _build_map_config(
                 center = header["center"]
             if zoom is None:
                 zoom = float(header["zoom"])
-        except Exception as e:
+        except (OSError, ValueError) as e:
             print(f"Could not fetch remote PMTiles header: {e}")
             # Fall back to hardcoded Alaska defaults
     elif bounds is None and vector_file_for_bounds is not None:

@@ -63,11 +63,11 @@ def _init_ee() -> None:
                 project = _ee_project or st.secrets.get("EE_PROJECT")
                 initialize_earth_engine(project=project)
                 return
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
         print("setting up EE with credentials file")
         initialize_earth_engine(project=_ee_project)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         print(f"Earth Engine initialization failed: {exc}")
 
 
@@ -260,7 +260,7 @@ class MapViewer:
         filters = [[(self.id_column, ">=", p), (self.id_column, "<=", p + "z" * 8)] for p in sorted(prefixes)]
         try:
             candidates = gpd.read_parquet(self._parquet_path, filters=filters)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.warning(f"Spatial-fallback parquet lookup failed: {e}")
             return None
 
@@ -963,7 +963,7 @@ def _load_precomputed_nrt(
                 counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
 
             return counts_df, breaks_df
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Failed to load single pre-computed breaks file: {e}")
             return None, None
 
@@ -1004,11 +1004,11 @@ def _load_precomputed_nrt(
                             df = pd.read_parquet(file_path)
                             if not df.empty:
                                 dfs.append(df)
-                        except Exception as e:
+                        except (OSError, ValueError) as e:
                             logger.warning(f"Failed to read {file_path}: {e}")
                     if dfs:
                         breaks_df = pd.concat(dfs, ignore_index=True)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Failed to load pre-computed NRT from remote directory {path_str}: {e}")
     else:
         nrt_dir = Path(precomputed_nrt_dir)
@@ -1031,7 +1031,7 @@ def _load_precomputed_nrt(
                         df = pd.read_parquet(file_path)
                         if not df.empty:
                             dfs.append(df)
-                    except Exception as e:
+                    except (OSError, ValueError) as e:
                         logger.warning(f"Failed to read {file_path}: {e}")
                 if dfs:
                     breaks_df = pd.concat(dfs, ignore_index=True)
@@ -1371,7 +1371,7 @@ def create_app(
                 selected = viewer.render()
 
                 return viewer, selected
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 st.error(f"Error loading data: {e!s}")
                 return None, None
 
@@ -1541,7 +1541,7 @@ def create_app(
                                     st.session_state.dw_dataset = st.session_state.dw_dataset.merge(
                                         downloaded_dataset_dw, how="id_geohash"
                                     )
-                                except Exception as merge_e:
+                                except Exception as merge_e:  # noqa: BLE001
                                     # If merge fails, use downloaded data only
                                     logger.warning(f"Could not merge DW data for lake {current}: {merge_e}")
                                     st.sidebar.warning(f"Could not merge data: {merge_e}")
@@ -1576,7 +1576,7 @@ def create_app(
                                     st.session_state.jrc_dataset = st.session_state.jrc_dataset.merge(
                                         downloaded_dataset_jrc, how="id_geohash"
                                     )
-                                except Exception as merge_e:
+                                except Exception as merge_e:  # noqa: BLE001
                                     # If merge fails, use downloaded data only
                                     logger.warning(f"Could not merge JRC data for lake {current}: {merge_e}")
                                     st.sidebar.warning(f"Could not merge data: {merge_e}")
@@ -1595,7 +1595,7 @@ def create_app(
                             st.rerun()
                         else:
                             st.error("Download returned no data.")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.error(f"Failed to download data for lake {current}: {e}")
                     st.error(f"Error downloading data: {e}")
                     st.info("Make sure you have Google Earth Engine authentication configured.")
@@ -1666,7 +1666,7 @@ def create_app(
                             with ts_col2:
                                 logger.info(f"JRC data not available for lake: {current}")
                                 st.caption("JRC data not available for this feature")
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.error(f"Error plotting time series for lake {current}: {e}")
                     st.error(f"Error plotting time series: {e}")
 
@@ -1749,7 +1749,7 @@ def create_app(
                                 grid_scale=20,  # thumbnail resolution, 4x fewer pixels than native 10 m
                             )
                             fig = cached_visualize_cube(ds, dates=viz_date_strs, style="rgb", id_geohash=current)
-                        except Exception as e:
+                        except Exception as e:  # noqa: BLE001
                             logger.error(f"Failed to load satellite preview for lake {current}: {e}")
                             st.warning(f"Could not load satellite imagery for this lake: {e}")
                             return
@@ -1761,7 +1761,7 @@ def create_app(
 
             ###################### END Recent imagery plotter #############################
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         st.error(f"Error loading data: {e!s}")
         st.info("Please check the file path and ensure the parquet file exists.")
 

@@ -233,7 +233,7 @@ class SimpleBreakpoint(BreakpointMethod):
                 if pos > 0:
                     previous_date = df.index[pos - 1]
                     after_date = df.index[pos + 1] if pos + 1 < len(df) else None
-            except Exception:
+            except (KeyError, IndexError, TypeError, ValueError):
                 previous_date = None
                 after_date = None
 
