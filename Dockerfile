@@ -27,6 +27,8 @@ COPY src/ ./src/
 COPY pyproject.toml .
 # COPY uv.lock .
 COPY README.md .
+# Streamlit resolves theming from .streamlit/config.toml in the CWD (/app)
+COPY .streamlit/ ./.streamlit/
 
 # Create virtual environment
 RUN uv venv
