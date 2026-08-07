@@ -390,6 +390,20 @@ class MapViewer:
         # Track the user's live view (feeds the shareable URL, not map construction)
         update_live_view(map_data.get("center"), map_data.get("zoom"))
 
+        # The click fields below echo the *last* click the frontend map widget saw,
+        # unchanged across reruns that weren't triggered by a new click (e.g. our
+        # own st.rerun() after clearing the selection). Comparing clicked_id against
+        # selected_geohash can't tell "stale echo of an old click" apart from "user
+        # clicked the same lake again", so track the raw click signature instead.
+        raw_click_signature = (
+            str(map_data.get("last_object_clicked")),
+            str(map_data.get("last_active_drawing")),
+            str(map_data.get("last_object_clicked_tooltip")),
+            str(map_data.get("last_clicked")),
+        )
+        is_new_click_event = raw_click_signature != st.session_state.get("_last_raw_click_signature_pmtiles")
+        st.session_state["_last_raw_click_signature_pmtiles"] = raw_click_signature
+
         # Extract clicked feature's id_geohash for time-series lookup
         clicked_id = None
         clicked_data = map_data.get("last_object_clicked")
@@ -429,8 +443,8 @@ class MapViewer:
                         st.session_state["_centered_selection"] = clicked_id
                         logger.info(f"Clicked on lake {clicked_id} and coordinate {clicked_lat} {clicked_lon}")
 
-        # Update session state only if a NEW feature was clicked
-        if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
+        # Update session state only if this is a genuinely new click event
+        if clicked_id and is_new_click_event:
             st.session_state.selected_geohash = clicked_id
             st.query_params["selected_lake"] = clicked_id
             logger.info(f"New lake selected: {clicked_id}")
@@ -643,8 +657,16 @@ class MapViewer:
             if clicked_data and "properties" in clicked_data:
                 clicked_id = clicked_data["properties"].get(self.id_column)
 
-        # Update session state only if a NEW feature was clicked (not the same one)
-        if clicked_id and clicked_id != st.session_state.get("selected_geohash"):
+        # `last_active_drawing` echoes the last click unchanged across reruns that
+        # weren't triggered by a new click (e.g. our own st.rerun() after clearing
+        # the selection), so track the raw signature rather than diffing against
+        # selected_geohash directly -- see the matching fix in _render_pmtiles.
+        raw_click_signature = str(result.get("last_active_drawing")) if result else None
+        is_new_click_event = raw_click_signature != st.session_state.get("_last_raw_click_signature_folium")
+        st.session_state["_last_raw_click_signature_folium"] = raw_click_signature
+
+        # Update session state only if this is a genuinely new click event
+        if clicked_id and is_new_click_event:
             st.session_state.selected_geohash = clicked_id
             st.query_params["selected_lake"] = clicked_id
             if clicked_id not in st.session_state.clicked_features:
@@ -1451,9 +1473,15 @@ def create_app(
 
         clicked = viewer.get_clicked_features()
 
+        _DROPDOWN_NO_SELECTION = "__no_lake_selected__"
+
         def _on_clicked_lake_dropdown_change():
             selected_option = st.session_state.get("clicked_lakes_dropdown")
-            if selected_option and selected_option != st.session_state.get("selected_geohash"):
+            if (
+                selected_option
+                and selected_option != _DROPDOWN_NO_SELECTION
+                and selected_option != st.session_state.get("selected_geohash")
+            ):
                 st.session_state.selected_geohash = selected_option
                 st.query_params["selected_lake"] = selected_option
                 clicked_lat, clicked_lon = pygeohash.decode(selected_option)
@@ -1466,21 +1494,28 @@ def create_app(
             options = list(reversed(clicked))
             current = viewer.get_selected_geohash()
 
+            # A leading "no selection" sentinel so that after a clear, picking a
+            # lake is always a real value change to the widget (and thus fires
+            # on_change) even when there's only one previously-clicked lake and
+            # it's the same one that was just cleared.
+            display_options = [_DROPDOWN_NO_SELECTION, *options]
+            target_value = current if current and current in options else _DROPDOWN_NO_SELECTION
+
             # Keep the dropdown's own widget state in sync with selections made
             # elsewhere (map click, clear button) since a keyed widget otherwise
             # ignores `index` after its first render.
-            if current and current in options and st.session_state.get("clicked_lakes_dropdown") != current:
-                st.session_state["clicked_lakes_dropdown"] = current
-
-            default_idx = options.index(current) if current and current in options else 0
+            if st.session_state.get("clicked_lakes_dropdown") != target_value:
+                st.session_state["clicked_lakes_dropdown"] = target_value
 
             st.sidebar.selectbox(
                 "Previously clicked lakes:",
-                options,
-                index=default_idx,
+                display_options,
+                index=display_options.index(target_value),
                 label_visibility="collapsed",
                 help="Select a previously clicked lake",
-                format_func=lambda x: geohash_to_human_readable_name(x),
+                format_func=lambda x: (
+                    "No lake selected" if x == _DROPDOWN_NO_SELECTION else geohash_to_human_readable_name(x)
+                ),
                 key="clicked_lakes_dropdown",
                 on_change=_on_clicked_lake_dropdown_change,
             )
