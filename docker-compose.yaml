@@ -3,33 +3,22 @@ services:
     build: .
     image: water-timeseries-streamlit:latest
     working_dir: /app
+    # Use the installed CLI (same launch path as production/helm). All data
+    # paths live in the config file; point DASHBOARD_CONFIG at another YAML
+    # (e.g. configs/dashboard_nrt.yaml) to switch datasets.
     command:
-      - streamlit
-      - run
-      - src/water_timeseries/dashboard/app.py
-      - --server.port=8501
-      - --server.address=0.0.0.0
-      - --
-      - --vector-file
-      - ${VECTOR_FILE:-downloads/lake_polygons.parquet}
-      - --dw-dataset-file
-      - ${DW_DATASET_FILE:-downloads/data.zarr}
-      - --jrc-dataset-file
-      - ${JRC_DATASET_FILE:-downloads/lakes_jrc_viz.zarr}
-      - --precomputed-nrt-dir
-      - ${PRECOMPUTED_NRT_DIR:-downloads/nrt}
-      - --pmtiles-file
-      - ${PMTILES_FILE:-downloads/tiles/lake_polygons.pmtiles}
-      - --pmtiles-url
-      - ${PMTILES_URL:-}
-      - --viz-configuration
-      - ${VIZ_CONFIGURATION:-colored_historical}
+      - water-timeseries
+      - dashboard
+      - --config-file
+      - ${DASHBOARD_CONFIG:-configs/dashboard_historical.yaml}
     volumes:
       - .:/app
       # Keep image .venv; a plain .:/app mount would hide it with an empty host dir
       - /app/.venv
       # Large/local datasets (gitignored downloads/; override host dirs via .env)
       - ${DOWNLOADS_DIR:-./downloads}:/app/downloads:ro
+      # Datasets referenced by configs/dashboard_*.yaml (data/... paths, as in production)
+      - ${DATA_DIR:-./data}:/app/data:ro
       # Optional: host EE credentials (alternative to EARTHENGINE_TOKEN in .env)
       - ${EARTHENGINE_CREDENTIALS_DIR:-${HOME}/.config/earthengine}:/root/.config/earthengine:ro
       # Host GCloud Application Default Credentials (ADC)
