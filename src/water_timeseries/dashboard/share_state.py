@@ -24,10 +24,11 @@ Map view state is two-tiered to avoid feedback loops with streamlit-folium:
 """
 
 import json
+import math
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Mapping, Optional
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
 import pygeohash
@@ -61,23 +62,23 @@ _ZOOM_EPS = 0.01
 class UrlState:
     """Decoded, validated window state from URL query params."""
 
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-    zoom: Optional[float] = None
-    selected_lake: Optional[str] = None
+    lat: float | None = None
+    lon: float | None = None
+    zoom: float | None = None
+    selected_lake: str | None = None
     drained: bool = False
-    month: Optional[str] = None
+    month: str | None = None
     hide_stable: bool = False
 
 
-def _parse_float(value: Optional[str]) -> Optional[float]:
+def _parse_float(value: str | None) -> float | None:
     if value is None:
         return None
     try:
         result = float(value)
     except (TypeError, ValueError):
         return None
-    if result != result or result in (float("inf"), float("-inf")):  # NaN/inf guard
+    if not math.isfinite(result):  # NaN/inf guard
         return None
     return result
 
@@ -165,7 +166,7 @@ def set_desired_view(lat: float, lon: float, zoom: float) -> None:
     _write_view_params(lat, lon, zoom)
 
 
-def update_live_view(center: Optional[Mapping], zoom: Optional[float]) -> None:
+def update_live_view(center: Mapping | None, zoom: float | None) -> None:
     """Record the user's live view (from st_folium) without touching map construction.
 
     Called on fragment reruns after pan/zoom. Only updates live keys and URL
@@ -233,7 +234,7 @@ def apply_url_state_once() -> None:
             glat, glon = pygeohash.decode(state.selected_lake)
             set_desired_view(glat, glon, 12)
             st.session_state["_centered_selection"] = state.selected_lake
-        except Exception:
+        except Exception:  # noqa: BLE001
             pass
 
     if state.drained:
@@ -263,7 +264,7 @@ def current_state_url() -> str:
     """
     try:
         base = str(st.context.url or "")
-    except Exception:
+    except Exception:  # noqa: BLE001
         base = ""
     if not base:
         return ""
@@ -406,7 +407,7 @@ def render_copy_link_button() -> None:
     app_url = ""
     try:
         app_url = str(st.context.url or "")
-    except Exception:
+    except Exception:  # noqa: BLE001
         pass
     config = json.dumps(
         {
