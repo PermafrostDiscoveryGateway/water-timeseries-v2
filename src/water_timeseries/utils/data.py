@@ -3,6 +3,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import xarray as xr
+from tqdm import tqdm
 
 
 def calculate_water_area_after(df_water, break_date_after, water_column: str, stats=None):
@@ -130,3 +131,94 @@ jrc_bandnames = [
     "area_water_seasonal",
     "area_water_permanent",
 ]
+
+
+def find_data_gaps(dataset: xr.Dataset, variable: str = "water", id_geohash_subset=None):
+    """
+    Identifies lakes with significant data gaps.
+
+    Parameters:
+    - dataset: The xarray Dataset (ds)
+    - variable: The primary variable to check for missingness (e.g., 'water')
+    - id_geohash_subset: An optional slice or range for the 'id_geohash' dimension.
+                           Example: slice(0, 100) or a list of indices [5, 10, 20]
+    """
+    print(f"Analyzing gaps using variable: {variable}...")
+
+    # Logic to handle subsetting
+    if id_geohash_subset is not None:
+        print(f"Applying subset for 'id_geohash': {id_geohash_subset}")
+        ds_to_analyze = dataset.isel(id_geohash=id_geohash_subset)
+    else:
+        print("No subset provided. Analyzing the full dataset.")
+        ds_to_analyze = dataset
+
+    # 1. Identify missing values (NaNs) and sum them along the time dimension
+    # Dask will handle this calculation in parallel chunks.
+    missing_counts = ds_to_analyze[variable].isnull().sum(dim="date")
+
+    # 2. Calculate completion percentage directly in Xarray
+    total_months = ds_to_analyze.dims["date"]
+    completion_pct = ((total_months - missing_counts) / total_months) * 100
+
+    # 3. Convert to a clean DataFrame
+    # We use .values.flatten() to ensure we get the raw data into the dataframe correctly
+    df = pd.DataFrame(
+        {
+            "id_geohash": ds_to_analyze.id_geohash.values,
+            "missing_count": missing_counts.values.flatten(),
+            "completion_pct": completion_pct.values.flatten(),
+        }
+    )
+
+    # 4. Filter for large gaps (e.g., less than 50% data present)
+    large_gaps = df[df["completion_pct"] < 50].sort_values(by="completion_pct")
+
+    print(f"Found {len(large_gaps)} lakes with less than 50% data coverage.")
+    return large_gaps
+
+
+def load_and_merge_parquets(file_list: list[Path], logger=None) -> pd.DataFrame:
+    """Loads multiple parquet files and concatenates them into one DataFrame."""
+    if logger:
+        logger.info(f"Found {len(file_list)} files to merge.")
+    df_list = []
+    required_column = "id_geohash"
+
+    index_count = 0
+    col_count = 0
+
+    for f in tqdm(file_list, desc="Loading Parquet Files"):
+        try:
+            df = pd.read_parquet(f)
+            if required_column not in df.columns:
+                if df.index.name == required_column:
+                    df = df.reset_index()
+                    index_count += 1
+                else:
+                    if logger:
+                        logger.warning(
+                            f"Skipping {f.name}: No '{required_column}' found in columns or as an index name."
+                        )
+                    continue
+            else:
+                col_count += 1
+
+            if not df.empty:
+                df_list.append(df)
+            else:
+                if logger:
+                    logger.warning(f"Skipping {f.name}: File is empty.")
+
+        except Exception as e: #noqa:BLE001
+            if logger:
+                logger.error(f"Failed to read {f.name} (possibly corrupt/inaccessible): {e}")
+
+    if not df_list:
+        raise FileNotFoundError("No valid parquet files containing 'id_geohash' were loaded.")
+
+    if logger:
+        logger.info(
+            f"Merge Summary: {index_count} files had '{required_column}' as Index, {col_count} files had it as a Column."
+        )
+    return pd.concat(df_list, ignore_index=True)
