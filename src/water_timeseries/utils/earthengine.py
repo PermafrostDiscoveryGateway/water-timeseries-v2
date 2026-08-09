@@ -891,6 +891,12 @@ def visualize_s2_first_and_last(ds: xr.Dataset, style: str = "rgb") -> plt.Figur
     return fig
 
 
+import ee
+import geopandas as gpd
+import numpy as np
+import xarray as xr
+
+
 def get_rioxarray_ds_from_lake(
     lake_gdf: gpd.GeoDataFrame,
     id_geohash: str,
@@ -933,33 +939,22 @@ def get_rioxarray_ds_from_lake(
     Returns:
         xr.Dataset: An xarray Dataset with Sentinel-2 bands as data variables,
             dimensions (time, y, x), and proper georeferencing (CRS set via rioxarray).
-            The Dataset includes all available bands (B1-B12) from the
-            COPERNICUS/S2_SR_HARMONIZED collection.
-
-    Example:
-        >>> import geopandas as gpd
-        >>> gdf = gpd.read_file("lakes.parquet")
-        >>> ds = get_rioxarray_ds_from_lake(
-        ...     lake_gdf=gdf,
-        ...     id_geohash="c22iz2n",
-        ...     start_date="2026-05-01",
-        ...     end_date="2026-06-01",
-        ...     max_cloud_cover=20
-        ... )
-        >>> print(ds)
     """
 
+    # 1. Filter the lake by its unique ID
     local_gdf = lake_gdf[lake_gdf["id_geohash"] == id_geohash]
 
-    # crs = 'EPSG:32604'
+    # 2. Setup Coordinate Reference System and AOI
     crs_object = local_gdf.estimate_utm_crs()
     crs = f"EPSG:{crs_object.to_epsg()}"
     aoi = local_gdf.to_crs(crs).buffer(buffer).to_crs(4326).iloc[0]
     fc = geemap.gdf_to_ee(local_gdf)
 
-    grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(10, 10))
+    # 3. Generate the grid for xee backend
+    grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(grid_scale, grid_scale))
     grid = fix_xee_grid_utm(grid)
 
+    # 4. Query the ImageCollection
     ic = (
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterDate(start_date, end_date)
@@ -967,8 +962,10 @@ def get_rioxarray_ds_from_lake(
         .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", max_cloud_cover))
         .filter(ee.Filter.calendarRange(6, 9, "month"))
     )
+
     if date_windows:
         ic = ic.filter(ee.Filter.Or(*[ee.Filter.date(s, e) for s, e in date_windows]))
+
     if bands:
         ic = ic.select(list(bands))
     ds_rio = xr.open_dataset(ic, engine="ee", **grid).rio.write_crs(crs).sortby("time")
@@ -1005,6 +1002,16 @@ def cached_get_rioxarray_ds_from_lake(
         date_windows=date_windows,
         grid_scale=grid_scale,
     )
+
+
+def get_better_image(ds: xr.Dataset) -> xr.Dataset:
+    better_image_per_date = ds["B4"].isnull().sum(dim=["x", "y"]).to_numpy().argmin()
+    return ds.isel(time=better_image_per_date)
+
+
+def get_nearest_date(ds, date):
+    selected = ds.sel(time=date, method="nearest")
+    return str(np.atleast_1d(selected.time.dt.strftime("%Y-%m-%d").values)[0])
 
 
 def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") -> plt.Figure:
@@ -1045,15 +1052,19 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") 
         date_string = date.strftime("%Y-%m-%d") if isinstance(date, datetime) else str(date)
         ax = axes[i]
         # check initial date and extract nearest date
-        ds_init = ds.sel(time=date, method="nearest")  # .rio.write_crs("EPSG:32604")
-        # check if there are more images for the same date and pull all from the date
-        ds_rio = ds.sel(time=ds_init.time.dt.date.astype(str))
+        # find closest available date
+        real_date = get_nearest_date(ds, date_string)
+
+        # if multiple image available select better (fewer nodata)
+        date_slice = slice(real_date, real_date)
+        ds_selected = get_better_image(ds.sel(time=date_slice))
+
         if style == "rgb":
-            (ds_rio[["B4", "B3", "B2"]].median(dim="time", skipna=True).to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
+            (ds_selected[["B4", "B3", "B2"]].to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
         else:
-            (ds_rio[["B8", "B4", "B3"]].median(dim="time", skipna=True).to_array() / 3000).clip(0, 1).plot.imshow(ax=ax)
+            (ds_selected[["B8", "B4", "B3"]].to_array() / 3000).clip(0, 1).plot.imshow(ax=ax)
         ax.set_aspect("equal")
-        ax.set_title(date_string)
+        ax.set_title(real_date)
         ax.set_ylabel("")
         ax.set_xlabel("")
         ax.set_xticklabels([])
