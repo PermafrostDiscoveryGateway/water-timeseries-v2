@@ -17,6 +17,18 @@ dw_dataset_file: data/lakes_dw_V2d_2016-2026-06_gapfilled_chunked.zarr
 
 precomputed_nrt_dir: data/DW_historicalbp_simple_merged_breaks_nogeoms_v4
 
+# Per-month drained-lakes tilesets for the "Drainage Status" overlay. The
+# selected month's archive is layered over pmtiles_file above, so the month's
+# confidence is read from baked tile properties instead of being pushed into
+# the browser per lake on every rerun. Rebuild after each new NRT month with:
+#   uv run water-timeseries build-nrt-pmtiles \
+#     --breaks-file data/DW_historicalbp_simple_merged_breaks_nogeoms_v4/nrt_monthly_drain_breaks.parquet \
+#     --geometry-file data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet \
+#     --output-dir data/nrt_tiles --months <YYYY-MM>
+# May also be an http(s):// or gs:// prefix when the tilesets are hosted.
+# Months with no tileset here fall back to the slower runtime feature-state path.
+nrt_pmtiles_dir: data/nrt_tiles
+
 dw_start_year: 2017
 dw_end_year: 2026
 dw_start_month: 6
