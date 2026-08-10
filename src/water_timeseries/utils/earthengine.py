@@ -1,6 +1,6 @@
 import os
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import ee
@@ -814,7 +814,7 @@ def create_timelapse(
     return outfile
 
 
-def fix_xee_grid_utm(grid: dict) -> dict:
+def fix_xee_grid_utm(grid: dict, grid_scale=10) -> dict:
     """
     Fix the UTM grid transformation parameters for xee compatibility.
 
@@ -838,7 +838,8 @@ def fix_xee_grid_utm(grid: dict) -> dict:
         (0, 10, 0, 0, -10, 0)
     """
     transform = list(grid["crs_transform"])
-    transform[4] = -10
+    transform[4] = -grid_scale
+    transform[0] = grid_scale
     grid["crs_transform"] = tuple(transform)
     return grid
 
@@ -891,6 +892,12 @@ def visualize_s2_first_and_last(ds: xr.Dataset, style: str = "rgb") -> plt.Figur
     return fig
 
 
+import ee
+import geopandas as gpd
+import numpy as np
+import xarray as xr
+
+
 def get_rioxarray_ds_from_lake(
     lake_gdf: gpd.GeoDataFrame,
     id_geohash: str,
@@ -933,33 +940,24 @@ def get_rioxarray_ds_from_lake(
     Returns:
         xr.Dataset: An xarray Dataset with Sentinel-2 bands as data variables,
             dimensions (time, y, x), and proper georeferencing (CRS set via rioxarray).
-            The Dataset includes all available bands (B1-B12) from the
-            COPERNICUS/S2_SR_HARMONIZED collection.
-
-    Example:
-        >>> import geopandas as gpd
-        >>> gdf = gpd.read_file("lakes.parquet")
-        >>> ds = get_rioxarray_ds_from_lake(
-        ...     lake_gdf=gdf,
-        ...     id_geohash="c22iz2n",
-        ...     start_date="2026-05-01",
-        ...     end_date="2026-06-01",
-        ...     max_cloud_cover=20
-        ... )
-        >>> print(ds)
     """
 
+    # 1. Filter the lake by its unique ID
     local_gdf = lake_gdf[lake_gdf["id_geohash"] == id_geohash]
 
-    # crs = 'EPSG:32604'
+    # 2. Setup Coordinate Reference System and AOI
     crs_object = local_gdf.estimate_utm_crs()
     crs = f"EPSG:{crs_object.to_epsg()}"
     aoi = local_gdf.to_crs(crs).buffer(buffer).to_crs(4326).iloc[0]
     fc = geemap.gdf_to_ee(local_gdf)
 
-    grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(10, 10))
-    grid = fix_xee_grid_utm(grid)
+    # 3. Generate the grid for xee backend
+    grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(grid_scale, grid_scale))
+    # print(grid)
+    grid = fix_xee_grid_utm(grid, grid_scale=grid_scale)
+    # print(grid)
 
+    # 4. Query the ImageCollection
     ic = (
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterDate(start_date, end_date)
@@ -967,8 +965,10 @@ def get_rioxarray_ds_from_lake(
         .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", max_cloud_cover))
         .filter(ee.Filter.calendarRange(6, 9, "month"))
     )
+
     if date_windows:
         ic = ic.filter(ee.Filter.Or(*[ee.Filter.date(s, e) for s, e in date_windows]))
+
     if bands:
         ic = ic.select(list(bands))
     ds_rio = xr.open_dataset(ic, engine="ee", **grid).rio.write_crs(crs).sortby("time")
@@ -1007,7 +1007,23 @@ def cached_get_rioxarray_ds_from_lake(
     )
 
 
-def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") -> plt.Figure:
+def get_better_image(ds: xr.Dataset) -> xr.Dataset:
+    better_image_per_date = ds["B4"].isnull().sum(dim=["x", "y"]).to_numpy().argmin()
+    return ds.isel(time=better_image_per_date)
+
+
+def get_nearest_date(ds, date):
+    selected = ds.sel(time=date, method="nearest")
+    return str(np.atleast_1d(selected.time.dt.strftime("%Y-%m-%d").values)[0])
+
+
+def visualize_s2_xee_cube(
+    ds: xr.Dataset,
+    dates: list[str],
+    style: str = "rgb",
+    max_cols: int = 4,
+    exact_dates: bool = False,
+) -> plt.Figure:
     """
     Visualize Sentinel-2 acquisitions from an xarray Dataset for specified dates.
 
@@ -1024,6 +1040,8 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") 
         style (str, optional): Visualization style - either 'rgb' for true color
             composite (B4, B3, B2) or any other value for vegetation false color
             composite (B8, B4, B3). Defaults to 'rgb'.
+        max_cols (int, optional): Maximum number of columns in the grid.
+            Defaults to 4.
 
     Returns:
         plt.Figure: A matplotlib Figure object containing subplots with the
@@ -1032,37 +1050,86 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") 
     Example:
         >>> ds = get_rioxarray_ds_from_lake(gdf, "c22iz2n", "2026-05-01", "2026-06-01")
         >>> dates = ["2026-05-10", "2026-05-20", "2026-06-01"]
-        >>> fig = visualize_s2_xee_cube(ds, dates, style="rgb")
+        >>> fig = visualize_s2_xee_cube_parallel(ds, dates, style="rgb")
         >>> fig.savefig("comparison.png", dpi=150, bbox_inches="tight")
 
     Notes:
         - The RGB visualization scales values to 0-1 range by dividing by 1000
         - Values outside 0-1 are clipped
         - Y-axis aspect ratio is set to 'equal' for accurate spatial representation
+        - When len(dates) > max_cols, a multi-row grid with max_cols columns is created
+        - Figure size adapts based on the number of images, keeping a fixed patch size
     """
-    fig, axes = plt.subplots(ncols=len(dates))
-    for i, date in enumerate(dates):
+    import math
+    from concurrent.futures import ThreadPoolExecutor
+
+    n_dates = len(dates)
+    patch_width = 3.0  # inches per image column
+    patch_height = 3.0  # inches per image row
+
+    # determine grid dimensions
+    n_rows = math.ceil(n_dates / max_cols)
+    n_cols_used = min(n_dates, max_cols)
+
+    # figure width = actual columns used * patch_width
+    # figure height = actual rows used * patch_height
+    fig_width = n_cols_used * patch_width
+    fig_height = n_rows * patch_height
+
+    if n_dates <= max_cols:
+        fig, axes = plt.subplots(ncols=n_dates, figsize=(fig_width, fig_height))
+        axes = np.atleast_1d(axes).ravel()
+    else:
+        fig, axes = plt.subplots(nrows=n_rows, ncols=max_cols, figsize=(fig_width, fig_height))
+        axes = axes.ravel()
+        for ax in axes[n_dates:]:
+            ax.axis("off")
+
+    def _render_date(i: int, date) -> None:
         date_string = date.strftime("%Y-%m-%d") if isinstance(date, datetime) else str(date)
         ax = axes[i]
-        # check initial date and extract nearest date
-        ds_init = ds.sel(time=date, method="nearest")  # .rio.write_crs("EPSG:32604")
-        # check if there are more images for the same date and pull all from the date
-        ds_rio = ds.sel(time=ds_init.time.dt.date.astype(str))
-        if style == "rgb":
-            (ds_rio[["B4", "B3", "B2"]].median(dim="time", skipna=True).to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
+        if exact_dates:
+            real_date = date_string
         else:
-            (ds_rio[["B8", "B4", "B3"]].median(dim="time", skipna=True).to_array() / 3000).clip(0, 1).plot.imshow(ax=ax)
+            real_date = get_nearest_date(ds, date_string)
+        date_slice = slice(real_date, real_date)
+        ds_selected = get_better_image(ds.sel(time=date_slice))
+
+        # reformat from YYYY-MM-DD to "DD Mon YYYY" (e.g. "15 Jan 2024")
+        real_date_dt = datetime.strptime(real_date, "%Y-%m-%d").replace(tzinfo=UTC)
+        real_date_formatted = real_date_dt.strftime("%d %b %Y")
+
+        if style == "rgb":
+            (ds_selected[["B4", "B3", "B2"]].to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
+        else:
+            (ds_selected[["B8", "B4", "B3"]].to_array() / 3000).clip(0, 1).plot.imshow(ax=ax)
         ax.set_aspect("equal")
-        ax.set_title(date_string)
+        ax.set_title(real_date_formatted)
         ax.set_ylabel("")
         ax.set_xlabel("")
         ax.set_xticklabels([])
         ax.set_yticklabels([])
+
+    with ThreadPoolExecutor() as executor:
+        list(executor.map(lambda args: _render_date(*args), enumerate(dates)))
+
+    fig.tight_layout()
     return fig
 
 
 @st.cache_resource(show_spinner=False)
-def cached_visualize_cube(_ds: xr.Dataset, dates: list[str], style: str = "rgb", id_geohash: str | None = None):
+def cached_visualize_cube(
+    _ds: xr.Dataset,
+    dates: list[str],
+    style: str = "rgb",
+    max_cols: int = 4,
+    exact_dates: bool = False,
+    id_geohash: str | None = None,
+):
     # _ds is excluded from the cache key (underscore prefix), so id_geohash must be
     # part of the key — otherwise two lakes with the same dates share one figure.
-    return visualize_s2_xee_cube(_ds, dates=tuple(dates), style=style)
+    return visualize_s2_xee_cube(_ds, dates=tuple(dates), style=style, max_cols=max_cols, exact_dates=exact_dates)
+
+
+def get_unique_dates_from_xee_ds(ds: xr.Dataset) -> list[str]:
+    return [date.strftime("%Y-%m-%d") for date in np.unique(ds.time.dt.date)]
