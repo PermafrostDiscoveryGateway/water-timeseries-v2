@@ -245,6 +245,12 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
     red intensity gradient by the ``water_change_perc`` feature-state value
     (relative water loss, -25 to -100 in the production breaks data); when
     that value is absent too, it falls back to a mid-range red.
+
+    Confidence colors match ``get_legend_html_nrt_drainage`` and
+    ``get_style_pmtiles_nrt_monthly_tiles``, the preferred baked-tile path.
+
+    This is the fallback for deployments without per-month drainage tilesets;
+    see ``build_pmtiles_nrt_monthly``.
     """
     conf = ["coalesce", ["feature-state", "confidence"], -1]
     unknown_conf_fill = [
@@ -267,11 +273,11 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         0,
         unknown_conf_fill,
         1,
-        "#3b6a8c",
+        "#f9c80e",  # gold - low confidence
         2,
-        "#9eb45c",
+        "#e67e22",  # amber - medium confidence
         3,
-        "#f0d6a8",
+        "#d73027",  # red - high confidence
         "#aaaaaa",  # stable lake (no state set this month)
     ]
     fill_opacity = [
@@ -293,11 +299,11 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         0,
         "#7f0000",  # dark red border for unknown-confidence drained
         1,
-        "#3b6a8c",
+        "#b58900",
         2,
-        "#4b9379",
+        "#a04d00",
         3,
-        "#fbf7b3",
+        "#8b0000",
         "#aaaaaa",
     ]
     line_width = [
@@ -327,6 +333,88 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         0 if hide_stable_lakes else 0.5,
     ]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
+
+
+def get_style_pmtiles_nrt_monthly_tiles() -> tuple:
+    """Paint for the per-month NRT drainage overlay tileset.
+
+    Reads ``drainage_confidence`` / ``water_change_perc`` straight from the
+    tile properties baked by ``build_pmtiles_nrt_monthly``, so switching months
+    means pointing the source at a different archive — nothing per-lake is sent
+    to the browser and no ``setFeatureState`` push is needed (contrast
+    ``get_style_pmtiles_nrt_confidence_featurestate``, the older runtime path).
+
+    Every feature in this tileset is a drained lake for its month, so there is
+    no "stable lake" case here; stable lakes stay in the base tiles underneath
+    (see ``get_style_pmtiles_nrt_base_lakes``). Confidence is absent for months
+    with no ARIMA confidence available, and those render as a red intensity
+    gradient by relative water loss instead (those months show the
+    ``get_legend_html_nrt_drainage_magnitude`` legend).
+
+    Colors, border colors and the thick-border-for-confidence-3 signature match
+    ``get_legend_html_nrt_drainage``. Fill opacity deliberately does not: the
+    legend swatches sit on white at 0.2, while these polygons sit on satellite
+    imagery and need to stay legible.
+    """
+    # -1 stands in for "no drainage_confidence property on this feature".
+    conf = ["coalesce", ["get", "drainage_confidence"], -1]
+    unknown_conf_fill = [
+        "interpolate",
+        ["linear"],
+        ["coalesce", ["get", "water_change_perc"], -70],
+        -100,
+        "#67000d",  # near-total water loss
+        -75,
+        "#de2d26",
+        -50,
+        "#fb6a4a",
+        -25,
+        "#fcae91",  # smallest loss that still counts as drained
+    ]
+
+    fill_color = [
+        "case",
+        ["==", conf, 1],
+        "#f9c80e",  # gold - low confidence
+        ["==", conf, 2],
+        "#e67e22",  # amber - medium confidence
+        ["==", conf, 3],
+        "#d73027",  # red - high confidence
+        unknown_conf_fill,
+    ]
+    fill_opacity = 0.85
+    line_color = [
+        "case",
+        ["==", conf, 1],
+        "#b58900",
+        ["==", conf, 2],
+        "#a04d00",
+        ["==", conf, 3],
+        "#8b0000",
+        "#7f0000",  # dark red border for unknown-confidence drained
+    ]
+    line_width = [
+        "case",
+        ["==", conf, 3],
+        3,
+        ["==", conf, -1],
+        2.0,
+        1,
+    ]
+    line_opacity = 1
+    return fill_color, fill_opacity, line_color, line_width, line_opacity
+
+
+def get_style_pmtiles_nrt_base_lakes(hide_stable_lakes: bool = False) -> tuple:
+    """Paint for the base lake tiles under the per-month NRT drainage overlay.
+
+    These are all the lakes, drained or not; the month's drained lakes are
+    drawn on top from their own tileset. Kept deliberately faint so the
+    overlay reads clearly, and fully hidden when the user hides stable lakes.
+    """
+    if hide_stable_lakes:
+        return "#aaaaaa", 0, "#aaaaaa", 0, 0
+    return "#aaaaaa", 0.05, "#aaaaaa", 0.5, 0.5
 
 
 def get_style_pmtiles_generic_water() -> tuple:
