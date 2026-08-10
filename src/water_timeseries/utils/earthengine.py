@@ -1,5 +1,5 @@
 import os
-from collections.abc import Sequence
+from collections.abc import List, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -1080,3 +1080,7 @@ def cached_visualize_cube(_ds: xr.Dataset, dates: list[str], style: str = "rgb",
     # _ds is excluded from the cache key (underscore prefix), so id_geohash must be
     # part of the key — otherwise two lakes with the same dates share one figure.
     return visualize_s2_xee_cube(_ds, dates=tuple(dates), style=style)
+
+
+def get_unique_dates_from_xee_ds(ds: xr.Dataset) -> List[str]:
+    return [date.strftime("%Y-%m-%d") for date in np.unique(ds.time.dt.date)]
