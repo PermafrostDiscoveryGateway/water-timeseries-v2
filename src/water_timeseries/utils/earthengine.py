@@ -1,5 +1,5 @@
 import os
-from collections.abc import List, Sequence
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -1017,7 +1017,12 @@ def get_nearest_date(ds, date):
     return str(np.atleast_1d(selected.time.dt.strftime("%Y-%m-%d").values)[0])
 
 
-def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") -> plt.Figure:
+def visualize_s2_xee_cube(
+    ds: xr.Dataset,
+    dates: list[str],
+    style: str = "rgb",
+    max_cols: int = 4,
+) -> plt.Figure:
     """
     Visualize Sentinel-2 acquisitions from an xarray Dataset for specified dates.
 
@@ -1034,6 +1039,8 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") 
         style (str, optional): Visualization style - either 'rgb' for true color
             composite (B4, B3, B2) or any other value for vegetation false color
             composite (B8, B4, B3). Defaults to 'rgb'.
+        max_cols (int, optional): Maximum number of columns in the grid.
+            Defaults to 4.
 
     Returns:
         plt.Figure: A matplotlib Figure object containing subplots with the
@@ -1042,36 +1049,67 @@ def visualize_s2_xee_cube(ds: xr.Dataset, dates: list[str], style: str = "rgb") 
     Example:
         >>> ds = get_rioxarray_ds_from_lake(gdf, "c22iz2n", "2026-05-01", "2026-06-01")
         >>> dates = ["2026-05-10", "2026-05-20", "2026-06-01"]
-        >>> fig = visualize_s2_xee_cube(ds, dates, style="rgb")
+        >>> fig = visualize_s2_xee_cube_parallel(ds, dates, style="rgb")
         >>> fig.savefig("comparison.png", dpi=150, bbox_inches="tight")
 
     Notes:
         - The RGB visualization scales values to 0-1 range by dividing by 1000
         - Values outside 0-1 are clipped
         - Y-axis aspect ratio is set to 'equal' for accurate spatial representation
+        - When len(dates) > max_cols, a multi-row grid with max_cols columns is created
+        - Figure size adapts based on the number of images, keeping a fixed patch size
     """
-    fig, axes = plt.subplots(ncols=len(dates))
-    for i, date in enumerate(dates):
+    import math
+    from concurrent.futures import ThreadPoolExecutor
+
+    n_dates = len(dates)
+    patch_width = 3.0  # inches per image column
+    patch_height = 3.0  # inches per image row
+
+    # determine grid dimensions
+    n_rows = math.ceil(n_dates / max_cols)
+    n_cols_used = min(n_dates, max_cols)
+
+    # figure width = actual columns used * patch_width
+    # figure height = actual rows used * patch_height
+    fig_width = n_cols_used * patch_width
+    fig_height = n_rows * patch_height
+
+    if n_dates <= max_cols:
+        fig, axes = plt.subplots(ncols=n_dates, figsize=(fig_width, fig_height))
+        axes = np.atleast_1d(axes).ravel()
+    else:
+        fig, axes = plt.subplots(nrows=n_rows, ncols=max_cols, figsize=(fig_width, fig_height))
+        axes = axes.ravel()
+        for ax in axes[n_dates:]:
+            ax.axis("off")
+
+    def _render_date(i: int, date) -> None:
         date_string = date.strftime("%Y-%m-%d") if isinstance(date, datetime) else str(date)
         ax = axes[i]
-        # check initial date and extract nearest date
-        # find closest available date
         real_date = get_nearest_date(ds, date_string)
-
-        # if multiple image available select better (fewer nodata)
         date_slice = slice(real_date, real_date)
         ds_selected = get_better_image(ds.sel(time=date_slice))
+
+        # reformat from YYYY-MM-DD to "DD Mon YYYY" (e.g. "15 Jan 2024")
+        real_date_dt = datetime.strptime(real_date, "%Y-%m-%d")
+        real_date_formatted = real_date_dt.strftime("%d %b %Y")
 
         if style == "rgb":
             (ds_selected[["B4", "B3", "B2"]].to_array() / 1000).clip(0, 1).plot.imshow(ax=ax)
         else:
             (ds_selected[["B8", "B4", "B3"]].to_array() / 3000).clip(0, 1).plot.imshow(ax=ax)
         ax.set_aspect("equal")
-        ax.set_title(real_date)
+        ax.set_title(real_date_formatted)
         ax.set_ylabel("")
         ax.set_xlabel("")
         ax.set_xticklabels([])
         ax.set_yticklabels([])
+
+    with ThreadPoolExecutor() as executor:
+        list(executor.map(lambda args: _render_date(*args), enumerate(dates)))
+
+    fig.tight_layout()
     return fig
 
 
@@ -1082,5 +1120,5 @@ def cached_visualize_cube(_ds: xr.Dataset, dates: list[str], style: str = "rgb",
     return visualize_s2_xee_cube(_ds, dates=tuple(dates), style=style)
 
 
-def get_unique_dates_from_xee_ds(ds: xr.Dataset) -> List[str]:
+def get_unique_dates_from_xee_ds(ds: xr.Dataset) -> list[str]:
     return [date.strftime("%Y-%m-%d") for date in np.unique(ds.time.dt.date)]
