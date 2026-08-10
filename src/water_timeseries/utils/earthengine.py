@@ -1008,24 +1008,11 @@ def cached_get_rioxarray_ds_from_lake(
 
 
 def get_better_image(ds: xr.Dataset) -> xr.Dataset:
-    """Select the acquisition with the fewest nodata pixels (least-cloudy).
-
-    Among all time steps in ``ds``, returns the one with the minimum number
-    of NaN pixels in the B04 band. If ``ds`` already has only one time step,
-    returns it unchanged.
-    """
-    if ds.sizes.get("time", 1) <= 1:
-        return ds
     better_image_per_date = ds["B4"].isnull().sum(dim=["x", "y"]).to_numpy().argmin()
     return ds.isel(time=better_image_per_date)
 
 
 def get_nearest_date(ds, date):
-    """Return the nearest acquisition date as 'YYYY-MM-DD'.
-
-    Uses xarray's ``sel(time=..., method='nearest')`` to find the closest
-    time step in ``ds`` to the given ``date``. Returns ``'YYYY-MM-DD'``.
-    """
     selected = ds.sel(time=date, method="nearest")
     return str(np.atleast_1d(selected.time.dt.strftime("%Y-%m-%d").values)[0])
 
@@ -1037,34 +1024,41 @@ def visualize_s2_xee_cube(
     max_cols: int = 4,
     exact_dates: bool = False,
 ) -> plt.Figure:
-    """Visualize Sentinel-2 imagery for a list of dates.
+    """
+    Visualize Sentinel-2 acquisitions from an xarray Dataset for specified dates.
 
-    Creates a multi-panel figure with one subplot per date. Rendering is
-    parallelised via :class:`~concurrent.futures.ThreadPoolExecutor`.
+    This function creates a multi-panel figure showing Sentinel-2 imagery for
+    the dates specified in the dates list, useful for comparing temporal changes
+    in lake appearance or extent.
 
-    Layout: if ``len(dates) <= max_cols`` → single row; otherwise multi-row
-    grid with ``max_cols`` columns, filled left-to-right. Trailing empty
-    slots are hidden. Each panel title is formatted as ``DD Mon YYYY``.
-    Panel titles show the requested date; when ``exact_dates=False`` the
-    nearest available acquisition is used.
+    Args:
+        ds (xr.Dataset): An xarray Dataset containing Sentinel-2 bands as data
+            variables with a 'time' dimension. Expected bands include B2, B3, B4,
+            and optionally B8 for vegetation analysis.
+        dates (List[str]): List of dates to visualize, in any format accepted by
+            xarray's `sel(time=..., method='nearest')`.
+        style (str, optional): Visualization style - either 'rgb' for true color
+            composite (B4, B3, B2) or any other value for vegetation false color
+            composite (B8, B4, B3). Defaults to 'rgb'.
+        max_cols (int, optional): Maximum number of columns in the grid.
+            Defaults to 4.
 
-    Parameters
-    ----------
-    ds : xr.Dataset
-        Dataset with Sentinel-2 bands (B2/B3/B4/B8) and a ``time`` dim.
-    dates : list[str]
-        Date strings. ``exact_dates=False`` (default) uses nearest acquisition.
-    style : str, optional
-        ``"rgb"`` (default): B4/B3/B2 scaled to 0–1. Any other value: false-colour
-        B8/B4/B3 scaled to 0–1.
-    max_cols : int, optional
-        Max columns in the grid. Defaults to 4.
-    exact_dates : bool, optional
-        If True, only exact date matches. Defaults to False.
+    Returns:
+        plt.Figure: A matplotlib Figure object containing subplots with the
+            visualized satellite imagery.
 
-    Returns
-    -------
-    plt.Figure
+    Example:
+        >>> ds = get_rioxarray_ds_from_lake(gdf, "c22iz2n", "2026-05-01", "2026-06-01")
+        >>> dates = ["2026-05-10", "2026-05-20", "2026-06-01"]
+        >>> fig = visualize_s2_xee_cube_parallel(ds, dates, style="rgb")
+        >>> fig.savefig("comparison.png", dpi=150, bbox_inches="tight")
+
+    Notes:
+        - The RGB visualization scales values to 0-1 range by dividing by 1000
+        - Values outside 0-1 are clipped
+        - Y-axis aspect ratio is set to 'equal' for accurate spatial representation
+        - When len(dates) > max_cols, a multi-row grid with max_cols columns is created
+        - Figure size adapts based on the number of images, keeping a fixed patch size
     """
     import math
     from concurrent.futures import ThreadPoolExecutor
@@ -1102,7 +1096,7 @@ def visualize_s2_xee_cube(
         ds_selected = get_better_image(ds.sel(time=date_slice))
 
         # reformat from YYYY-MM-DD to "DD Mon YYYY" (e.g. "15 Jan 2024")
-        real_date_dt = datetime.strptime(real_date, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
+        real_date_dt = datetime.strptime(real_date, "%Y-%m-%d")
         real_date_formatted = real_date_dt.strftime("%d %b %Y")
 
         if style == "rgb":
@@ -1132,20 +1126,10 @@ def cached_visualize_cube(
     exact_dates: bool = False,
     id_geohash: str | None = None,
 ):
-    """Cached wrapper around :func:`visualize_s2_xee_cube`.
-
-    The dataset (``_ds``) is excluded from the cache key (underscore prefix),
-    so ``id_geohash`` must be provided to distinguish figures for different
-    lakes. All other arguments are passed directly to ``visualize_s2_xee_cube``.
-    """
     # _ds is excluded from the cache key (underscore prefix), so id_geohash must be
     # part of the key — otherwise two lakes with the same dates share one figure.
     return visualize_s2_xee_cube(_ds, dates=tuple(dates), style=style, max_cols=max_cols, exact_dates=exact_dates)
 
 
 def get_unique_dates_from_xee_ds(ds: xr.Dataset) -> list[str]:
-    """Return deduplicated calendar dates from ``ds.time`` as 'YYYY-MM-DD' strings.
-
-    Useful for generating a compact date list to pass to :func:`visualize_s2_xee_cube`.
-    """
     return [date.strftime("%Y-%m-%d") for date in np.unique(ds.time.dt.date)]
