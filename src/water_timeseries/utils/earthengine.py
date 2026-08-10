@@ -814,7 +814,7 @@ def create_timelapse(
     return outfile
 
 
-def fix_xee_grid_utm(grid: dict) -> dict:
+def fix_xee_grid_utm(grid: dict, grid_scale=10) -> dict:
     """
     Fix the UTM grid transformation parameters for xee compatibility.
 
@@ -838,7 +838,8 @@ def fix_xee_grid_utm(grid: dict) -> dict:
         (0, 10, 0, 0, -10, 0)
     """
     transform = list(grid["crs_transform"])
-    transform[4] = -10
+    transform[4] = -grid_scale
+    transform[0] = grid_scale
     grid["crs_transform"] = tuple(transform)
     return grid
 
@@ -952,7 +953,9 @@ def get_rioxarray_ds_from_lake(
 
     # 3. Generate the grid for xee backend
     grid = helpers.fit_geometry(geometry=aoi, grid_crs=crs, grid_scale=(grid_scale, grid_scale))
-    grid = fix_xee_grid_utm(grid)
+    # print(grid)
+    grid = fix_xee_grid_utm(grid, grid_scale=grid_scale)
+    # print(grid)
 
     # 4. Query the ImageCollection
     ic = (
