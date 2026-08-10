@@ -38,6 +38,38 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
     "lakes",
 )
 
+# Properties baked into the per-month NRT drainage tilesets. These carry the
+# month's drainage signal *in the tiles*, so the dashboard styles and hovers
+# straight from tile properties instead of pushing a per-lake dict into the
+# browser on every rerun (see build_pmtiles_nrt_monthly).
+NRT_MONTHLY_TILE_PROPERTIES: tuple[str, ...] = (
+    "id_geohash",
+    "analysis_month",
+    "drainage_confidence",
+    "water_change_ha",
+    "water_change_perc",
+    "pre_break_median",
+    "post_break_median",
+    "water_observed",
+    "water_predicted",
+    "water_residual",
+    "water_predicted_lower_90",
+    "water_predicted_upper_90",
+)
+
+# The monthly overlay holds tens of thousands of features, not millions, and
+# every one of them must survive: a dropped feature is a drained lake missing
+# from the map. So no density dropping/coalescing and no tile size limits,
+# unlike DEFAULT_TIPPECANOE_ARGS.
+NRT_MONTHLY_TIPPECANOE_ARGS: tuple[str, ...] = (
+    "--force",
+    "--simplification=10",
+    "--no-tile-size-limit",
+    "--no-feature-limit",
+    "-r1",
+    f"--temporary-directory={TIPPECANOE_TEMP_DIR}",
+)
+
 
 def find_tippecanoe() -> str | None:
     """Return path to tippecanoe executable, or None if not installed."""
@@ -125,31 +157,65 @@ def parquet_to_geojsonseq(
 
             gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
             gdf = _sanitize_properties(gdf, property_columns)
-
-            for _, row in gdf.iterrows():
-                props = {c: row[c] for c in property_columns if c in gdf.columns}
-                for key, val in list(props.items()):
-                    if isinstance(val, float) and pd.isna(val):
-                        props[key] = None
-                    elif hasattr(val, "item"):
-                        props[key] = val.item()
-
-                # Write polygon feature
-                geom_poly = row.geometry.__geo_interface__
-                feat_poly = {"type": "Feature", "properties": props, "geometry": geom_poly}
-                fh_poly.write(json.dumps(feat_poly, separators=(",", ":")) + "\n")
-
-                # Write point feature
-                if fh_points:
-                    geom_pt = row.geometry.centroid.__geo_interface__
-                    feat_pt = {"type": "Feature", "properties": props, "geometry": geom_pt}
-                    fh_points.write(json.dumps(feat_pt, separators=(",", ":")) + "\n")
+            _write_features(gdf, property_columns, fh_poly, fh_points)
     finally:
         fh_poly.close()
         if fh_points:
             fh_points.close()
 
     return output_path, points_path
+
+
+def _write_features(gdf: gpd.GeoDataFrame, property_columns: Sequence[str], fh_poly, fh_points) -> None:
+    """Append ``gdf`` to open GeoJSONL handles as polygon (and centroid) features."""
+    for _, row in gdf.iterrows():
+        props = {c: row[c] for c in property_columns if c in gdf.columns}
+        for key, val in list(props.items()):
+            if isinstance(val, float) and pd.isna(val):
+                props[key] = None
+            elif hasattr(val, "item"):
+                props[key] = val.item()
+
+        # Write polygon feature
+        geom_poly = row.geometry.__geo_interface__
+        feat_poly = {"type": "Feature", "properties": props, "geometry": geom_poly}
+        fh_poly.write(json.dumps(feat_poly, separators=(",", ":")) + "\n")
+
+        # Write point feature
+        if fh_points:
+            geom_pt = row.geometry.centroid.__geo_interface__
+            feat_pt = {"type": "Feature", "properties": props, "geometry": geom_pt}
+            fh_points.write(json.dumps(feat_pt, separators=(",", ":")) + "\n")
+
+
+def _run_tippecanoe(
+    output_path: Path,
+    layers: Sequence[dict],
+    base_flags: Sequence[str],
+    tippecanoe_bin: str | None = None,
+    delete_tempdir: bool = True,
+) -> Path:
+    """Run tippecanoe for the given ``-L`` layer specs, writing ``output_path``."""
+    tippecanoe_bin = tippecanoe_bin or find_tippecanoe()
+    if not tippecanoe_bin:
+        raise RuntimeError("tippecanoe is not installed or not on PATH. Install it with: brew install tippecanoe")
+
+    # An earlier build may have removed the shared temp directory on its way
+    # out; tippecanoe fails outright if --temporary-directory does not exist.
+    TIPPECANOE_TEMP_DIR.mkdir(exist_ok=True, parents=True)
+
+    print(f"Running tippecanoe to build PMTiles at {output_path}...")
+    args: list[str] = [tippecanoe_bin, "-o", str(output_path), *base_flags]
+    for layer in layers:
+        args.extend(["-L", json.dumps(layer)])
+
+    print("Executing command: " + " ".join(args))
+    subprocess.run(args, check=True)
+
+    if delete_tempdir:
+        shutil.rmtree(TIPPECANOE_TEMP_DIR, ignore_errors=True)
+
+    return output_path
 
 
 def build_pmtiles(
@@ -182,6 +248,7 @@ def build_pmtiles(
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Fail before the (slow) GeoJSON export rather than after it.
     tippecanoe_bin = tippecanoe_bin or find_tippecanoe()
     if not tippecanoe_bin:
         raise RuntimeError("tippecanoe is not installed or not on PATH. Install it with: brew install tippecanoe")
@@ -190,40 +257,192 @@ def build_pmtiles(
     print(f"Generating GeoJSON sequences for {parquet_path}...")
     poly_path, point_path = parquet_to_geojsonseq(parquet_path, geojsonl_path, property_columns=property_columns)
 
-    print(f"Running tippecanoe to build PMTiles at {output_path}...")
-    args: list[str] = [tippecanoe_bin, "-o", str(output_path)]
-
-    base_flags = []
     if tippecanoe_args:
         base_flags = list(tippecanoe_args)
     else:
-        for f in DEFAULT_TIPPECANOE_ARGS:
-            if f.startswith(("--minimum-zoom", "--maximum-zoom")) or f == "-l" or f == "lakes":
-                continue
-            base_flags.append(f)
+        base_flags = [
+            f
+            for f in DEFAULT_TIPPECANOE_ARGS
+            if not f.startswith(("--minimum-zoom", "--maximum-zoom")) and f not in ("-l", "lakes")
+        ]
 
-    args.extend(base_flags)
-
-    poly_layer = {"file": str(poly_path), "layer": "lakes", "minzoom": 6, "maxzoom": 14}
-    args.extend(["-L", json.dumps(poly_layer)])
-
+    layers = [{"file": str(poly_path), "layer": "lakes", "minzoom": 6, "maxzoom": 14}]
     if point_path:
-        point_layer = {"file": str(point_path), "layer": "lakes_points", "minzoom": 0, "maxzoom": 5}
-        args.extend(["-L", json.dumps(point_layer)])
+        layers.append({"file": str(point_path), "layer": "lakes_points", "minzoom": 0, "maxzoom": 5})
 
-    print("Executing command: " + " ".join(args))
-    subprocess.run(args, check=True)
+    _run_tippecanoe(
+        output_path,
+        layers,
+        base_flags,
+        tippecanoe_bin=tippecanoe_bin,
+        delete_tempdir=delete_tempdir,
+    )
 
     if not keep_geojsonl:
         poly_path.unlink(missing_ok=True)
         if point_path:
             point_path.unlink(missing_ok=True)
 
-    # cleanup and del tmp dir
-    if delete_tempdir:
-        shutil.rmtree(TIPPECANOE_TEMP_DIR)
-
     return output_path
+
+
+def nrt_monthly_tiles_filename(month: str) -> str:
+    """Return the tileset filename the dashboard looks for, e.g. ``nrt_2026-07_drainage.pmtiles``."""
+    return f"nrt_{month}_drainage.pmtiles"
+
+
+def _collect_geometries(
+    geometry_parquet: Path | str,
+    wanted_ids: set[str],
+    geometry_column: str = "geometry",
+    id_column: str = "id_geohash",
+    batch_size: int = 100_000,
+) -> dict[str, bytes]:
+    """Return ``{id_geohash: wkb}`` for ``wanted_ids``, streaming the source once.
+
+    The geometry source is the full lake table (millions of rows, GBs of WKB),
+    so it is read in batches of two columns and filtered as it goes; only the
+    matched geometries are held in memory.
+    """
+    import pyarrow as pa
+    import pyarrow.compute as pc
+
+    pq_file = pq.ParquetFile(geometry_parquet)
+    value_set = pa.array(sorted(wanted_ids), type=pa.string())
+    found: dict[str, bytes] = {}
+
+    for batch in pq_file.iter_batches(batch_size=batch_size, columns=[id_column, geometry_column]):
+        ids = batch.column(id_column)
+        mask = pc.is_in(ids, value_set=value_set)
+        if not pc.any(mask).as_py():
+            continue
+        matched = batch.filter(mask)
+        for gid, wkb in zip(
+            matched.column(id_column).to_pylist(),
+            matched.column(geometry_column).to_pylist(),
+            strict=True,
+        ):
+            if gid is not None and wkb is not None:
+                found[gid] = wkb
+
+    return found
+
+
+def build_pmtiles_nrt_monthly(
+    breaks_parquet: Path | str,
+    geometry_parquet: Path | str,
+    output_dir: Path | str,
+    *,
+    months: Sequence[str] | None = None,
+    property_columns: Sequence[str] = NRT_MONTHLY_TILE_PROPERTIES,
+    tippecanoe_args: Sequence[str] | None = None,
+    tippecanoe_bin: str | None = None,
+    keep_geojsonl: bool = False,
+    month_column: str = "analysis_month",
+    id_column: str = "id_geohash",
+) -> dict[str, Path]:
+    """Build one small drained-lakes-only PMTiles archive per NRT analysis month.
+
+    Each archive holds only the lakes that drained in that month (~1-2% of the
+    full lake table) with the month's drainage signal baked in as tile
+    properties. The dashboard layers the month's archive over the static base
+    tiles, so switching months is a source-URL swap: no per-lake data is
+    inlined into the page and no ``setFeatureState`` push is needed.
+
+    Args:
+        breaks_parquet: Aggregated NRT breaks table (``nrt_monthly_drain_breaks.parquet``);
+            supplies which lakes drained per month and their per-month values.
+        geometry_parquet: Lake table carrying ``id_geohash`` + geometry (the
+            ``*_with_allgeoms_*`` parquet). Read once for all months.
+        output_dir: Directory to write ``nrt_<month>_drainage.pmtiles`` into.
+        months: Months to build (``YYYY-MM``). Defaults to every month in the
+            breaks table.
+        property_columns: Columns to bake into tile properties (missing ones are skipped).
+        keep_geojsonl: Keep the intermediate GeoJSONL files next to the output.
+
+    Returns:
+        ``{month: pmtiles_path}`` for the months actually built.
+    """
+    breaks_parquet = Path(breaks_parquet)
+    geometry_parquet = Path(geometry_parquet)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    # Fail before the expensive geometry scan rather than after it.
+    tippecanoe_bin = tippecanoe_bin or find_tippecanoe()
+    if not tippecanoe_bin:
+        raise RuntimeError("tippecanoe is not installed or not on PATH. Install it with: brew install tippecanoe")
+
+    breaks = pd.read_parquet(breaks_parquet)
+    if month_column not in breaks.columns:
+        raise ValueError(f"{breaks_parquet} has no '{month_column}' column")
+
+    breaks = breaks[breaks[month_column].notna()].copy()
+    breaks[month_column] = breaks[month_column].astype(str)
+    if months is not None:
+        breaks = breaks[breaks[month_column].isin(set(months))]
+    if breaks.empty:
+        raise ValueError(f"No rows in {breaks_parquet} for months={months}")
+
+    # One lake can drain in several months; dedupe within a month so a month's
+    # tileset has exactly one feature per lake.
+    breaks = breaks.drop_duplicates(subset=[month_column, id_column], keep="last")
+
+    wanted_ids = set(breaks[id_column].astype(str))
+    print(f"Collecting geometries for {len(wanted_ids)} lakes from {geometry_parquet}...")
+    geom_by_id = _collect_geometries(geometry_parquet, wanted_ids, id_column=id_column)
+    print(f"Found geometries for {len(geom_by_id)}/{len(wanted_ids)} lakes")
+    if not geom_by_id:
+        raise ValueError(f"No geometries in {geometry_parquet} matched ids from {breaks_parquet}")
+
+    keep_columns = [c for c in property_columns if c in breaks.columns]
+    outputs: dict[str, Path] = {}
+
+    for month, month_rows in breaks.groupby(month_column, sort=True):
+        month_rows = month_rows[month_rows[id_column].astype(str).isin(geom_by_id)]
+        if month_rows.empty:
+            print(f"[{month}] no lakes with geometry, skipping")
+            continue
+
+        geoms = gpd.GeoSeries.from_wkb(
+            [geom_by_id[gid] for gid in month_rows[id_column].astype(str)],
+            crs="EPSG:4326",
+        )
+        gdf = gpd.GeoDataFrame(month_rows[keep_columns].reset_index(drop=True), geometry=geoms.reset_index(drop=True))
+        gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
+        gdf = _sanitize_properties(gdf, keep_columns)
+
+        output_path = output_dir / nrt_monthly_tiles_filename(str(month))
+        poly_path = output_path.with_suffix(".geojsonl")
+        points_path = poly_path.with_name(f"{poly_path.stem}_points.geojsonl")
+        print(f"[{month}] writing {len(gdf)} features to {poly_path.name}...")
+        with poly_path.open("w", encoding="utf-8") as fh_poly, points_path.open("w", encoding="utf-8") as fh_points:
+            _write_features(gdf, keep_columns, fh_poly, fh_points)
+
+        # Polygons above z6 and centroids below it, mirroring the base tileset,
+        # so drained lakes stay visible when zoomed out (where the polygons are
+        # sub-pixel) without needing per-lake browser markers.
+        layers = [
+            {"file": str(poly_path), "layer": "drained", "minzoom": 6, "maxzoom": 14},
+            {"file": str(points_path), "layer": "drained_points", "minzoom": 0, "maxzoom": 5},
+        ]
+        _run_tippecanoe(
+            output_path,
+            layers,
+            list(tippecanoe_args) if tippecanoe_args else list(NRT_MONTHLY_TIPPECANOE_ARGS),
+            tippecanoe_bin=tippecanoe_bin,
+            delete_tempdir=False,
+        )
+
+        if not keep_geojsonl:
+            poly_path.unlink(missing_ok=True)
+            points_path.unlink(missing_ok=True)
+
+        size_mb = output_path.stat().st_size / 1e6
+        print(f"[{month}] wrote {output_path.name} ({size_mb:.1f} MB)")
+        outputs[str(month)] = output_path
+
+    return outputs
 
 
 def build_pmtiles_drainage_year(

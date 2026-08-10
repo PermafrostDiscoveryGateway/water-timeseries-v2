@@ -1,4 +1,6 @@
 import functools
+import os
+import time
 from pathlib import Path
 
 import branca.element
@@ -8,14 +10,18 @@ import leafmap.foliumap as leafmap
 import pygeohash
 from branca.element import Element  # <--- Added this import
 from folium_pmtiles.vector import PMTilesMapLibreLayer
+from loguru import logger
 
 from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
     get_style_pmtiles_generic_water,
+    get_style_pmtiles_nrt_base_lakes,
     get_style_pmtiles_nrt_confidence_featurestate,
     get_style_pmtiles_nrt_drainage,
+    get_style_pmtiles_nrt_monthly_tiles,
 )
+from water_timeseries.utils.timing import timed
 from water_timeseries.utils.visualization import (
     get_legend_html_date_drainage_year,
     get_legend_html_net_change,
@@ -230,6 +236,7 @@ class PMTilesMapLibreFeatureState(branca.element.MacroElement):
     function applyFeatureState_{{ this.get_name() }}(maplibreLayer) {
     var mlMap = maplibreLayer.getMaplibreMap();
     function pushState() {
+    console.time("[timing] setFeatureState push ({{ this.get_name() }})");
     mlMap.removeFeatureState({source: {{ this.source_json }}, sourceLayer: {{ this.source_layer_json }}});
     for (const [id, state] of Object.entries(stateById_{{ this.get_name() }})) {
     mlMap.setFeatureState(
@@ -237,6 +244,7 @@ class PMTilesMapLibreFeatureState(branca.element.MacroElement):
     state
     );
     }
+    console.timeEnd("[timing] setFeatureState push ({{ this.get_name() }})");
     }
     if (mlMap.isStyleLoaded()) { pushState(); } else { mlMap.on("load", pushState); }
     }
@@ -290,6 +298,8 @@ def build_pmtiles_map(
     nrt_confidence_by_id: dict[str, int | None] | None = None,
     nrt_tooltip_overrides: dict[str, dict] | None = None,
     nrt_magnitude_by_id: dict[str, float] | None = None,
+    nrt_monthly_tiles_url: str | None = None,
+    nrt_month_has_confidence: bool = True,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons.
 
@@ -305,7 +315,15 @@ def build_pmtiles_map(
     loss, negative) for unknown-confidence lakes: those render as a red
     intensity gradient by loss magnitude instead of flat red, and the map
     legend switches to the gradient variant.
+
+    ``nrt_monthly_tiles_url`` is the preferred path for the monthly overlay:
+    given a per-month drained-lakes tileset (built by
+    ``build_pmtiles_nrt_monthly``), the month's confidence is read from baked
+    tile properties, so none of the ``nrt_*_by_id`` dicts are needed and
+    nothing per-lake is serialized into the page. The dict-based arguments
+    above are the fallback for deployments without those tilesets.
     """
+    _build_start = time.perf_counter()
 
     m = leafmap.Map(
         location=center,
@@ -385,26 +403,52 @@ def build_pmtiles_map(
             "water_change_perc": "Change of water area [%]",
             "pre_break_median": "Lake area before break [ha]",
             "post_break_median": "Lake area after break [ha]",
+            # Baked into the per-month drainage tilesets: the NRT months carry
+            # these rather than the "_absolute" variants above.
+            "analysis_month": "Analysis month [YYYY-MM]",
+            "water_observed": "Observed water area",
+            "water_predicted": "Predicted water area",
+            "water_residual": "Difference of lake area from prediction",
+            "water_predicted_lower_90": "Predicted water area, lower 90%",
+            "water_predicted_upper_90": "Predicted water area, upper 90%",
         }
-        tooltip = PMTilesMapLibreTooltipWithRounding(
-            column_aliases=aliases,
-            filter_layers=["lakes-fill"],
-            min_zoom=8,
-            max_zoom=14,
-            property_overrides=nrt_tooltip_overrides,
-        )
-        if nrt_confidence_by_id is not None:
-            # Monthly overlay: static feature-state paint, values pushed at
-            # runtime by PMTilesMapLibreFeatureState (added below).
-            fill_color, fill_opacity, line_color, line_width, line_opacity = (
-                get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes=hide_stable_lakes)
+        if nrt_monthly_tiles_url:
+            # Hover the overlay, not the base lakes: the overlay features carry
+            # the selected month's values, the base tiles only whatever single
+            # month happened to be baked into them.
+            tooltip = PMTilesMapLibreTooltipWithRounding(
+                column_aliases=aliases,
+                filter_layers=["nrt-drained-fill"],
+                min_zoom=8,
+                max_zoom=14,
             )
-        else:
-            # Convert to number to handle string values in PMTiles
-            fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_drainage(
+            # The month's drained lakes come from their own tileset (added
+            # below); the base tiles are the faint backdrop of all other lakes.
+            fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_base_lakes(
                 hide_stable_lakes=hide_stable_lakes
             )
-        legend = get_legend_html_nrt_drainage_magnitude() if nrt_magnitude_by_id else get_legend_html_nrt_drainage()
+            has_magnitude_legend = not nrt_month_has_confidence
+        else:
+            tooltip = PMTilesMapLibreTooltipWithRounding(
+                column_aliases=aliases,
+                filter_layers=["lakes-fill"],
+                min_zoom=8,
+                max_zoom=14,
+                property_overrides=nrt_tooltip_overrides,
+            )
+            if nrt_confidence_by_id is not None:
+                # Monthly overlay: static feature-state paint, values pushed at
+                # runtime by PMTilesMapLibreFeatureState (added below).
+                fill_color, fill_opacity, line_color, line_width, line_opacity = (
+                    get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes=hide_stable_lakes)
+                )
+            else:
+                # Convert to number to handle string values in PMTiles
+                fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_drainage(
+                    hide_stable_lakes=hide_stable_lakes
+                )
+            has_magnitude_legend = bool(nrt_magnitude_by_id)
+        legend = get_legend_html_nrt_drainage_magnitude() if has_magnitude_legend else get_legend_html_nrt_drainage()
 
         tile_layer_darkmatter.add_to(m)
         tcvis_tile_layer.add_to(m)
@@ -480,23 +524,72 @@ def build_pmtiles_map(
         lakes_fill_layer["filter"] = nan_filter
         lakes_line_layer["filter"] = nan_filter
 
+    sources = {
+        "lakes_pmtiles": {
+            "type": "vector",
+            "url": "pmtiles://" + pmtiles_url,
+            # Stable per-feature identity for setFeatureState, consistent
+            # across zoom levels/tiles.
+            "promoteId": "id_geohash",
+        }
+    }
+    layers = [lakes_fill_layer, lakes_line_layer]
+
+    if nrt_monthly_tiles_url:
+        drained_fill, drained_opacity, drained_line, drained_width, drained_line_opacity = (
+            get_style_pmtiles_nrt_monthly_tiles()
+        )
+        sources["nrt_pmtiles"] = {
+            "type": "vector",
+            "url": "pmtiles://" + nrt_monthly_tiles_url,
+        }
+        layers.extend(
+            [
+                # Centroids below z6, where the polygons are sub-pixel: this is
+                # what keeps drained lakes findable when zoomed out, without
+                # per-lake browser markers.
+                {
+                    "id": "nrt-drained-points",
+                    "source": "nrt_pmtiles",
+                    "source-layer": "drained_points",
+                    "type": "circle",
+                    "maxzoom": 6,
+                    "paint": {
+                        "circle-color": drained_fill,
+                        "circle-opacity": drained_opacity,
+                        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.5, 5, 4],
+                        "circle-stroke-color": drained_line,
+                        "circle-stroke-width": 0.5,
+                    },
+                },
+                {
+                    "id": "nrt-drained-fill",
+                    "source": "nrt_pmtiles",
+                    "source-layer": "drained",
+                    "type": "fill",
+                    "minzoom": 6,
+                    "paint": {"fill-color": drained_fill, "fill-opacity": drained_opacity},
+                },
+                {
+                    "id": "nrt-drained-line",
+                    "source": "nrt_pmtiles",
+                    "source-layer": "drained",
+                    "type": "line",
+                    "minzoom": 6,
+                    "paint": {
+                        "line-color": drained_line,
+                        "line-width": drained_width,
+                        "line-opacity": drained_line_opacity,
+                    },
+                },
+            ]
+        )
+
     lake_layer = PMTilesMapLibreLayer(
         pmtiles_url,
         "Lakes",
         overlay=True,
-        style={
-            "version": 8,
-            "sources": {
-                "lakes_pmtiles": {
-                    "type": "vector",
-                    "url": "pmtiles://" + pmtiles_url,
-                    # Stable per-feature identity for setFeatureState, consistent
-                    # across zoom levels/tiles.
-                    "promoteId": "id_geohash",
-                }
-            },
-            "layers": [lakes_fill_layer, lakes_line_layer],
-        },
+        style={"version": 8, "sources": sources, "layers": layers},
         tooltip=tooltip,
     )
 
@@ -505,62 +598,44 @@ def build_pmtiles_map(
     # ------------------------
 
     if viz_configuration_name == "nrt_drainage" and not drained_ids and nrt_confidence_by_id is not None:
-        # None means "drained, confidence unknown" — encoded as 0 (rendered as
-        # a red gradient by water_change_perc when available, else mid red).
-        state_by_id = {
-            gid: {"confidence": 0 if conf is None else int(conf)} for gid, conf in nrt_confidence_by_id.items()
-        }
-        for gid, perc in (nrt_magnitude_by_id or {}).items():
-            if gid in state_by_id:
-                state_by_id[gid]["water_change_perc"] = perc
-        PMTilesMapLibreFeatureState(
-            state_by_id=state_by_id,
-            source="lakes_pmtiles",
-            source_layer=source_layer,
-        ).add_to(lake_layer)
+        with timed(f"build_pmtiles_map: feature_state_setup ({len(nrt_confidence_by_id)} lakes)"):
+            # None means "drained, confidence unknown" — encoded as 0 (rendered as
+            # a red gradient by water_change_perc when available, else mid red).
+            state_by_id = {
+                gid: {"confidence": 0 if conf is None else int(conf)} for gid, conf in nrt_confidence_by_id.items()
+            }
+            for gid, perc in (nrt_magnitude_by_id or {}).items():
+                if gid in state_by_id:
+                    state_by_id[gid]["water_change_perc"] = perc
+            feature_state = PMTilesMapLibreFeatureState(
+                state_by_id=state_by_id,
+                source="lakes_pmtiles",
+                source_layer=source_layer,
+            )
+            # Materialize the JSON now (rather than lazily at Jinja-render time)
+            # so its cost is visible here instead of silently folded into
+            # `st_folium`'s HTML serialization step.
+            _ = feature_state.state_by_id_json
+        feature_state.add_to(lake_layer)
 
-        # The flagged lakes are a few hundred small polygons scattered across
-        # the whole Arctic — the tiles drop them at low zoom, so without
-        # markers they are undiscoverable by panning (same problem the
-        # Historical Drainage overlay solves with its marker group).
-        if nrt_confidence_by_id:
-            month_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
-            for gid in nrt_confidence_by_id:
-                try:
-                    lat, lon = pygeohash.decode(gid)
-                except ValueError:
-                    continue
-                perc = (nrt_magnitude_by_id or {}).get(gid)
-                marker_tooltip = f"{gid}" + (f" · {perc}% water loss" if perc is not None else "")
-                folium.CircleMarker(
+    if drained_ids:
+        with timed(f"build_pmtiles_map: drained_ids CircleMarker loop ({len(drained_ids)} markers)"):
+            drained_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
+            for gid in drained_ids:
+                lat, lon = pygeohash.decode(gid)
+                marker = folium.CircleMarker(
                     location=[lat, lon],
                     radius=6,
                     color="darkred",
-                    weight=1,
                     fill=True,
                     fill_color="red",
-                    fill_opacity=0.5,
-                    tooltip=marker_tooltip,
-                ).add_to(month_markers)
-            month_markers.add_to(m)
+                    fill_opacity=0.6,
+                    border_width=0.5,
+                    icon=folium.Icon(color="red", icon="tint", prefix="fa"),
+                )
+                marker.add_to(drained_markers)
 
-    if drained_ids:
-        drained_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
-        for gid in drained_ids:
-            lat, lon = pygeohash.decode(gid)
-            marker = folium.CircleMarker(
-                location=[lat, lon],
-                radius=6,
-                color="darkred",
-                fill=True,
-                fill_color="red",
-                fill_opacity=0.6,
-                border_width=0.5,
-                icon=folium.Icon(color="red", icon="tint", prefix="fa"),
-            )
-            marker.add_to(drained_markers)
-
-        drained_markers.add_to(m)
+            drained_markers.add_to(m)
         ul, lr = drained_markers.get_bounds()
         print(ul, lr)
 
@@ -588,6 +663,7 @@ def build_pmtiles_map(
     """
     m.get_root().html.add_child(Element(style))
 
+    logger.info(f"[timing] build_pmtiles_map total: {(time.perf_counter() - _build_start) * 1000:.1f} ms")
     return m
 
 
@@ -616,6 +692,43 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
         raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
 
     return _get_pmtiles_server(str(pmtiles_path)).url_for(pmtiles_path.name)
+
+
+def resolve_nrt_monthly_tiles_url(location: str | Path | None, month: str) -> str | None:
+    """Return a browser-fetchable URL for ``month``'s drainage tileset, or None.
+
+    ``location`` is where ``build_pmtiles_nrt_monthly`` wrote its output: a
+    local directory, an ``http(s)://`` prefix, or a ``gs://`` prefix. Returns
+    None when no tileset exists for the month, which is the signal for callers
+    to fall back to the runtime feature-state path.
+
+    For a local directory, the tiles are served by a background
+    ``PmtilesServer`` rooted at that directory — unless ``PMTILES_BASE_URL`` is
+    set, in which case the monthly tilesets are expected to be reachable by
+    filename under that base URL (same convention as ``resolve_pmtiles_url``).
+    """
+    if not location:
+        return None
+
+    from water_timeseries.utils.pmtiles_build import nrt_monthly_tiles_filename
+
+    filename = nrt_monthly_tiles_filename(month)
+    location_str = str(location)
+
+    if location_str.startswith(("http://", "https://")):
+        return f"{location_str.rstrip('/')}/{filename}"
+    if location_str.startswith("gs://"):
+        return f"https://storage.googleapis.com/{location_str[5:].strip('/')}/{filename}"
+
+    tiles_dir = Path(location_str)
+    if not (tiles_dir / filename).is_file():
+        return None
+
+    base_url = os.environ.get("PMTILES_BASE_URL")
+    if base_url:
+        return f"{base_url.rstrip('/')}/{filename}"
+
+    return _get_pmtiles_server(str(tiles_dir.resolve())).url_for(filename)
 
 
 @functools.cache

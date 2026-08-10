@@ -26,6 +26,7 @@ from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_
 from water_timeseries.utils.pmtiles_build import (
     build_pmtiles_drainage_year,
     build_pmtiles_nrt_drainage,
+    build_pmtiles_nrt_monthly,
     find_tippecanoe,
 )
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
@@ -90,6 +91,7 @@ def dashboard(
     viz_configuration: str | None = None,
     pmtiles_file: str | None = None,
     pmtiles_url: str | None = None,
+    nrt_pmtiles_dir: str | None = None,
     port: int | None = None,
     logfile: str | None = None,
     verbose: int = 0,
@@ -117,6 +119,10 @@ viz_configuration: The visualization configuration name for the map viewer.
             - "nrt_drainage": Near-real-time drainage data.
         pmtiles_file: Path to a .pmtiles archive for fast vector-tile rendering.
         pmtiles_url: HTTP(S) URL to a hosted .pmtiles file (e.g. on S3).
+        nrt_pmtiles_dir: Location of the per-month NRT drainage tilesets built by
+            ``build-nrt-pmtiles`` (local directory, http(s):// or gs:// prefix).
+            Auto-detected from an ``nrt_tiles`` directory next to the .pmtiles
+            file when present.
         port: Port to run the dashboard on (default: 8501)
         logfile: Path to log file
         verbose: Verbosity level (-v for DEBUG)
@@ -159,6 +165,7 @@ viz_configuration: The visualization configuration name for the map viewer.
         viz_configuration=viz_configuration,
         pmtiles_file=pmtiles_file,
         pmtiles_url=pmtiles_url,
+        nrt_pmtiles_dir=nrt_pmtiles_dir,
         port=port,
         logfile=logfile,
         verbose=verbose,
@@ -179,6 +186,7 @@ viz_configuration: The visualization configuration name for the map viewer.
     viz_configuration = config_dict.get("viz_configuration", "colored_historical")
     pmtiles_file = config_dict.get("pmtiles_file")
     pmtiles_url = config_dict.get("pmtiles_url")
+    nrt_pmtiles_dir = config_dict.get("nrt_pmtiles_dir")
     port = config_dict.get("port", 8501)
     logfile = config_dict.get("logfile")
     verbose = config_dict.get("verbose", 0)
@@ -226,6 +234,8 @@ viz_configuration: The visualization configuration name for the map viewer.
         script_args.extend(["--pmtiles-file", pmtiles_file])
     if pmtiles_url:
         script_args.extend(["--pmtiles-url", pmtiles_url])
+    if nrt_pmtiles_dir:
+        script_args.extend(["--nrt-pmtiles-dir", str(nrt_pmtiles_dir)])
     if logfile:
         script_args.extend(["--logfile", logfile])
     if script_args:
@@ -309,6 +319,62 @@ def build_pmtiles(
     else:
         build_pmtiles_archive(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
     print(f"Wrote PMTiles archive: {output_file_path}")
+
+
+@app.command(group="Visualization")
+def build_nrt_pmtiles(
+    breaks_file: Path | None = None,
+    geometry_file: Path | None = None,
+    output_dir: Path | None = None,
+    months: str | None = None,
+    keep_geojsonl: bool = False,
+    logfile: str | None = None,
+    verbose: int = 0,
+):
+    """Build one small drained-lakes PMTiles archive per NRT analysis month.
+
+    Each archive holds only that month's drained lakes, with the month's
+    drainage signal baked into the tile properties. The dashboard layers the
+    selected month's archive over the base tiles, so switching months costs a
+    source-URL swap instead of shipping per-lake values into the browser on
+    every rerun.
+
+    Re-run this after each new NRT month lands (``aggregate-nrt``), then point
+    the dashboard at the output with ``--nrt-pmtiles-dir``.
+
+    Args:
+        breaks_file: Aggregated NRT breaks table (``nrt_monthly_drain_breaks.parquet``).
+        geometry_file: Lake table with ``id_geohash`` + geometry (the ``*_with_allgeoms_*``
+            parquet). Scanned once for all months.
+        output_dir: Directory to write ``nrt_<month>_drainage.pmtiles`` into.
+        months: Comma-separated ``YYYY-MM`` list. Defaults to every month in the breaks table.
+        keep_geojsonl: Keep the intermediate GeoJSONL files next to the output.
+
+    Example:
+        water-timeseries build-nrt-pmtiles \\
+            --breaks-file precomputed/nrt/nrt_monthly_drain_breaks.parquet \\
+            --geometry-file data/lakes_with_allgeoms.parquet \\
+            --output-dir data/nrt_tiles
+        water-timeseries dashboard --pmtiles-file data/lakes.pmtiles \\
+            --nrt-pmtiles-dir data/nrt_tiles --viz-configuration nrt_drainage
+    """
+    setup_logging(logfile=logfile, verbose=verbose)
+
+    if not breaks_file or not geometry_file or not output_dir:
+        logger.error("breaks_file, geometry_file and output_dir are all required.")
+        raise SystemExit(1)
+    if not find_tippecanoe():
+        raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
+
+    month_list = [m.strip() for m in months.split(",") if m.strip()] if months else None
+    outputs = build_pmtiles_nrt_monthly(
+        breaks_file,
+        geometry_file,
+        output_dir,
+        months=month_list,
+        keep_geojsonl=keep_geojsonl,
+    )
+    print(f"Wrote {len(outputs)} monthly drainage tilesets to {output_dir}")
 
 
 @app.command(group="Visualization")

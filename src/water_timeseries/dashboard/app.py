@@ -82,6 +82,22 @@ def _resolve_default_nrt_dir() -> Path | None:
     return None
 
 
+def _resolve_default_nrt_tiles_dir(pmtiles_file: str | Path | None) -> Path | None:
+    """Return the first directory holding per-month NRT drainage tilesets, if any.
+
+    Looks next to the base ``.pmtiles`` archive first, then the conventional
+    repo locations, so a local run picks the tilesets up without a flag.
+    """
+    candidates = []
+    if pmtiles_file:
+        candidates.append(Path(pmtiles_file).parent / "nrt_tiles")
+    candidates += [_REPO_ROOT / "precomputed" / "nrt_tiles", Path("data/nrt_tiles"), Path("downloads/nrt_tiles")]
+    for candidate in candidates:
+        if candidate.is_dir() and any(candidate.glob("nrt_*_drainage.pmtiles")):
+            return candidate
+    return None
+
+
 def parse_args():
     """Parse command line arguments for the dashboard."""
     parser = argparse.ArgumentParser(description="Run the Water Timeseries Dashboard")
@@ -172,6 +188,18 @@ def parse_args():
         help="HTTP(S) URL to a hosted .pmtiles file (e.g. on S3). Overrides local tile server.",
     )
     parser.add_argument(
+        "--nrt-pmtiles-dir",
+        type=str,
+        default=None,
+        help=(
+            "Location of the per-month NRT drainage tilesets built by "
+            "`water-timeseries build-nrt-pmtiles` (local directory, http(s):// or gs:// prefix). "
+            "When a tileset exists for the selected month, the drainage-status overlay renders "
+            "from it instead of sending per-lake values to the browser. Auto-detected from an "
+            "`nrt_tiles` directory next to the .pmtiles file when present."
+        ),
+    )
+    parser.add_argument(
         "--logfile",
         type=str,
         default=None,
@@ -198,6 +226,7 @@ def main(
     viz_configuration: str | None = None,
     pmtiles_file: str | Path | None = None,
     pmtiles_url: str | None = None,
+    nrt_pmtiles_dir: str | Path | None = None,
     dw_start_year: int | None = None,
     dw_end_year: int | None = None,
     dw_start_month: int | None = None,
@@ -263,6 +292,11 @@ def main(
     if pmtiles_url == "":
         pmtiles_url = None
 
+    if not nrt_pmtiles_dir:
+        nrt_pmtiles_dir = _resolve_default_nrt_tiles_dir(pmtiles_file)
+    if nrt_pmtiles_dir:
+        logger.info(f"NRT monthly drainage tilesets: {nrt_pmtiles_dir}")
+
     create_app(
         data_path=vector_file,
         zarr_path=dw_dataset_file,
@@ -277,6 +311,7 @@ def main(
         viz_configuration_name=viz_configuration,
         pmtiles_file=pmtiles_file,
         pmtiles_url=pmtiles_url,
+        nrt_pmtiles_dir=nrt_pmtiles_dir,
     )
 
 
@@ -296,6 +331,7 @@ if __name__ == "__main__":
         viz_configuration=args.viz_configuration,
         pmtiles_file=args.pmtiles_file,
         pmtiles_url=args.pmtiles_url,
+        nrt_pmtiles_dir=args.nrt_pmtiles_dir,
         logfile=args.logfile,
         verbose=args.verbose,
     )
