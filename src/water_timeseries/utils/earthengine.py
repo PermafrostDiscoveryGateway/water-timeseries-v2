@@ -1022,6 +1022,7 @@ def visualize_s2_xee_cube(
     dates: list[str],
     style: str = "rgb",
     max_cols: int = 4,
+    exact_dates: bool = False,
 ) -> plt.Figure:
     """
     Visualize Sentinel-2 acquisitions from an xarray Dataset for specified dates.
@@ -1087,7 +1088,10 @@ def visualize_s2_xee_cube(
     def _render_date(i: int, date) -> None:
         date_string = date.strftime("%Y-%m-%d") if isinstance(date, datetime) else str(date)
         ax = axes[i]
-        real_date = get_nearest_date(ds, date_string)
+        if exact_dates:
+            real_date = date_string
+        else:
+            real_date = get_nearest_date(ds, date_string)
         date_slice = slice(real_date, real_date)
         ds_selected = get_better_image(ds.sel(time=date_slice))
 
@@ -1114,10 +1118,17 @@ def visualize_s2_xee_cube(
 
 
 @st.cache_resource(show_spinner=False)
-def cached_visualize_cube(_ds: xr.Dataset, dates: list[str], style: str = "rgb", id_geohash: str | None = None):
+def cached_visualize_cube(
+    _ds: xr.Dataset,
+    dates: list[str],
+    style: str = "rgb",
+    max_cols: int = 4,
+    exact_dates: bool = False,
+    id_geohash: str | None = None,
+):
     # _ds is excluded from the cache key (underscore prefix), so id_geohash must be
     # part of the key — otherwise two lakes with the same dates share one figure.
-    return visualize_s2_xee_cube(_ds, dates=tuple(dates), style=style)
+    return visualize_s2_xee_cube(_ds, dates=tuple(dates), style=style, max_cols=max_cols, exact_dates=exact_dates)
 
 
 def get_unique_dates_from_xee_ds(ds: xr.Dataset) -> list[str]:
