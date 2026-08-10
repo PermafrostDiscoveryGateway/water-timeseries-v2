@@ -164,6 +164,7 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     var columnAliases_{{ this.get_name() }} = {{ this.column_aliases_json }};
     var propertyOverrides_{{ this.get_name() }} = {{ this.property_overrides_json }};
     var filterLayers_{{ this.get_name() }} = {{ this.filter_layers_json }};
+    var suppressedProperties_{{ this.get_name() }} = {{ this.suppressed_properties_json }};
     var minZoom_{{ this.get_name() }} = {{ this.min_zoom_json }};
     var maxZoom_{{ this.get_name() }} = {{ this.max_zoom_json }};
     function setTooltipForPMTilesMapLibreLayer_{{ this.get_name() }}(maplibreLayer) {
@@ -184,17 +185,32 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     var filterLayers = filterLayers_{{ this.get_name() }};
     if (filterLayers && filterLayers.length > 0) {
     features = features.filter(f => filterLayers.includes(f.layer.id));
+    // filterLayers doubles as a priority list: show only the first listed
+    // layer that has a hit, so a lake covered by an overlay renders the
+    // overlay's values instead of two stacked tables.
+    for (const layerId of filterLayers) {
+    const preferred = features.filter(f => f.layer.id === layerId);
+    if (preferred.length) { features = preferred; break; }
+    }
     }
     const {lng, lat}  = e.lngLat;
     const coordinates = [lng, lat]
     const aliases = columnAliases_{{ this.get_name() }};
     const overrides = propertyOverrides_{{ this.get_name() }};
+    const suppressed = suppressedProperties_{{ this.get_name() }};
     const html = features.map(f=>{
     const props = Object.assign({}, f.properties, overrides[f.properties["id_geohash"]] || {});
+    for (const key of (suppressed[f.layer.id] || [])) { delete props[key]; }
     return `
     <div class="feature-row">
     <table>
     ${Object.entries(props).map(([key, value]) => {
+    // Tilesets bake missing values as placeholder strings ("NaT" for null
+    // dates, "nan" for null floats); showing those as data is worse than
+    // omitting the row.
+    if (value === null || value === undefined) { return ""; }
+    const asText = String(value).trim();
+    if (asText === "" || ["nat", "nan", "none", "null"].includes(asText.toLowerCase())) { return ""; }
     let displayKey = aliases[key] || key;
     let displayVal = value;
     if (typeof value === 'number') {
@@ -236,6 +252,7 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
         min_zoom=None,
         max_zoom=None,
         property_overrides=None,
+        suppressed_properties=None,
         **kwargs,
     ):
         # Pop custom kwargs before passing to parent
@@ -246,7 +263,13 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
         super().__init__(**kwargs)
         self._name = name if name else "PMTilesTooltip"
         self.column_aliases = column_aliases if column_aliases else {}
+        # Ordered by priority: only the first layer with a hit under the cursor
+        # contributes to the popup.
         self.filter_layers = filter_layers if filter_layers else []
+        # {layer_id: [property, ...]} to drop from the popup for that layer --
+        # for properties a tileset bakes that would be stale or misleading in
+        # the current view.
+        self.suppressed_properties = suppressed_properties if suppressed_properties else {}
         self.min_zoom = min_zoom
         self.max_zoom = max_zoom
         # Per-feature tooltip content overrides, keyed by id_geohash: the
@@ -259,6 +282,12 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
         import json
 
         return json.dumps(self.property_overrides)
+
+    @property
+    def suppressed_properties_json(self):
+        import json
+
+        return json.dumps(self.suppressed_properties)
 
     @property
     def column_aliases_json(self):
@@ -483,6 +512,13 @@ def build_pmtiles_map(
             "water_change_perc": "Change of water area [%]",
             "pre_break_median": "Lake area before break [ha]",
             "post_break_median": "Lake area after break [ha]",
+            # Carried by the base lake tiles, which non-drained lakes hover.
+            "date_break": "Historical break date",
+            "date_break_year": "Historical break year",
+            "Area_start_ha": "Lake area year 2000 [ha]",
+            "Area_end_ha": "Lake area year 2020 [ha]",
+            "NetChange_perc": "Net change [%]",
+            "NetChange_ha": "Net change [ha]",
             # Baked into the per-month drainage tilesets: the NRT months carry
             # these rather than the "_absolute" variants above.
             "analysis_month": "Analysis month [YYYY-MM]",
@@ -493,20 +529,21 @@ def build_pmtiles_map(
             "water_predicted_upper_90": "Predicted water area, upper 90%",
         }
         if nrt_monthly_tiles_url:
-            # Hover the overlay, not the base lakes: the overlay features carry
-            # the selected month's values, the base tiles only whatever single
-            # month happened to be baked into them.
+            # Prefer the overlay, fall back to the base lakes: a drained lake
+            # hovers the selected month's values, any other lake still hovers
+            # whatever the base tiles carry. `date`/`drainage_confidence` are
+            # suppressed for the base layer because some base tilesets bake
+            # them from a single NRT run, which would report the wrong month.
             tooltip = PMTilesMapLibreTooltipWithRounding(
                 column_aliases=aliases,
-                filter_layers=["nrt-drained-fill"],
+                filter_layers=["nrt-drained-fill", "lakes-fill"],
+                suppressed_properties={"lakes-fill": ["date", "drainage_confidence"]},
                 min_zoom=8,
                 max_zoom=14,
             )
             # The month's drained lakes come from their own tileset (added
-            # below); the base tiles are the faint backdrop of all other lakes.
-            fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_base_lakes(
-                hide_stable_lakes=hide_stable_lakes
-            )
+            # below); the base tiles are the backdrop of all other lakes.
+            fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_base_lakes()
             has_magnitude_legend = not nrt_month_has_confidence
         else:
             tooltip = PMTilesMapLibreTooltipWithRounding(
@@ -671,6 +708,31 @@ def build_pmtiles_map(
             "type": "vector",
             "url": "pmtiles://" + nrt_monthly_tiles_url,
         }
+        # Base-lake centroids below z6, where the base tileset has no polygons
+        # (it bakes `lakes` at z6-14 and `lakes_points` at z0-5). Without this
+        # the zoomed-out view would show only the drained lakes, which do have
+        # a low-zoom layer. Drawn first so drained lakes stay on top.
+        base_points_layer = {
+            "id": "lakes-points",
+            "source": "lakes_pmtiles",
+            "source-layer": "lakes_points",
+            "type": "circle",
+            "maxzoom": 6,
+            "paint": {
+                "circle-color": fill_color,
+                "circle-opacity": fill_opacity,
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 5, 2.5],
+            },
+        }
+        layers.insert(0, base_points_layer)
+
+        if hide_stable_lakes:
+            # Switch the base layers off rather than painting them at zero
+            # opacity: a zero-opacity layer still counts as rendered, so
+            # queryRenderedFeatures would keep producing hover popups for the
+            # lakes the user asked to hide. The drained overlay is unaffected.
+            for layer in (base_points_layer, lakes_fill_layer, lakes_line_layer):
+                layer["layout"] = {"visibility": "none"}
         layers.extend(
             [
                 # Centroids below z6, where the polygons are sub-pixel: this is

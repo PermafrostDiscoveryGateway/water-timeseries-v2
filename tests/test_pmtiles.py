@@ -143,9 +143,12 @@ def test_build_pmtiles_map_monthly_tiles_layers():
     assert f"pmtiles://{tiles_url}" in html
     assert "nrt-drained-fill" in html
     assert "nrt-drained-points" in html
-    # No feature-state push, and the tooltip hovers the overlay layer.
+    # No feature-state push. The tooltip prefers the overlay but falls back to
+    # the base lakes, so non-drained lakes still hover -- minus the month-
+    # specific properties some base tilesets bake from a single NRT run.
     assert "setFeatureState" not in html
-    assert "filterLayers" in html and '["nrt-drained-fill"]' in html
+    assert '["nrt-drained-fill", "lakes-fill"]' in html
+    assert '{"lakes-fill": ["date", "drainage_confidence"]}' in html
     # Nothing per-lake reaches the page: no lake id, no state dict.
     assert "b7uefy0bvcrc" not in html
     assert "stateById" not in html
@@ -161,6 +164,36 @@ def test_build_pmtiles_map_monthly_tiles_layers():
     fallback_html = fallback.get_root().render()
     assert "setFeatureState" in fallback_html
     assert "b7uefy0bvcrc" in fallback_html
+
+
+def test_build_pmtiles_map_hide_stable_lakes_hides_base_layers():
+    """Hiding stable lakes must switch the base layers off, not just zero their opacity.
+
+    A zero-opacity layer still answers queryRenderedFeatures, which would leave
+    hidden lakes producing hover popups.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    def base_layers(hide: bool) -> dict:
+        m = build_pmtiles_map(
+            "http://localhost:1/lakes.pmtiles",
+            viz_configuration_name="nrt_drainage",
+            nrt_monthly_tiles_url="http://localhost:1/nrt_2026-07_drainage.pmtiles",
+            hide_stable_lakes=hide,
+        )
+        style = next(child for child in m._children.values() if hasattr(child, "style")).style
+        return {layer["id"]: layer for layer in style["layers"]}
+
+    shown = base_layers(False)
+    hidden = base_layers(True)
+
+    for layer_id in ("lakes-fill", "lakes-line", "lakes-points"):
+        assert "layout" not in shown[layer_id], layer_id
+        assert hidden[layer_id]["layout"]["visibility"] == "none", layer_id
+
+    # The month's drained lakes stay visible either way.
+    for layer_id in ("nrt-drained-fill", "nrt-drained-line", "nrt-drained-points"):
+        assert hidden[layer_id].get("layout", {}).get("visibility") != "none", layer_id
 
 
 def test_pmtiles_server_range_requests(tmp_path):

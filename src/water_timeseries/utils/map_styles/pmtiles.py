@@ -278,7 +278,7 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         "#e67e22",  # amber - medium confidence
         3,
         "#d73027",  # red - high confidence
-        "#aaaaaa",  # stable lake (no state set this month)
+        "#bdbdbd",  # stable lake (no state set this month)
     ]
     fill_opacity = [
         "match",
@@ -291,7 +291,7 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         0.85,
         3,
         0.85,
-        0 if hide_stable_lakes else 0.05,
+        0 if hide_stable_lakes else 0.35,
     ]
     line_color = [
         "match",
@@ -304,7 +304,7 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         "#a04d00",
         3,
         "#8b0000",
-        "#aaaaaa",
+        "#bdbdbd",
     ]
     line_width = [
         "match",
@@ -317,7 +317,7 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         1,
         3,
         3,
-        0 if hide_stable_lakes else 0.5,
+        0 if hide_stable_lakes else 1,
     ]
     line_opacity = [
         "match",
@@ -330,7 +330,7 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         1,
         3,
         1,
-        0 if hide_stable_lakes else 0.5,
+        0 if hide_stable_lakes else 0.9,
     ]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
@@ -405,16 +405,21 @@ def get_style_pmtiles_nrt_monthly_tiles() -> tuple:
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
-def get_style_pmtiles_nrt_base_lakes(hide_stable_lakes: bool = False) -> tuple:
+def get_style_pmtiles_nrt_base_lakes() -> tuple:
     """Paint for the base lake tiles under the per-month NRT drainage overlay.
 
     These are all the lakes, drained or not; the month's drained lakes are
-    drawn on top from their own tileset. Kept deliberately faint so the
-    overlay reads clearly, and fully hidden when the user hides stable lakes.
+    drawn on top from their own tileset. They read as neutral context -- grey,
+    matching the "0 - Stable lake" swatch in ``get_legend_html_nrt_drainage``
+    -- visible enough to show where lakes are, muted enough that the gold/
+    amber/red drained lakes stay the figure.
+
+    "Hide stable lakes" is *not* handled here: hiding via zero opacity would
+    leave the layer rendered as far as ``queryRenderedFeatures`` is concerned,
+    so invisible lakes would still produce hover popups. ``build_pmtiles_map``
+    switches the base layers' ``layout.visibility`` off instead.
     """
-    if hide_stable_lakes:
-        return "#aaaaaa", 0, "#aaaaaa", 0, 0
-    return "#aaaaaa", 0.05, "#aaaaaa", 0.5, 0.5
+    return "#bdbdbd", 0.35, "#bdbdbd", 1, 0.9
 
 
 def get_style_pmtiles_generic_water() -> tuple:

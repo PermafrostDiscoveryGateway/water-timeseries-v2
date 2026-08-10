@@ -269,6 +269,7 @@ def main(
         "dw_dataset_file": dw_dataset_file,
         "jrc_dataset_file": jrc_dataset_file,
         "precomputed_nrt_dir": precomputed_nrt_dir,
+        "nrt_pmtiles_dir": nrt_pmtiles_dir,
         "viz_configuration": viz_configuration,
         "pmtiles_file": pmtiles_file,
         "pmtiles_url": pmtiles_url,
@@ -287,6 +288,9 @@ def main(
     dw_dataset_file = settings["dw_dataset_file"]
     jrc_dataset_file = settings["jrc_dataset_file"]
     precomputed_nrt_dir = settings["precomputed_nrt_dir"]
+    # Each mode names its own monthly tilesets: they are built from that mode's
+    # breaks and geometries, so they can't be shared across modes.
+    nrt_pmtiles_dir = settings["nrt_pmtiles_dir"]
     viz_configuration = settings["viz_configuration"]
     pmtiles_file = settings["pmtiles_file"]
     pmtiles_url = settings["pmtiles_url"]
