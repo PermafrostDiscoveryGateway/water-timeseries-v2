@@ -1,6 +1,6 @@
 import os
 from collections.abc import Sequence
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import ee
@@ -1096,7 +1096,7 @@ def visualize_s2_xee_cube(
         ds_selected = get_better_image(ds.sel(time=date_slice))
 
         # reformat from YYYY-MM-DD to "DD Mon YYYY" (e.g. "15 Jan 2024")
-        real_date_dt = datetime.strptime(real_date, "%Y-%m-%d")
+        real_date_dt = datetime.strptime(real_date, "%Y-%m-%d").replace(tzinfo=UTC)
         real_date_formatted = real_date_dt.strftime("%d %b %Y")
 
         if style == "rgb":
