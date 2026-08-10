@@ -248,6 +248,7 @@ viz_configuration: The visualization configuration name for the map viewer.
 def build_pmtiles(
     vector_file: Path | None = None,
     output_file: Path | None = None,
+    pmtiles_file: Path | None = None,
     viz_configuration: str | None = None,
     keep_geojsonl: bool | None = None,
     logfile: str | None = None,
@@ -260,8 +261,13 @@ def build_pmtiles(
     ``.pmtiles`` file to object storage (S3, GCS, etc.) and pass ``--pmtiles-url`` to
     the dashboard, or use ``--pmtiles-file`` for local development.
 
+    The same dashboard config (e.g. ``configs/dashboard_historical.yaml``) that hosts
+    the dashboard can be reused here: its ``pmtiles_file`` key is accepted as the
+    build output path, so ``--config-file`` works for both building and serving tiles.
+
     Example:
         water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
+        water-timeseries build-pmtiles --config-file configs/dashboard_historical.yaml
         water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
     """
     # Load config file if provided
@@ -272,6 +278,7 @@ def build_pmtiles(
         config_dict,
         vector_file=str(vector_file) if vector_file else None,
         output_file=str(output_file) if output_file else None,
+        pmtiles_file=str(pmtiles_file) if pmtiles_file else None,
         viz_configuration=viz_configuration,
         keep_geojsonl=keep_geojsonl,
         logfile=logfile,
@@ -279,13 +286,15 @@ def build_pmtiles(
     )
 
     vector_file_str = config_dict.get("vector_file")
-    output_file_str = config_dict.get("output_file")
+    # `output_file` and `pmtiles_file` are aliases here: dashboard configs name the
+    # tiles path `pmtiles_file`, so accept either to let the same config build tiles.
+    output_file_str = config_dict.get("output_file") or config_dict.get("pmtiles_file")
 
     if not vector_file_str:
         logger.error("vector_file is required. Provide via CLI arguments or config file.")
         raise SystemExit(1)
     if not output_file_str:
-        logger.error("output_file is required. Provide via CLI arguments or config file.")
+        logger.error("output_file (or pmtiles_file) is required. Provide via CLI arguments or config file.")
         raise SystemExit(1)
 
     vector_file_path = Path(vector_file_str)
