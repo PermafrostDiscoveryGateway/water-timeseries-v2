@@ -328,6 +328,7 @@ def build_nrt_pmtiles(
     output_dir: Path | None = None,
     months: str | None = None,
     keep_geojsonl: bool = False,
+    poly_max_zoom: int = 14,
     logfile: str | None = None,
     verbose: int = 0,
 ):
@@ -349,6 +350,11 @@ def build_nrt_pmtiles(
         output_dir: Directory to write ``nrt_<month>_drainage.pmtiles`` into.
         months: Comma-separated ``YYYY-MM`` list. Defaults to every month in the breaks table.
         keep_geojsonl: Keep the intermediate GeoJSONL files next to the output.
+        poly_max_zoom: Highest zoom to bake polygon geometry at (default 14). The
+            top zooms dominate archive size -- for 2026-07, z13+z14 were 43% of
+            the file -- so ``--poly-max-zoom 12`` roughly halves the polygon
+            layer while only quantizing coordinates above z12 (MapLibre
+            overzooms the z12 tiles, which already carry full-detail geometry).
 
     Example:
         water-timeseries build-nrt-pmtiles \\
@@ -373,6 +379,7 @@ def build_nrt_pmtiles(
         output_dir,
         months=month_list,
         keep_geojsonl=keep_geojsonl,
+        poly_max_zoom=poly_max_zoom,
     )
     print(f"Wrote {len(outputs)} monthly drainage tilesets to {output_dir}")
 

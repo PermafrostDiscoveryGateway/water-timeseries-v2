@@ -166,8 +166,27 @@ def parquet_to_geojsonseq(
     return output_path, points_path
 
 
-def _write_features(gdf: gpd.GeoDataFrame, property_columns: Sequence[str], fh_poly, fh_points) -> None:
-    """Append ``gdf`` to open GeoJSONL handles as polygon (and centroid) features."""
+def _write_features(
+    gdf: gpd.GeoDataFrame,
+    property_columns: Sequence[str],
+    fh_poly,
+    fh_points,
+    *,
+    poly_zoom: tuple[int, int] = (6, 14),
+    points_zoom: tuple[int, int] = (0, 5),
+) -> None:
+    """Append ``gdf`` to open GeoJSONL handles as polygon (and centroid) features.
+
+    ``poly_zoom``/``points_zoom`` are stamped onto each feature as its
+    ``tippecanoe.minzoom``/``maxzoom`` (the documented per-feature zoom-range
+    keys, see ``man tippecanoe``). This is NOT the same as the ``minzoom``/
+    ``maxzoom`` keys in an ``-L`` layer spec passed to ``_run_tippecanoe`` —
+    those aren't part of tippecanoe's ``-L`` JSON schema (only ``file``,
+    ``layer``, ``description``, ``format`` are) and are silently ignored, so
+    setting them there does not restrict a layer's zoom range at all. Confirmed
+    by decoding output tiles: with only the (ignored) ``-L`` keys set, the
+    "drained" polygon layer showed up at z0 anyway. Per-feature is the fix.
+    """
     for _, row in gdf.iterrows():
         props = {c: row[c] for c in property_columns if c in gdf.columns}
         for key, val in list(props.items()):
@@ -178,13 +197,23 @@ def _write_features(gdf: gpd.GeoDataFrame, property_columns: Sequence[str], fh_p
 
         # Write polygon feature
         geom_poly = row.geometry.__geo_interface__
-        feat_poly = {"type": "Feature", "properties": props, "geometry": geom_poly}
+        feat_poly = {
+            "type": "Feature",
+            "tippecanoe": {"minzoom": poly_zoom[0], "maxzoom": poly_zoom[1]},
+            "properties": props,
+            "geometry": geom_poly,
+        }
         fh_poly.write(json.dumps(feat_poly, separators=(",", ":")) + "\n")
 
         # Write point feature
         if fh_points:
             geom_pt = row.geometry.centroid.__geo_interface__
-            feat_pt = {"type": "Feature", "properties": props, "geometry": geom_pt}
+            feat_pt = {
+                "type": "Feature",
+                "tippecanoe": {"minzoom": points_zoom[0], "maxzoom": points_zoom[1]},
+                "properties": props,
+                "geometry": geom_pt,
+            }
             fh_points.write(json.dumps(feat_pt, separators=(",", ":")) + "\n")
 
 
@@ -266,9 +295,13 @@ def build_pmtiles(
             if not f.startswith(("--minimum-zoom", "--maximum-zoom")) and f not in ("-l", "lakes")
         ]
 
-    layers = [{"file": str(poly_path), "layer": "lakes", "minzoom": 6, "maxzoom": 14}]
+    # Zoom split (polygons z6-14, centroids z0-5) is enforced by the per-feature
+    # "tippecanoe" property that parquet_to_geojsonseq -> _write_features stamps
+    # onto each feature, not by minzoom/maxzoom keys here — tippecanoe's -L JSON
+    # doesn't have those (see _write_features).
+    layers = [{"file": str(poly_path), "layer": "lakes"}]
     if point_path:
-        layers.append({"file": str(point_path), "layer": "lakes_points", "minzoom": 0, "maxzoom": 5})
+        layers.append({"file": str(point_path), "layer": "lakes_points"})
 
     _run_tippecanoe(
         output_path,
@@ -340,6 +373,7 @@ def build_pmtiles_nrt_monthly(
     keep_geojsonl: bool = False,
     month_column: str = "analysis_month",
     id_column: str = "id_geohash",
+    poly_max_zoom: int = 14,
 ) -> dict[str, Path]:
     """Build one small drained-lakes-only PMTiles archive per NRT analysis month.
 
@@ -359,6 +393,15 @@ def build_pmtiles_nrt_monthly(
             breaks table.
         property_columns: Columns to bake into tile properties (missing ones are skipped).
         keep_geojsonl: Keep the intermediate GeoJSONL files next to the output.
+        poly_max_zoom: Highest zoom to bake polygon geometry at. Lowering this is
+            by far the biggest size lever, because the top zooms dominate the
+            archive: for 2026-07, z13+z14 alone were 43% of the file. Dropping
+            it to 12 roughly halves the polygon layer (measured 96.6 -> 48.6 MB)
+            and costs only coordinate quantization above z12, not detail —
+            MapLibre overzooms the z12 tiles, and z12 already carries
+            full-resolution geometry (a sample tile held 919 vertices at
+            ``poly_max_zoom=12`` vs 920 at 14). Kept at 14 by default so
+            rebuilds are byte-comparable with existing archives.
 
     Returns:
         ``{month: pmtiles_path}`` for the months actually built.
@@ -417,14 +460,24 @@ def build_pmtiles_nrt_monthly(
         points_path = poly_path.with_name(f"{poly_path.stem}_points.geojsonl")
         print(f"[{month}] writing {len(gdf)} features to {poly_path.name}...")
         with poly_path.open("w", encoding="utf-8") as fh_poly, points_path.open("w", encoding="utf-8") as fh_points:
-            _write_features(gdf, keep_columns, fh_poly, fh_points)
+            _write_features(
+                gdf,
+                keep_columns,
+                fh_poly,
+                fh_points,
+                poly_zoom=(6, poly_max_zoom),
+                points_zoom=(0, 5),
+            )
 
         # Polygons above z6 and centroids below it, mirroring the base tileset,
         # so drained lakes stay visible when zoomed out (where the polygons are
-        # sub-pixel) without needing per-lake browser markers.
+        # sub-pixel) without needing per-lake browser markers. The zoom split
+        # is enforced by the per-feature "tippecanoe" property written above,
+        # not by these dict keys (tippecanoe's -L JSON has no minzoom/maxzoom
+        # of its own; see _write_features).
         layers = [
-            {"file": str(poly_path), "layer": "drained", "minzoom": 6, "maxzoom": 14},
-            {"file": str(points_path), "layer": "drained_points", "minzoom": 0, "maxzoom": 5},
+            {"file": str(poly_path), "layer": "drained"},
+            {"file": str(points_path), "layer": "drained_points"},
         ]
         _run_tippecanoe(
             output_path,
