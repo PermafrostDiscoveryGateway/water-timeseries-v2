@@ -787,7 +787,7 @@ class NRTBreakpoint(BreakpointMethod):
         if prediction_df.empty:
             prediction_df = pd.DataFrame(
                 index=ds_analysis_filtered.id_geohash.values,
-                columns=self.output_columns,
+                columns=["water_predicted", "water_predicted_lower_90", "water_predicted_upper_90"],
             )
 
         # merge output into a single dataframe
