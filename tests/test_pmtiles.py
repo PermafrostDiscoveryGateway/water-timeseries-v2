@@ -103,6 +103,40 @@ def test_build_pmtiles_nrt_monthly_months_filter(tmp_path):
         build_pmtiles_nrt_monthly(breaks, TEST_PARQUET, tmp_path / "tiles2", months=["1999-01"])
 
 
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_build_nrt_pmtiles_cli_config_file(tmp_path):
+    """``--config-file`` resolves breaks/geometry/output-dir from dashboard config keys."""
+    from water_timeseries.scripts.cli import build_nrt_pmtiles
+
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
+    breaks_dir = tmp_path / "precomputed_nrt"
+    breaks_dir.mkdir()
+    _write_breaks_fixture(breaks_dir / "nrt_monthly_drain_breaks.parquet", geohashes)
+
+    config_path = tmp_path / "dashboard_config.yaml"
+    config_path.write_text(
+        f"vector_file: {TEST_PARQUET}\n"
+        f"precomputed_nrt_dir: {breaks_dir}\n"
+        f"nrt_pmtiles_dir: {tmp_path / 'tiles'}\n"
+    )
+
+    build_nrt_pmtiles(config_file=config_path, months="2018-07")
+
+    assert (tmp_path / "tiles" / "nrt_2018-07_drainage.pmtiles").exists()
+
+    # A CLI flag overrides the config file's value for that key.
+    build_nrt_pmtiles(config_file=config_path, months="2018-07", output_dir=tmp_path / "tiles_override")
+    assert (tmp_path / "tiles_override" / "nrt_2018-07_drainage.pmtiles").exists()
+
+
+def test_build_nrt_pmtiles_cli_missing_paths_raises(tmp_path):
+    """No breaks/geometry/output_dir from CLI or config -> a clear error, not a crash."""
+    from water_timeseries.scripts.cli import build_nrt_pmtiles
+
+    with pytest.raises(SystemExit):
+        build_nrt_pmtiles()
+
+
 def test_resolve_nrt_monthly_tiles_url(tmp_path, monkeypatch):
     from water_timeseries.map_utils import resolve_nrt_monthly_tiles_url
 

@@ -53,6 +53,42 @@ Features:
 
 ![Dashboard](figures/dashboard.png)
 
+### Near Real Time (NRT) Drainage Status overlay
+
+In NRT mode (`viz_configuration: nrt_drainage`), the "Drainage Status" overlay reads
+each month's drained lakes from its own small PMTiles archive instead of pushing
+per-lake values into the browser on every rerun. Build one archive per month after
+each new NRT month lands (`aggregate-nrt`), then point the dashboard config at the
+output directory with `nrt_pmtiles_dir`:
+
+```bash
+uv run water-timeseries build-nrt-pmtiles \
+    --breaks-file precomputed/nrt/nrt_monthly_drain_breaks.parquet \
+    --geometry-file data/lakes_with_allgeoms.parquet \
+    --output-dir data/nrt_tiles
+```
+
+You can also point it at the dashboard config YAML directly, so there's nothing to
+keep in sync between the two commands:
+
+```bash
+uv run water-timeseries build-nrt-pmtiles --config-file configs/dashboard_nrt.yaml --months 2026-08
+```
+
+This reads `precomputed_nrt_dir` (+ `nrt_monthly_drain_breaks.parquet`), `vector_file`,
+and `nrt_pmtiles_dir` from the config for breaks_file, geometry_file, and output_dir
+respectively; any `--breaks-file`/`--geometry-file`/`--output-dir`/`--months` flag
+passed on the CLI takes priority over the config file. `nrt_pmtiles_dir` may also be
+an `http(s)://` or `gs://` prefix if the tilesets are hosted rather than local; months
+with no tileset there fall back to the slower runtime feature-state path.
+
+Add the resulting directory to the dashboard config:
+
+```yaml
+# configs/dashboard_nrt.yaml
+nrt_pmtiles_dir: data/nrt_tiles
+```
+
 ## Quick Start
 
 ### Python API
