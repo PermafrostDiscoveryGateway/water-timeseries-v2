@@ -1,6 +1,5 @@
 import functools
 import os
-import time
 from pathlib import Path
 from typing import ClassVar
 
@@ -11,7 +10,6 @@ import leafmap.foliumap as leafmap
 import pygeohash
 from branca.element import Element  # <--- Added this import
 from folium_pmtiles.vector import PMTilesMapLibreLayer
-from loguru import logger
 
 from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_colored_historical,
@@ -22,7 +20,6 @@ from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_nrt_drainage,
     get_style_pmtiles_nrt_monthly_tiles,
 )
-from water_timeseries.utils.timing import timed
 from water_timeseries.utils.visualization import (
     get_legend_html_date_drainage_year,
     get_legend_html_drained_month,
@@ -335,7 +332,6 @@ class PMTilesMapLibreFeatureState(branca.element.MacroElement):
     function applyFeatureState_{{ this.get_name() }}(maplibreLayer) {
     var mlMap = maplibreLayer.getMaplibreMap();
     function pushState() {
-    console.time("[timing] setFeatureState push ({{ this.get_name() }})");
     mlMap.removeFeatureState({source: {{ this.source_json }}, sourceLayer: {{ this.source_layer_json }}});
     for (const [id, state] of Object.entries(stateById_{{ this.get_name() }})) {
     mlMap.setFeatureState(
@@ -343,7 +339,6 @@ class PMTilesMapLibreFeatureState(branca.element.MacroElement):
     state
     );
     }
-    console.timeEnd("[timing] setFeatureState push ({{ this.get_name() }})");
     }
     if (mlMap.isStyleLoaded()) { pushState(); } else { mlMap.on("load", pushState); }
     }
@@ -432,8 +427,6 @@ def build_pmtiles_map(
         id_column: Tile property holding the lake id (matched against
             ``selected_id``).
     """
-    _build_start = time.perf_counter()
-
     m = leafmap.Map(
         location=center,
         zoom_start=zoom_start,
@@ -790,44 +783,38 @@ def build_pmtiles_map(
     # ------------------------
 
     if viz_configuration_name == "nrt_drainage" and not drained_ids and nrt_confidence_by_id is not None:
-        with timed(f"build_pmtiles_map: feature_state_setup ({len(nrt_confidence_by_id)} lakes)"):
-            # None means "drained, confidence unknown" — encoded as 0 (rendered as
-            # a red gradient by water_change_perc when available, else mid red).
-            state_by_id = {
-                gid: {"confidence": 0 if conf is None else int(conf)} for gid, conf in nrt_confidence_by_id.items()
-            }
-            for gid, perc in (nrt_magnitude_by_id or {}).items():
-                if gid in state_by_id:
-                    state_by_id[gid]["water_change_perc"] = perc
-            feature_state = PMTilesMapLibreFeatureState(
-                state_by_id=state_by_id,
-                source="lakes_pmtiles",
-                source_layer=source_layer,
-            )
-            # Materialize the JSON now (rather than lazily at Jinja-render time)
-            # so its cost is visible here instead of silently folded into
-            # `st_folium`'s HTML serialization step.
-            _ = feature_state.state_by_id_json
+        # None means "drained, confidence unknown" — encoded as 0 (rendered as
+        # a red gradient by water_change_perc when available, else mid red).
+        state_by_id = {
+            gid: {"confidence": 0 if conf is None else int(conf)} for gid, conf in nrt_confidence_by_id.items()
+        }
+        for gid, perc in (nrt_magnitude_by_id or {}).items():
+            if gid in state_by_id:
+                state_by_id[gid]["water_change_perc"] = perc
+        feature_state = PMTilesMapLibreFeatureState(
+            state_by_id=state_by_id,
+            source="lakes_pmtiles",
+            source_layer=source_layer,
+        )
         feature_state.add_to(lake_layer)
 
     if drained_ids:
-        with timed(f"build_pmtiles_map: drained_ids CircleMarker loop ({len(drained_ids)} markers)"):
-            drained_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
-            for gid in drained_ids:
-                lat, lon = pygeohash.decode(gid)
-                marker = folium.CircleMarker(
-                    location=[lat, lon],
-                    radius=6,
-                    color="darkred",
-                    fill=True,
-                    fill_color="red",
-                    fill_opacity=0.6,
-                    border_width=0.5,
-                    icon=folium.Icon(color="red", icon="tint", prefix="fa"),
-                )
-                marker.add_to(drained_markers)
+        drained_markers = folium.FeatureGroup(name="Drained Lake Markers", control=True)
+        for gid in drained_ids:
+            lat, lon = pygeohash.decode(gid)
+            marker = folium.CircleMarker(
+                location=[lat, lon],
+                radius=6,
+                color="darkred",
+                fill=True,
+                fill_color="red",
+                fill_opacity=0.6,
+                border_width=0.5,
+                icon=folium.Icon(color="red", icon="tint", prefix="fa"),
+            )
+            marker.add_to(drained_markers)
 
-            drained_markers.add_to(m)
+        drained_markers.add_to(m)
         ul, lr = drained_markers.get_bounds()
         print(ul, lr)
 
@@ -855,7 +842,6 @@ def build_pmtiles_map(
     """
     m.get_root().html.add_child(Element(style))
 
-    logger.info(f"[timing] build_pmtiles_map total: {(time.perf_counter() - _build_start) * 1000:.1f} ms")
     return m
 
 

@@ -51,7 +51,6 @@ from water_timeseries.utils.map_styling import (
     get_colored_style_function,
     get_default_style_function,
 )
-from water_timeseries.utils.timing import timed
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
@@ -373,46 +372,41 @@ class MapViewer:
             logger.info(f"Drained data overlay: {len(drained_ids)} lakes")
         logger.info("Setting up map")
         tooltip = None
-        _perf = st.session_state.setdefault("_perf_timings_fragment", {})
-        with timed("_render_pmtiles: build_pmtiles_map", sink=_perf):
-            m = build_pmtiles_map(
-                pmtiles_url,
-                center=tuple(center),
-                zoom_start=self.zoom,
-                drained_ids=drained_ids,
-                viz_configuration_name=viz_configuration_name,
-                tooltip=tooltip,
-                hide_stable_lakes=self.hide_stable_lakes,
-                drained_label=getattr(self, "drained_label", None),
-                nrt_confidence_by_id=self.nrt_confidence_by_id,
-                nrt_tooltip_overrides=self.nrt_tooltip_overrides,
-                nrt_magnitude_by_id=self.nrt_magnitude_by_id,
-                nrt_monthly_tiles_url=self.nrt_monthly_tiles_url,
-                nrt_month_has_confidence=self.nrt_month_has_confidence,
-                selected_id=st.session_state.get("selected_geohash"),
-                id_column=self.id_column,
-            )
+        m = build_pmtiles_map(
+            pmtiles_url,
+            center=tuple(center),
+            zoom_start=self.zoom,
+            drained_ids=drained_ids,
+            viz_configuration_name=viz_configuration_name,
+            tooltip=tooltip,
+            hide_stable_lakes=self.hide_stable_lakes,
+            drained_label=getattr(self, "drained_label", None),
+            nrt_confidence_by_id=self.nrt_confidence_by_id,
+            nrt_tooltip_overrides=self.nrt_tooltip_overrides,
+            nrt_magnitude_by_id=self.nrt_magnitude_by_id,
+            nrt_monthly_tiles_url=self.nrt_monthly_tiles_url,
+            nrt_month_has_confidence=self.nrt_month_has_confidence,
+            selected_id=st.session_state.get("selected_geohash"),
+            id_column=self.id_column,
+        )
 
         # Render the map and get click data. This is the streamlit-folium
         # component call: it serializes `m` to HTML and round-trips it to the
-        # browser iframe, so its timing is "server HTML build + transfer +
-        # component mount", not pure Python -- the actual client-side
-        # setFeatureState push is timed separately in the browser console.
-        with timed("_render_pmtiles: st_folium component render", sink=_perf):
-            map_data = st_folium(
-                m,
-                width="100%",
-                height=600,
-                key="map_viewer_pmtiles",
-                returned_objects=[
-                    "last_active_drawing",
-                    "last_object_clicked",
-                    "last_object_clicked_tooltip",
-                    "last_clicked",
-                    "center",
-                    "zoom",
-                ],
-            )
+        # browser iframe.
+        map_data = st_folium(
+            m,
+            width="100%",
+            height=600,
+            key="map_viewer_pmtiles",
+            returned_objects=[
+                "last_active_drawing",
+                "last_object_clicked",
+                "last_object_clicked_tooltip",
+                "last_clicked",
+                "center",
+                "zoom",
+            ],
+        )
 
         # Track the user's live view (feeds the shareable URL, not map construction)
         update_live_view(map_data.get("center"), map_data.get("zoom"))
@@ -697,15 +691,13 @@ class MapViewer:
 
         # Render the map and get click data
         # Note: returned_objects includes 'last_active_drawing' for click detection
-        _perf = st.session_state.setdefault("_perf_timings_fragment", {})
-        with timed("_render_folium: st_folium component render", sink=_perf):
-            result = st_folium(
-                m,
-                height=600,
-                width="100%",
-                key="map_viewer",
-                returned_objects=["last_active_drawing", "center", "zoom"],
-            )
+        result = st_folium(
+            m,
+            height=600,
+            width="100%",
+            key="map_viewer",
+            returned_objects=["last_active_drawing", "center", "zoom"],
+        )
         # Track the user's live view (feeds the shareable URL, not map construction)
         update_live_view(result.get("center"), result.get("zoom"))
 
@@ -1228,12 +1220,6 @@ def create_app(
         st.query_params.pop("selected_lake", None)
         st.rerun()
 
-    # Reset per-full-rerun timing bucket (see the sidebar debug expander near
-    # the end of this function). Fragment-only reruns (map pan/zoom, clicks
-    # inside map_viewer_section) don't reach this line, so they instead
-    # accumulate into "_perf_timings_fragment", reset inside the fragment.
-    st.session_state["_perf_timings_page"] = {}
-
     # Disable/Enable JRC data. True to disable
     st.session_state.disable_jrc = True
     if st.session_state.disable_jrc:
@@ -1369,8 +1355,7 @@ def create_app(
 
     # Load pre-computed NRT results (once per session)
     if "precomputed_nrt_counts" not in st.session_state:
-        with timed("load_precomputed_nrt (first load this session)", sink=st.session_state["_perf_timings_page"]):
-            counts_loaded, breaks_loaded = _load_precomputed_nrt(precomputed_nrt_dir)
+        counts_loaded, breaks_loaded = _load_precomputed_nrt(precomputed_nrt_dir)
         st.session_state.precomputed_nrt_counts = counts_loaded
         st.session_state.precomputed_nrt_breaks = breaks_loaded
         default_activate_historical = False
@@ -1441,33 +1426,29 @@ def create_app(
                 nrt_confidence_by_id = {}
                 nrt_tooltip_overrides = {}
                 nrt_magnitude_by_id = {}
-                with timed(
-                    f"build_nrt_confidence_dicts ({len(month_rows)} rows, {selected_conf_month})",
-                    sink=st.session_state["_perf_timings_page"],
-                ):
-                    for row in month_rows.itertuples(index=False):
-                        gid = str(row.id_geohash)
-                        conf: int | None = None
-                        if has_confidence:
-                            raw_conf = getattr(row, "drainage_confidence", None)
-                            conf = int(raw_conf) if raw_conf is not None and pd.notna(raw_conf) else None
-                        nrt_confidence_by_id[gid] = conf
-                        if conf is None:
-                            # No real confidence for this lake — shade by relative
-                            # water loss instead of flat red (see the feature-state
-                            # paint expression in map_styles/pmtiles.py).
-                            perc = getattr(row, "water_change_perc", None)
-                            if perc is not None and pd.notna(perc):
-                                nrt_magnitude_by_id[gid] = round(float(perc), 1)
-                        override: dict = {
-                            "date": selected_conf_month,
-                            "drainage_confidence": conf if conf is not None else "unknown",
-                        }
-                        for col in tooltip_override_cols:
-                            val = getattr(row, col, None)
-                            if val is not None and pd.notna(val):
-                                override[col] = float(val)
-                        nrt_tooltip_overrides[gid] = override
+                for row in month_rows.itertuples(index=False):
+                    gid = str(row.id_geohash)
+                    conf: int | None = None
+                    if has_confidence:
+                        raw_conf = getattr(row, "drainage_confidence", None)
+                        conf = int(raw_conf) if raw_conf is not None and pd.notna(raw_conf) else None
+                    nrt_confidence_by_id[gid] = conf
+                    if conf is None:
+                        # No real confidence for this lake — shade by relative
+                        # water loss instead of flat red (see the feature-state
+                        # paint expression in map_styles/pmtiles.py).
+                        perc = getattr(row, "water_change_perc", None)
+                        if perc is not None and pd.notna(perc):
+                            nrt_magnitude_by_id[gid] = round(float(perc), 1)
+                    override: dict = {
+                        "date": selected_conf_month,
+                        "drainage_confidence": conf if conf is not None else "unknown",
+                    }
+                    for col in tooltip_override_cols:
+                        val = getattr(row, col, None)
+                        if val is not None and pd.notna(val):
+                            override[col] = float(val)
+                    nrt_tooltip_overrides[gid] = override
                 shaded_by_magnitude = bool(nrt_magnitude_by_id)
             elif "water_change_perc" in month_rows.columns:
                 # The tile paint applies the same water-loss gradient from the
@@ -1546,13 +1527,12 @@ def create_app(
                     st.session_state["heatmap_selected_cell"] = selectable_months[-1]
 
                 # Heatmap in sidebar – click a cell to pre-select the month dropdown
-                with timed("render_drain_heatmap", sink=st.session_state["_perf_timings_page"]):
-                    _render_drain_heatmap(
-                        precomputed_counts,
-                        precomputed_breaks,
-                        container=st.sidebar,
-                        selected_month=st.session_state.get("heatmap_selected_cell", None),
-                    )
+                _render_drain_heatmap(
+                    precomputed_counts,
+                    precomputed_breaks,
+                    container=st.sidebar,
+                    selected_month=st.session_state.get("heatmap_selected_cell", None),
+                )
                 # Sync dropdown with heatmap click: consume the one-shot flag and write
                 # directly to the selectbox session-state key so Streamlit picks it up.
                 heatmap_pick = st.session_state.get("heatmap_selected_cell")
@@ -1602,12 +1582,6 @@ def create_app(
 
         @st.fragment
         def map_viewer_section():
-            # Reset per-fragment-rerun timing bucket. Panning/clicking the map
-            # only reruns this fragment (that's the point of @st.fragment), so
-            # this dict captures timings for those fast, frequent reruns
-            # separately from the full-page timings in "_perf_timings_page".
-            st.session_state["_perf_timings_fragment"] = {}
-
             try:
                 # st.write(f"DEBUG: fragment running, hide_stable_lakes={st.session_state.get('toggle_hide_stable_lakes')}")
                 if drained_just_enabled and drained_breaks is not None and st.session_state.selected_geohash is None:
@@ -1667,8 +1641,7 @@ def create_app(
                     viewer.show_main_layer = True
 
                 # Render the map INSIDE the fragment
-                with timed("viewer.render (total)", sink=st.session_state["_perf_timings_fragment"]):
-                    selected = viewer.render()
+                selected = viewer.render()
 
                 # Mirror the current state params to a cooperating parent page
                 # (re-posts on fragment reruns, e.g. after pan/zoom)
@@ -1680,22 +1653,6 @@ def create_app(
                 return None, None
 
         viewer, _selected = map_viewer_section()
-
-        # Debug: surface where render time actually went. "page" timings are
-        # from the full-script rerun (data load, confidence-dict build,
-        # heatmap); "fragment" timings are from the map_viewer_section
-        # fragment (map build + streamlit-folium component round trip), which
-        # also reruns on its own on every pan/zoom/click. See
-        # PMTilesMapLibreFeatureState's console.time/timeEnd for the
-        # client-side setFeatureState push, which isn't visible server-side.
-        page_timings = st.session_state.get("_perf_timings_page", {})
-        fragment_timings = st.session_state.get("_perf_timings_fragment", {})
-        all_timings = {**page_timings, **fragment_timings}
-        if all_timings:
-            with st.sidebar.expander("⏱️ Render timing (debug)", expanded=False):
-                for label, elapsed_ms in sorted(all_timings.items(), key=lambda kv: kv[1], reverse=True):
-                    st.caption(f"{elapsed_ms:,.0f} ms — {label}")
-                st.caption(f"**Total (page + fragment): {sum(all_timings.values()):,.0f} ms**")
 
         # Display selected features in sidebar
         st.sidebar.divider()
