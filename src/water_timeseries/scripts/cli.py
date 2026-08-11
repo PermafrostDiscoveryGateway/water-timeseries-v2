@@ -356,8 +356,9 @@ def build_nrt_pmtiles(
     geometry_file: Path | None = None,
     output_dir: Path | None = None,
     months: str | None = None,
-    keep_geojsonl: bool = False,
-    poly_max_zoom: int = 14,
+    keep_geojsonl: bool | None = None,
+    poly_max_zoom: int | None = None,
+    config_file: Path | None = None,
     logfile: str | None = None,
     verbose: int = 0,
 ):
@@ -384,19 +385,58 @@ def build_nrt_pmtiles(
             the file -- so ``--poly-max-zoom 12`` roughly halves the polygon
             layer while only quantizing coordinates above z12 (MapLibre
             overzooms the z12 tiles, which already carry full-detail geometry).
+        config_file: A dashboard config YAML (e.g. the one deployed as
+            ``dashboard-config.yaml``) or a config using these flags' own names.
+            Its ``precomputed_nrt_dir`` (+ ``nrt_monthly_drain_breaks.parquet``),
+            ``vector_file`` and ``nrt_pmtiles_dir`` are read as breaks_file,
+            geometry_file and output_dir respectively when those keys aren't
+            set directly. CLI flags always take priority over the config file.
 
     Example:
         water-timeseries build-nrt-pmtiles \\
             --breaks-file precomputed/nrt/nrt_monthly_drain_breaks.parquet \\
             --geometry-file data/lakes_with_allgeoms.parquet \\
             --output-dir data/nrt_tiles
+        water-timeseries build-nrt-pmtiles --config-file configs/dashboard_panarctic.yaml --months 2026-08
         water-timeseries dashboard --pmtiles-file data/lakes.pmtiles \\
             --nrt-pmtiles-dir data/nrt_tiles --viz-configuration nrt_drainage
     """
     setup_logging(logfile=logfile, verbose=verbose)
 
+    # A multi-mode dashboard config keeps these keys under its `nrt_drainage`
+    # mode, so flatten that mode out before reading them.
+    config_dict = flatten_mode(load_config(config_file, logger), "nrt_drainage") if config_file else {}
+    if not config_dict.get("breaks_file") and config_dict.get("precomputed_nrt_dir"):
+        config_dict["breaks_file"] = str(Path(config_dict["precomputed_nrt_dir"]) / "nrt_monthly_drain_breaks.parquet")
+    if not config_dict.get("geometry_file") and config_dict.get("vector_file"):
+        config_dict["geometry_file"] = config_dict["vector_file"]
+    if not config_dict.get("output_dir") and config_dict.get("nrt_pmtiles_dir"):
+        config_dict["output_dir"] = config_dict["nrt_pmtiles_dir"]
+
+    config_dict = merge_config_with_args(
+        config_dict,
+        breaks_file=str(breaks_file) if breaks_file else None,
+        geometry_file=str(geometry_file) if geometry_file else None,
+        output_dir=str(output_dir) if output_dir else None,
+        months=months,
+        keep_geojsonl=keep_geojsonl,
+        poly_max_zoom=poly_max_zoom,
+    )
+
+    breaks_file = Path(config_dict["breaks_file"]) if config_dict.get("breaks_file") else None
+    geometry_file = Path(config_dict["geometry_file"]) if config_dict.get("geometry_file") else None
+    output_dir = Path(config_dict["output_dir"]) if config_dict.get("output_dir") else None
+    months = config_dict.get("months")
+    if isinstance(months, list):
+        months = ",".join(months)
+    keep_geojsonl = bool(config_dict.get("keep_geojsonl", False))
+    poly_max_zoom = int(config_dict.get("poly_max_zoom", 14))
+
     if not breaks_file or not geometry_file or not output_dir:
-        logger.error("breaks_file, geometry_file and output_dir are all required.")
+        logger.error(
+            "breaks_file, geometry_file and output_dir are all required "
+            "(via CLI flags, or a --config-file with precomputed_nrt_dir/vector_file/nrt_pmtiles_dir)."
+        )
         raise SystemExit(1)
     if not find_tippecanoe():
         raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
