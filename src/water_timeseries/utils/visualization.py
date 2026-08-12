@@ -200,6 +200,50 @@ def get_legend_html_nrt_drainage() -> str:
     return LEGEND_HTML_NRT_DRAINAGE
 
 
+def get_legend_html_nrt_drainage_magnitude() -> str:
+    """Generate HTML legend for the NRT monthly overlay when no real
+    drainage-confidence values exist and drained lakes are instead shaded
+    by relative water loss (``water_change_perc``).
+
+    The gradient stops must match ``get_style_pmtiles_nrt_confidence_featurestate``
+    in ``map_styles/pmtiles.py``.
+    """
+    LEGEND_HTML_NRT_MAGNITUDE = """
+        <div style="
+            position: fixed;
+            bottom: 40px;
+            right: 10px;
+            width: 180px;
+            height: auto;
+            border: 2px solid grey;
+            z-index: 9999;
+            font-size: 12px;
+            background-color: white;
+            color: #222;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        ">
+        <p style="margin: 0 0 5px 0; font-weight: bold;">Drained Lakes: Water Loss</p>
+        <div style="
+            height: 14px;
+            border: 1px solid #ccc;
+            margin-bottom: 3px;
+            background: linear-gradient(to right, #fcae91, #fb6a4a, #de2d26, #67000d);
+        "></div>
+        <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+            <span>-25%</span>
+            <span>-100%</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #aaaaaa; border: 1px solid #ccc; margin-right: 8px;"></div>
+            <span>Stable lake</span>
+        </div>
+        </div>
+    """
+    return LEGEND_HTML_NRT_MAGNITUDE
+
+
 def build_hover_template(
     id_column: str,
     hover_fields: list[str],

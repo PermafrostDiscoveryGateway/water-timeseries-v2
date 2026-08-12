@@ -29,7 +29,7 @@ from water_timeseries.dashboard.share_state import (
 from water_timeseries.dashboard.tutorial_popup import show_help_button, show_tutorial_popup
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
-from water_timeseries.map_utils import geohash_to_human_readable_name
+from water_timeseries.map_utils import geohash_to_human_readable_name, resolve_nrt_monthly_tiles_url
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
     check_dataset_availability_ds_raw,
@@ -151,6 +151,17 @@ class MapViewer:
         self.drained_data = None
         self.viz_configuration_name = viz_configuration_name
         self.hide_stable_lakes = hide_stable_lakes
+        # Optional NRT monthly overlay (nrt_drainage viz only), attached by the
+        # dashboard before render(). Preferred: a per-month drained-lakes
+        # tileset URL, whose properties are baked at build time. The per-lake
+        # dicts below are the fallback for deployments without those tilesets;
+        # they travel to the browser inline on every rerun, so they are much
+        # more expensive (see build_pmtiles_map).
+        self.nrt_monthly_tiles_url: str | None = None
+        self.nrt_month_has_confidence: bool = True
+        self.nrt_confidence_by_id: dict[str, int | None] | None = None
+        self.nrt_tooltip_overrides: dict[str, dict] | None = None
+        self.nrt_magnitude_by_id: dict[str, float] | None = None
 
         use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
         if use_pmtiles and map_backend != "pmtiles":
@@ -369,9 +380,16 @@ class MapViewer:
             viz_configuration_name=viz_configuration_name,
             tooltip=tooltip,
             hide_stable_lakes=self.hide_stable_lakes,
+            nrt_confidence_by_id=self.nrt_confidence_by_id,
+            nrt_tooltip_overrides=self.nrt_tooltip_overrides,
+            nrt_magnitude_by_id=self.nrt_magnitude_by_id,
+            nrt_monthly_tiles_url=self.nrt_monthly_tiles_url,
+            nrt_month_has_confidence=self.nrt_month_has_confidence,
         )
 
-        # Render the map and get click data
+        # Render the map and get click data. This is the streamlit-folium
+        # component call: it serializes `m` to HTML and round-trips it to the
+        # browser iframe.
         map_data = st_folium(
             m,
             width="100%",
@@ -1117,6 +1135,7 @@ def create_app(
     viz_configuration_name: str | None = "colored_historical",
     pmtiles_file: str | Path | None = None,
     pmtiles_url: str | None = None,
+    nrt_pmtiles_dir: str | Path | None = None,
     logfile: str | None = None,
 ):
     """Create the Streamlit app with map viewer.
@@ -1139,6 +1158,11 @@ def create_app(
         viz_configuration_name: Map styling preset.
         pmtiles_file: Path to a ``.pmtiles`` archive (enables fast vector-tile map).
         pmtiles_url: HTTP(S) URL to a hosted ``.pmtiles`` file (e.g. on S3).
+        nrt_pmtiles_dir: Where the per-month NRT drainage tilesets live (local
+            directory, ``http(s)://`` prefix or ``gs://`` prefix), as written by
+            ``build_pmtiles_nrt_monthly``. When a tileset exists for the
+            selected month, the drainage-status overlay is rendered from it
+            instead of pushing per-lake values into the browser.
     """
 
     def _set_center_to_selected():
@@ -1254,6 +1278,16 @@ def create_app(
             st.session_state.selected_geohash = selected_id
             if selected_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(selected_id)
+            # This sync runs after the _set_center_to_selected() check above,
+            # so a fresh page load with ?selected_lake= would otherwise render
+            # the default viewport instead of jumping to the lake.
+            try:
+                qp_lat, qp_lon = pygeohash.decode(selected_id)
+            except ValueError:
+                logger.warning(f"selected_lake query param is not a valid geohash: {selected_id}")
+            else:
+                st.session_state.map_center = {"lat": qp_lat, "lon": qp_lon}
+                st.session_state.zoom_level = 12
 
     # Initialize dataset in session state if not already.
     # The zarr handles and lake polygons are NOT loaded here: first paint only
@@ -1285,6 +1319,109 @@ def create_app(
         default_activate_historical = False
     precomputed_counts: pd.DataFrame | None = st.session_state.precomputed_nrt_counts
     precomputed_breaks: pd.DataFrame | None = st.session_state.precomputed_nrt_breaks
+
+    # Monthly drainage-status overlay (NRT mode): pick a month of the most
+    # recent year in the pre-computed breaks and show that month's drained
+    # lakes. Served from the month's own tileset when one was built
+    # (``nrt_pmtiles_dir``); otherwise recolored at runtime from the per-lake
+    # dicts below via MapLibre feature-state.
+    nrt_monthly_tiles_url: str | None = None
+    nrt_month_has_confidence: bool = True
+    nrt_confidence_by_id: dict[str, int | None] | None = None
+    nrt_tooltip_overrides: dict[str, dict] | None = None
+    nrt_magnitude_by_id: dict[str, float] | None = None
+    if (
+        viz_configuration_name == "nrt_drainage"
+        and precomputed_breaks is not None
+        and not precomputed_breaks.empty
+        and "analysis_month" in precomputed_breaks.columns
+        and "id_geohash" in precomputed_breaks.columns
+    ):
+        # Months come from the per-lake breaks table, NOT precomputed_counts:
+        # the two can cover different month sets, and a month with counts but
+        # no per-lake rows would silently color nothing.
+        available_conf_months = sorted(precomputed_breaks["analysis_month"].dropna().unique().tolist())
+        if available_conf_months:
+            latest_year = available_conf_months[-1][:4]
+            year_months = [m for m in available_conf_months if m.startswith(latest_year)]
+            month_counts = precomputed_breaks["analysis_month"].value_counts()
+
+            st.sidebar.divider()
+            st.sidebar.subheader(f"Drainage Status {latest_year}")
+            selected_conf_month = st.sidebar.radio(
+                "Month",
+                year_months,
+                index=len(year_months) - 1,
+                key="nrt_confidence_month",
+                format_func=lambda m: f"{m}  ·  {int(month_counts.get(m, 0))} drained",
+                help="Colors lakes by their drainage signal for the selected month.",
+            )
+
+            month_rows = precomputed_breaks[precomputed_breaks["analysis_month"] == selected_conf_month]
+            has_confidence = (
+                "drainage_confidence" in month_rows.columns and month_rows["drainage_confidence"].notna().any()
+            )
+
+            # Preferred path: the month has its own drained-lakes tileset, with
+            # confidence baked into the tile properties. Nothing per-lake needs
+            # to be built or shipped to the browser, so skip the dict building
+            # below entirely (it costs ~250ms/rerun at 60k lakes, and lands
+            # another ~6MB in the page for streamlit-folium to serialize).
+            nrt_monthly_tiles_url = resolve_nrt_monthly_tiles_url(nrt_pmtiles_dir, selected_conf_month)
+            nrt_month_has_confidence = has_confidence
+            if nrt_monthly_tiles_url:
+                logger.info(f"NRT monthly tiles for {selected_conf_month}: {nrt_monthly_tiles_url}")
+
+            shaded_by_magnitude = False
+            if not nrt_monthly_tiles_url:
+                tooltip_override_cols = [
+                    c
+                    for c in ("water_change_ha", "water_change_perc", "pre_break_median", "post_break_median")
+                    if c in month_rows.columns
+                ]
+                nrt_confidence_by_id = {}
+                nrt_tooltip_overrides = {}
+                nrt_magnitude_by_id = {}
+                for row in month_rows.itertuples(index=False):
+                    gid = str(row.id_geohash)
+                    conf: int | None = None
+                    if has_confidence:
+                        raw_conf = getattr(row, "drainage_confidence", None)
+                        conf = int(raw_conf) if raw_conf is not None and pd.notna(raw_conf) else None
+                    nrt_confidence_by_id[gid] = conf
+                    if conf is None:
+                        # No real confidence for this lake — shade by relative
+                        # water loss instead of flat red (see the feature-state
+                        # paint expression in map_styles/pmtiles.py).
+                        perc = getattr(row, "water_change_perc", None)
+                        if perc is not None and pd.notna(perc):
+                            nrt_magnitude_by_id[gid] = round(float(perc), 1)
+                    override: dict = {
+                        "date": selected_conf_month,
+                        "drainage_confidence": conf if conf is not None else "unknown",
+                    }
+                    for col in tooltip_override_cols:
+                        val = getattr(row, col, None)
+                        if val is not None and pd.notna(val):
+                            override[col] = float(val)
+                    nrt_tooltip_overrides[gid] = override
+                shaded_by_magnitude = bool(nrt_magnitude_by_id)
+            elif "water_change_perc" in month_rows.columns:
+                # The tile paint applies the same water-loss gradient from the
+                # baked water_change_perc property.
+                shaded_by_magnitude = bool(month_rows["water_change_perc"].notna().any())
+
+            if not has_confidence:
+                if shaded_by_magnitude:
+                    st.sidebar.caption(
+                        "⚠️ No drainage-confidence values are available for these months; "
+                        "drained lakes are shaded red by relative water loss instead."
+                    )
+                else:
+                    st.sidebar.caption(
+                        "⚠️ No drainage-confidence values are available for these months; "
+                        "drained lakes are shown in red (confidence unknown)."
+                    )
 
     # Near-real-time drainage overlay
     st.sidebar.divider()
@@ -1398,7 +1535,6 @@ def create_app(
 
         @st.fragment
         def map_viewer_section():
-
             try:
                 # st.write(f"DEBUG: fragment running, hide_stable_lakes={st.session_state.get('toggle_hide_stable_lakes')}")
                 if drained_just_enabled and drained_breaks is not None and st.session_state.selected_geohash is None:
@@ -1428,6 +1564,11 @@ def create_app(
                     logger=logger,
                     hide_stable_lakes=hide_stable_lakes,
                 )
+                viewer.nrt_monthly_tiles_url = nrt_monthly_tiles_url
+                viewer.nrt_month_has_confidence = nrt_month_has_confidence
+                viewer.nrt_confidence_by_id = nrt_confidence_by_id
+                viewer.nrt_tooltip_overrides = nrt_tooltip_overrides
+                viewer.nrt_magnitude_by_id = nrt_magnitude_by_id
 
                 if show_drained and drained_breaks is not None and not drained_breaks.empty:
                     drained_ids = drained_breaks.index.unique().tolist()

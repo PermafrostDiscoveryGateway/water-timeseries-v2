@@ -4,11 +4,14 @@ import json
 from pathlib import Path
 
 import geopandas as gpd
+import pandas as pd
 import pytest
 
 from water_timeseries.utils.pmtiles_build import (
     DEFAULT_TILE_PROPERTIES,
+    build_pmtiles_nrt_monthly,
     find_tippecanoe,
+    nrt_monthly_tiles_filename,
     parquet_to_geojsonseq,
 )
 from water_timeseries.utils.pmtiles_reader import read_pmtiles_header
@@ -42,6 +45,189 @@ def test_build_pmtiles_integration(tmp_path):
     build_pmtiles(TEST_PARQUET, output)
     assert output.exists()
     assert output.stat().st_size > 1000
+
+
+def _write_breaks_fixture(path: Path, geohashes: list[str]) -> Path:
+    """Two months of drained lakes: one with confidence, one with only water loss."""
+    rows = [
+        {"analysis_month": "2026-07", "id_geohash": gid, "drainage_confidence": conf, "water_observed": 0.5}
+        for gid, conf in zip(geohashes, [1.0, 2.0, 3.0] * len(geohashes), strict=False)
+    ]
+    rows += [
+        {"analysis_month": "2018-07", "id_geohash": gid, "water_change_perc": -60.0, "water_change_ha": -3.0}
+        for gid in geohashes[:2]
+    ]
+    pd.DataFrame(rows).to_parquet(path, index=False)
+    return path
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_build_pmtiles_nrt_monthly(tmp_path):
+    """One archive per month, holding only that month's drained lakes."""
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
+    breaks = _write_breaks_fixture(tmp_path / "breaks.parquet", geohashes)
+
+    outputs = build_pmtiles_nrt_monthly(breaks, TEST_PARQUET, tmp_path / "tiles", keep_geojsonl=True)
+
+    assert set(outputs) == {"2026-07", "2018-07"}
+    for month, path in outputs.items():
+        assert path.name == nrt_monthly_tiles_filename(month)
+        assert path.stat().st_size > 0
+
+    # Only the month's own lakes land in its archive, with that month's values.
+    july_2018 = json.loads((tmp_path / "tiles" / "nrt_2018-07_drainage.geojsonl").read_text().splitlines()[0])
+    assert july_2018["properties"]["analysis_month"] == "2018-07"
+    assert july_2018["properties"]["water_change_perc"] == -60.0
+    assert len((tmp_path / "tiles" / "nrt_2018-07_drainage.geojsonl").read_text().strip().splitlines()) == 2
+
+    nrt_lines = (tmp_path / "tiles" / "nrt_2026-07_drainage.geojsonl").read_text().strip().splitlines()
+    assert len(nrt_lines) == 3
+    assert json.loads(nrt_lines[0])["properties"]["drainage_confidence"] in (1.0, 2.0, 3.0)
+
+    # Centroids are emitted alongside the polygons for the low-zoom layer.
+    points = (tmp_path / "tiles" / "nrt_2026-07_drainage_points.geojsonl").read_text().strip().splitlines()
+    assert len(points) == 3
+    assert json.loads(points[0])["geometry"]["type"] == "Point"
+
+
+def test_build_pmtiles_nrt_monthly_months_filter(tmp_path):
+    """`months` restricts the build; an unknown month is an error, not a silent no-op."""
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
+    breaks = _write_breaks_fixture(tmp_path / "breaks.parquet", geohashes)
+
+    if find_tippecanoe() is not None:
+        outputs = build_pmtiles_nrt_monthly(breaks, TEST_PARQUET, tmp_path / "tiles", months=["2018-07"])
+        assert set(outputs) == {"2018-07"}
+
+    with pytest.raises(ValueError, match="No rows"):
+        build_pmtiles_nrt_monthly(breaks, TEST_PARQUET, tmp_path / "tiles2", months=["1999-01"])
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_build_nrt_pmtiles_cli_config_file(tmp_path):
+    """``--config-file`` resolves breaks/geometry/output-dir from dashboard config keys."""
+    from water_timeseries.scripts.cli import build_nrt_pmtiles
+
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
+    breaks_dir = tmp_path / "precomputed_nrt"
+    breaks_dir.mkdir()
+    _write_breaks_fixture(breaks_dir / "nrt_monthly_drain_breaks.parquet", geohashes)
+
+    config_path = tmp_path / "dashboard_config.yaml"
+    config_path.write_text(
+        f"vector_file: {TEST_PARQUET}\n"
+        f"precomputed_nrt_dir: {breaks_dir}\n"
+        f"nrt_pmtiles_dir: {tmp_path / 'tiles'}\n"
+    )
+
+    build_nrt_pmtiles(config_file=config_path, months="2018-07")
+
+    assert (tmp_path / "tiles" / "nrt_2018-07_drainage.pmtiles").exists()
+
+    # A CLI flag overrides the config file's value for that key.
+    build_nrt_pmtiles(config_file=config_path, months="2018-07", output_dir=tmp_path / "tiles_override")
+    assert (tmp_path / "tiles_override" / "nrt_2018-07_drainage.pmtiles").exists()
+
+
+def test_build_nrt_pmtiles_cli_missing_paths_raises(tmp_path):
+    """No breaks/geometry/output_dir from CLI or config -> a clear error, not a crash."""
+    from water_timeseries.scripts.cli import build_nrt_pmtiles
+
+    with pytest.raises(SystemExit):
+        build_nrt_pmtiles()
+
+
+def test_resolve_nrt_monthly_tiles_url(tmp_path, monkeypatch):
+    from water_timeseries.map_utils import resolve_nrt_monthly_tiles_url
+
+    monkeypatch.delenv("PMTILES_BASE_URL", raising=False)
+
+    assert resolve_nrt_monthly_tiles_url(None, "2026-07") is None
+    # Missing month -> None, which is the caller's signal to use the fallback path.
+    assert resolve_nrt_monthly_tiles_url(tmp_path, "2026-07") is None
+
+    (tmp_path / nrt_monthly_tiles_filename("2026-07")).write_bytes(b"0" * 100)
+    local_url = resolve_nrt_monthly_tiles_url(tmp_path, "2026-07")
+    assert local_url is not None
+    assert local_url.endswith("nrt_2026-07_drainage.pmtiles")
+    assert local_url.startswith("http://")
+
+    assert (
+        resolve_nrt_monthly_tiles_url("https://example.com/tiles/", "2026-06")
+        == "https://example.com/tiles/nrt_2026-06_drainage.pmtiles"
+    )
+    assert (
+        resolve_nrt_monthly_tiles_url("gs://bucket/tiles", "2026-06")
+        == "https://storage.googleapis.com/bucket/tiles/nrt_2026-06_drainage.pmtiles"
+    )
+
+
+def test_build_pmtiles_map_monthly_tiles_layers():
+    """The monthly tileset becomes its own source/layers, with nothing per-lake inlined."""
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    tiles_url = "http://localhost:1/nrt_2026-07_drainage.pmtiles"
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="nrt_drainage",
+        nrt_monthly_tiles_url=tiles_url,
+    )
+    html = m.get_root().render()
+
+    assert f"pmtiles://{tiles_url}" in html
+    assert "nrt-drained-fill" in html
+    assert "nrt-drained-points" in html
+    # No feature-state push. The tooltip prefers the overlay but falls back to
+    # the base lakes, so non-drained lakes still hover -- minus the month-
+    # specific properties some base tilesets bake from a single NRT run.
+    assert "setFeatureState" not in html
+    assert '["nrt-drained-fill", "lakes-fill"]' in html
+    assert '{"lakes-fill": ["date", "drainage_confidence"]}' in html
+    # Nothing per-lake reaches the page: no lake id, no state dict.
+    assert "b7uefy0bvcrc" not in html
+    assert "stateById" not in html
+
+    # The dict-based fallback is what inlines per-lake state; assert the
+    # contrast so a regression back to it is visible.
+    fallback = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="nrt_drainage",
+        nrt_confidence_by_id={"b7uefy0bvcrc": 3},
+        nrt_tooltip_overrides={"b7uefy0bvcrc": {"date": "2026-07"}},
+    )
+    fallback_html = fallback.get_root().render()
+    assert "setFeatureState" in fallback_html
+    assert "b7uefy0bvcrc" in fallback_html
+
+
+def test_build_pmtiles_map_hide_stable_lakes_hides_base_layers():
+    """Hiding stable lakes must switch the base layers off, not just zero their opacity.
+
+    A zero-opacity layer still answers queryRenderedFeatures, which would leave
+    hidden lakes producing hover popups.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    def base_layers(hide: bool) -> dict:
+        m = build_pmtiles_map(
+            "http://localhost:1/lakes.pmtiles",
+            viz_configuration_name="nrt_drainage",
+            nrt_monthly_tiles_url="http://localhost:1/nrt_2026-07_drainage.pmtiles",
+            hide_stable_lakes=hide,
+        )
+        style = next(child for child in m._children.values() if hasattr(child, "style")).style
+        return {layer["id"]: layer for layer in style["layers"]}
+
+    shown = base_layers(False)
+    hidden = base_layers(True)
+
+    for layer_id in ("lakes-fill", "lakes-line", "lakes-points"):
+        assert "layout" not in shown[layer_id], layer_id
+        assert hidden[layer_id]["layout"]["visibility"] == "none", layer_id
+
+    # The month's drained lakes stay visible either way.
+    for layer_id in ("nrt-drained-fill", "nrt-drained-line", "nrt-drained-points"):
+        assert hidden[layer_id].get("layout", {}).get("visibility") != "none", layer_id
 
 
 def test_pmtiles_server_range_requests(tmp_path):
