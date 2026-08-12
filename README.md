@@ -274,7 +274,7 @@ pip install -e ".[dev]"
 ## Helm deployment
 
 Helm deployment templates are provided in the `helm` directory, and provide an easy, repeatable
-means for deploying the application to kubermetes and setting options. Like the standalone streamlit app, the
+means for deploying the application to kubernetes and setting options. Like the standalone streamlit app, the
 helm chart is primarily configured via a configuration file (typically `dashboard-config.yaml`, but can be named
 differently by providing the file path of the config file as a helm value. In our typical deployment, the
 config file is mounted at `/data/dashboard-config.yaml`. For a typical production deployment, the 
