@@ -296,7 +296,7 @@ helm upgrade --install -n lostlakes lostlakes ./helm
 ```
 
 That assumes that the default values in `./helm/values.yaml` are set as you wish for deployment, including the tag
-name of the image to be deployed. Values keys re defined below in [Helm Parameters](#helm-prarameters).  With a 
+name of the image to be deployed. Values keys re defined below in [Helm Parameters](#helm-parameters).  With a 
 typical release, the `helm/values.yaml` will be updated with the release tag for the current release (e.g., `image.tag` 
 in values.yaml would be set to `v0.15.3`), and will be the image used by default for deployments. You can use 
 typical helm approaches to set and use alternative values such as image tags, but the defaults represent typical usage.
