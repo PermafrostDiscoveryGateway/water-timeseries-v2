@@ -271,6 +271,37 @@ cd water-timeseries-v2
 pip install -e ".[dev]"
 ```
 
+## Helm deployment
+
+Helm deployment templates are provided in the `helm` directory, and provide an easy, repeatable
+means for deploying the application to kubermetes and setting options. Like the standalone streamlit app, the
+helm chart is primarily configured via a configuration file (typically `dashboard-config.yaml`, but can be named
+differently by providing the file path of the config file as a helm value. In our typical deployment, the
+config file is mounted at `/data/dashboard-config.yaml`. For a typical production deployment, the 
+app is started with an existing PVC mounted at `/data` that contains both the config file and the data
+files that are needed by the application. The config file lists the individual data sources at their
+fully-qualified, helm-mounted paths (e.g., `/data/DW_NRT_2026-06_run2025-06-25_allGeoms_v3.pmtiles`).
+
+Typical prerequisities for deployment are:
+
+1. Create or identify the PVC to be used for data and config files (e.g., `lostlakes-vardata`).
+2. Copy the config file and data files to that PVC volume at the paths set in the config file.
+2. Create or identify the secret containtaing Google Earth Engine service account credentials (e.g., `lostlakes-ee-sa-secret`).
+
+In our typical deployment, the dashboard app is installed or upgraded using helm in the `lostlakes` namespace,
+with the following command, executed from the root of the water-timeseries-v2 repository:
+
+```bash
+helm upgrade --install -n lostlakes lostlakes ./helm
+```
+
+That assumes that the default values in `./helm/values.yaml` are set as you wish for deployment, including the tag
+name of the image to be deployed. Values keys re defined below in [Helm Parameters](#helm-prarameters).  With a 
+typical release, the `helm/values.yaml` will be updated with the release tag for the current release (e.g., `image.tag` 
+in values.yaml would be set to `v0.15.3`), and will be the image used by default for deployments. You can use 
+typical helm approaches to set and use alternative values such as image tags, but the defaults represent typical usage.
+
+
 ## Main Classes
 
 ### Datasets
@@ -314,3 +345,85 @@ We welcome contributions! Please ensure you:
 ## Author
 
 Ingmar Nitze
+
+
+## Helm Parameters
+
+### Global
+
+| Name           | Description                              | Value |
+| -------------- | ---------------------------------------- | ----- |
+| `replicaCount` | Number of dashboard pod replicas to run. | `1`   |
+
+### Image
+
+| Name               | Description                                                                                 | Value                                                    |
+| ------------------ | ------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `image.repository` | Container image repository path.                                                            | `ghcr.io/permafrostdiscoverygateway/water-timeseries-v2` |
+| `image.tag`        | Container image tag to deploy.                                                              | `v0.15.3`                                                |
+| `image.pullPolicy` | Image pull policy. Use 'Always' to force re-pulling on every pod start.                     | `IfNotPresent`                                           |
+| `nameOverride`     | Override the chart name used in resource labels. Leave empty to use the chart name.         | `""`                                                     |
+| `fullnameOverride` | Override the fully-qualified app name used in resource names. Leave empty to auto-generate. | `""`                                                     |
+
+### Dashboard
+
+| Name                     | Description                                                                             | Value                         |
+| ------------------------ | --------------------------------------------------------------------------------------- | ----------------------------- |
+| `dashboard.port`         | Port the dashboard container listens on.                                                | `8501`                        |
+| `dashboard.offlineMode`  | Run the dashboard without outbound network access (disables live Earth Engine calls).   | `false`                       |
+| `dashboard.eeProject`    | Google Earth Engine project ID used for authenticated GEE API calls.                    | `pdg-project-406720`          |
+| `dashboard.eeSecretName` | Name of the Kubernetes secret containing the Earth Engine service account key.          | `lostlakes-ee-sa-secret`      |
+| `dashboard.configFile`   | Path inside the container to the dashboard YAML config file (typically in a pvc mount). | `/data/dashboard-config.yaml` |
+| `dashboard.pmtilesFile`  | Explicit path to a .pmtiles file. If empty, the path is read from configFile.           | `""`                          |
+
+### PMTiles server
+
+| Name                   | Description                                                         | Value |
+| ---------------------- | ------------------------------------------------------------------- | ----- |
+| `pmtiles.replicaCount` | Number of PMTiles server pod replicas to run.                       | `1`   |
+| `pmtiles.resources`    | Resource requests and limits for the PMTiles server container.      | `{}`  |
+| `pmtiles.nodeSelector` | Node label selector constraints for PMTiles server pod scheduling.  | `{}`  |
+| `pmtiles.affinity`     | Affinity and anti-affinity rules for PMTiles server pod scheduling. | `{}`  |
+| `pmtiles.tolerations`  | Tolerations for PMTiles server pod scheduling on tainted nodes.     | `[]`  |
+
+### Persistence
+
+| Name                           | Description                                                                          | Value               |
+| ------------------------------ | ------------------------------------------------------------------------------------ | ------------------- |
+| `persistence.enabled`          | Enable persistent volume claim mounting.                                             | `true`              |
+| `persistence.existingClaim`    | Name of a pre-existing PVC to use. If set, no new PVC is created.                    | `lostlakes-vardata` |
+| `persistence.mountPath`        | Path inside the container where the volume is mounted.                               | `/data`             |
+| `persistence.accessModes`      | Access modes for the persistent volume.                                              | `[]`                |
+| `persistence.size`             | Requested storage size when creating a new PVC.                                      | `50Mi`              |
+| `persistence.storageClassName` | Storage class name for dynamic provisioning. Leave empty to use the cluster default. | `""`                |
+| `persistence.annotations`      | Annotations to add to the PVC resource.                                              | `{}`                |
+
+### Services
+
+| Name       | Description                                                              | Value |
+| ---------- | ------------------------------------------------------------------------ | ----- |
+| `services` | List of service definitions. Each entry requires a name, type, and port. | `[]`  |
+
+### Workload scheduling
+
+| Name             | Description                                                    | Value |
+| ---------------- | -------------------------------------------------------------- | ----- |
+| `resources`      | Resource requests and limits for the dashboard container.      | `{}`  |
+| `podAnnotations` | Annotations to add to dashboard pods.                          | `{}`  |
+| `podLabels`      | Additional labels to add to dashboard pods.                    | `{}`  |
+| `nodeSelector`   | Node label selector constraints for dashboard pod scheduling.  | `{}`  |
+| `tolerations`    | Tolerations for dashboard pod scheduling on tainted nodes.     | `[]`  |
+| `affinity`       | Affinity and anti-affinity rules for dashboard pod scheduling. | `{}`  |
+
+### Ingress
+
+| Name                                                 | Description                                                               | Value                    |
+| ---------------------------------------------------- | ------------------------------------------------------------------------- | ------------------------ |
+| `ingress.enabled`                                    | Enable ingress to allow web traffic. Ingress settings ignored if 'false'  | `true`                   |
+| `ingress.className`                                  | The class of the ingress controller to use.                               | `nginx`                  |
+| `ingress.hosts`                                      | Full ingress host/path subtree (advanced mode).                           | `[]`                     |
+| `ingress.tlsEnabled`                                 | Set to 'false', to disable rendering Ingress TLS (HTTP-only).             | `true`                   |
+| `ingress.tlsSecretName`                              | Secret name used by inferred TLS when `ingress.tls` is empty.             | `ingress-nginx-tls-cert` |
+| `ingress.annotations.cert-manager.io/cluster-issuer` | cert-manager cluster issuer to use for provisioning certificates          | `letsencrypt-prod`       |
+| `ingress.tls`                                        | Full TLS subtree (advanced mode). Ignored unless ingress.enabled is true. | `[]`                     |
+

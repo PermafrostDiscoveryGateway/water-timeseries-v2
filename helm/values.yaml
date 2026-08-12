@@ -11,7 +11,7 @@ image:
   ## @param image.repository Container image repository path.
   repository: ghcr.io/permafrostdiscoverygateway/water-timeseries-v2
   ## @param image.tag Container image tag to deploy.
-  tag: v0.15.2
+  tag: v0.15.3
   ## @param image.pullPolicy Image pull policy. Use 'Always' to force re-pulling on every pod start.
   pullPolicy: IfNotPresent
 
