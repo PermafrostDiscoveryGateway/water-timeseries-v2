@@ -114,6 +114,7 @@ class MapViewer:
         show_main_layer: bool = True,
         viz_configuration_name: str | None = "colored_historical",
         hide_stable_lakes: bool = False,
+        hidden_nrt_categories: frozenset[str] | None = None,
         logger=None,
     ):
         """Initialize the MapViewer.
@@ -152,6 +153,7 @@ class MapViewer:
         self.drained_ids: list[str] | None = None
         self.viz_configuration_name = viz_configuration_name
         self.hide_stable_lakes = hide_stable_lakes
+        self.hidden_nrt_categories = frozenset(hidden_nrt_categories) if hidden_nrt_categories else frozenset()
         # Optional NRT monthly overlay (nrt_drainage viz only), attached by the
         # dashboard before render(). Preferred: a per-month drained-lakes
         # tileset URL, whose properties are baked at build time. The per-lake
@@ -381,6 +383,7 @@ class MapViewer:
             tooltip=tooltip,
             hide_stable_lakes=self.hide_stable_lakes,
             drained_label=getattr(self, "drained_label", None),
+            hidden_categories=self.hidden_nrt_categories,
             nrt_confidence_by_id=self.nrt_confidence_by_id,
             nrt_tooltip_overrides=self.nrt_tooltip_overrides,
             nrt_magnitude_by_id=self.nrt_magnitude_by_id,
@@ -1467,6 +1470,23 @@ def create_app(
                         "drained lakes are shown in red (confidence unknown)."
                     )
 
+    hidden_nrt_categories: frozenset[str] = frozenset()
+    if viz_configuration_name == "nrt_drainage":
+        st.sidebar.caption("Show lake categories")
+        nrt_category_checkboxes = {
+            "high": st.sidebar.checkbox("High confidence", value=True, key="nrt_show_high"),
+            "medium": st.sidebar.checkbox("Medium confidence", value=True, key="nrt_show_medium"),
+            "low": st.sidebar.checkbox("Low confidence", value=True, key="nrt_show_low"),
+            "stable": st.sidebar.checkbox("Stable", value=True, key="nrt_show_stable"),
+            "no_data": st.sidebar.checkbox("No data", value=True, key="nrt_show_nodata"),
+        }
+        sync_flag_param("hide_high", not nrt_category_checkboxes["high"])
+        sync_flag_param("hide_medium", not nrt_category_checkboxes["medium"])
+        sync_flag_param("hide_low", not nrt_category_checkboxes["low"])
+        sync_flag_param("hide_stable", not nrt_category_checkboxes["stable"])
+        sync_flag_param("hide_nodata", not nrt_category_checkboxes["no_data"])
+        hidden_nrt_categories = frozenset(cat for cat, shown in nrt_category_checkboxes.items() if not shown)
+
     # Historical drainage overlay. Hidden entirely in Near Real-Time mode,
     # which has its own per-month drainage controls.
     show_drained = False
@@ -1589,7 +1609,7 @@ def create_app(
                     overview_center = st.session_state.map_center
                     set_desired_view(overview_center["lat"], overview_center["lon"], 6)
 
-                if viz_configuration_name in ["drainage_year", "nrt_drainage"]:
+                if viz_configuration_name == "drainage_year":
                     hide_stable_lakes = st.toggle(
                         "Hide stable lakes",
                         key="toggle_hide_stable_lakes",
@@ -1610,6 +1630,7 @@ def create_app(
                     pmtiles_url=pmtiles_url,
                     logger=logger,
                     hide_stable_lakes=hide_stable_lakes,
+                    hidden_nrt_categories=hidden_nrt_categories,
                 )
                 viewer.nrt_monthly_tiles_url = nrt_monthly_tiles_url
                 viewer.nrt_month_has_confidence = nrt_month_has_confidence
