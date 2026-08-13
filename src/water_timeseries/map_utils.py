@@ -20,6 +20,7 @@ from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_nrt_drainage,
     get_style_pmtiles_nrt_monthly_tiles,
 )
+from water_timeseries.utils.pmtiles_build import NRT_POINT_POLY_SWITCH_ZOOM
 from water_timeseries.utils.visualization import (
     get_legend_html_date_drainage_year,
     get_legend_html_drained_month,
@@ -748,14 +749,16 @@ def build_pmtiles_map(
                 layer["layout"] = {"visibility": "none"}
 
         nrt_drained_points_layer = {
-            # Centroids below z6, where the polygons are sub-pixel: this is
-            # what keeps drained lakes findable when zoomed out, without
-            # per-lake browser markers.
+            # Centroids below the switch zoom, where the polygons are sub-pixel:
+            # this is what keeps drained lakes findable when zoomed out, without
+            # per-lake browser markers. maxzoom is exclusive and the polygon
+            # layers' minzoom is inclusive, so both using the same value hands
+            # off in one step with no zoom left uncovered.
             "id": "nrt-drained-points",
             "source": "nrt_pmtiles",
             "source-layer": "drained_points",
             "type": "circle",
-            "maxzoom": 6,
+            "maxzoom": NRT_POINT_POLY_SWITCH_ZOOM,
             "paint": {
                 "circle-color": drained_fill,
                 "circle-opacity": drained_opacity,
@@ -769,7 +772,7 @@ def build_pmtiles_map(
             "source": "nrt_pmtiles",
             "source-layer": "drained",
             "type": "fill",
-            "minzoom": 6,
+            "minzoom": NRT_POINT_POLY_SWITCH_ZOOM,
             "paint": {"fill-color": drained_fill, "fill-opacity": drained_opacity},
         }
         nrt_drained_line_layer = {
@@ -777,7 +780,7 @@ def build_pmtiles_map(
             "source": "nrt_pmtiles",
             "source-layer": "drained",
             "type": "line",
-            "minzoom": 6,
+            "minzoom": NRT_POINT_POLY_SWITCH_ZOOM,
             "paint": {
                 "line-color": drained_line,
                 "line-width": drained_width,
