@@ -328,6 +328,7 @@ def build_nrt_pmtiles(
     output_dir: Path | None = None,
     months: str | None = None,
     keep_geojsonl: bool | None = None,
+    poly_min_zoom: int | None = None,
     poly_max_zoom: int | None = None,
     config_file: Path | None = None,
     logfile: str | None = None,
@@ -390,6 +391,7 @@ def build_nrt_pmtiles(
         months=months,
         keep_geojsonl=keep_geojsonl,
         poly_max_zoom=poly_max_zoom,
+        poly_min_zoom=poly_min_zoom,
     )
 
     breaks_file = Path(config_dict["breaks_file"]) if config_dict.get("breaks_file") else None
@@ -1013,13 +1015,10 @@ def breakpoint_analysis_nrt(
         aggregate_nrt_directory(resolved_output_dir)
 
 
-
-
-
 def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> None:
     """Aggregate individual monthly NRT files in a directory into consolidated parquet files."""
 
-    def _catch_id_geohash_index(df: pd.DataFrame, id_column:str='id_geohash') -> pd.DataFrame:
+    def _catch_id_geohash_index(df: pd.DataFrame, id_column: str = "id_geohash") -> pd.DataFrame:
         """
         Helper function to catch NRT output files with 'id_geohash' as index rather than column
         """
@@ -1032,7 +1031,6 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
             else:
                 logger.warning("Column {id_column} not found, This may cause issues matching geometries!")
                 return df
-
 
     if output_dir is None:
         output_dir = nrt_dir
@@ -1052,7 +1050,7 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
     for file_path in monthly_files:
         try:
             df = pd.read_parquet(file_path)
-            df = _catch_id_geohash_index(df, id_column='id_geohash')
+            df = _catch_id_geohash_index(df, id_column="id_geohash")
             dfs.append(df)
         except (OSError, ValueError) as e:
             logger.warning(f"Failed to read {file_path}: {e}")
@@ -1061,7 +1059,7 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
         logger.warning("No monthly NRT files could be loaded.")
         return
 
-    breaks_df = pd.concat(dfs, ignore_index=True)#.reset_index()
+    breaks_df = pd.concat(dfs, ignore_index=True)  # .reset_index()
     breaks_path = output_dir / "nrt_monthly_drain_breaks.parquet"
     breaks_df.to_parquet(breaks_path, index=False)
     logger.info(f"Wrote consolidated breaks to {breaks_path}")

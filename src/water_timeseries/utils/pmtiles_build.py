@@ -44,17 +44,22 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
 # browser on every rerun (see build_pmtiles_nrt_monthly).
 NRT_MONTHLY_TILE_PROPERTIES: tuple[str, ...] = (
     "id_geohash",
-    "analysis_month",
-    "drainage_confidence",
+    # "date",
+    "analysis_month",  # check if this is necessary
+    "water_observed_absolute",
+    "water_predicted_absolute",
+    "water_predicted_ci_absolute",
+    "water_residual_absolute",
     "water_change_ha",
     "water_change_perc",
-    "pre_break_median",
-    "post_break_median",
-    "water_observed",
-    "water_predicted",
-    "water_residual",
-    "water_predicted_lower_90",
-    "water_predicted_upper_90",
+    "drainage_confidence",
+    # "pre_break_median",
+    # "post_break_median",
+    # "water_observed",
+    # "water_predicted",
+    # "water_residual",
+    # "water_predicted_lower_90",
+    # "water_predicted_upper_90",
 )
 
 # The monthly overlay holds tens of thousands of features, not millions, and
@@ -373,6 +378,7 @@ def build_pmtiles_nrt_monthly(
     keep_geojsonl: bool = False,
     month_column: str = "analysis_month",
     id_column: str = "id_geohash",
+    poly_min_zoom=8,
     poly_max_zoom: int = 14,
 ) -> dict[str, Path]:
     """Build one small drained-lakes-only PMTiles archive per NRT analysis month.
@@ -416,9 +422,20 @@ def build_pmtiles_nrt_monthly(
     if not tippecanoe_bin:
         raise RuntimeError("tippecanoe is not installed or not on PATH. Install it with: brew install tippecanoe")
 
+    def _infer_month_from_date(df):
+        if "date" in df.columns:
+            if pd.api.types.is_datetime64_any_dtype(df["date"]):
+                df["analysis_month"] = df["date"].dt.strftime("%Y-%m")
+        else:
+            raise ValueError
+        return df
+
     breaks = pd.read_parquet(breaks_parquet)
     if month_column not in breaks.columns:
-        raise ValueError(f"{breaks_parquet} has no '{month_column}' column")
+        try:
+            breaks = _infer_month_from_date(breaks)
+        except ValueError:
+            raise ValueError(f"{breaks_parquet} has no '{month_column}' column")
 
     breaks = breaks[breaks[month_column].notna()].copy()
     breaks[month_column] = breaks[month_column].astype(str)
@@ -465,8 +482,8 @@ def build_pmtiles_nrt_monthly(
                 keep_columns,
                 fh_poly,
                 fh_points,
-                poly_zoom=(6, poly_max_zoom),
-                points_zoom=(0, 5),
+                poly_zoom=(poly_min_zoom, poly_max_zoom),
+                points_zoom=(0, 9),
             )
 
         # Polygons above z6 and centroids below it, mirroring the base tileset,
