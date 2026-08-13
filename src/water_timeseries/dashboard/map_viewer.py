@@ -1503,9 +1503,7 @@ def create_app(
                     if st.query_params.get("month") != selected_analysis_month:
                         st.query_params["month"] = selected_analysis_month
                     if selected_analysis_month not in selectable_months:
-                        st.sidebar.caption(
-                            f"Month {selected_analysis_month} from the shared link is not available."
-                        )
+                        st.sidebar.caption(f"Month {selected_analysis_month} from the shared link is not available.")
 
                 if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
                     month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")

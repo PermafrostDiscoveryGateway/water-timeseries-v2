@@ -225,19 +225,19 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
     see ``build_pmtiles_nrt_monthly``.
     """
     conf = ["coalesce", ["feature-state", "confidence"], -1]
-    unknown_conf_fill = [
-        "interpolate",
-        ["linear"],
-        ["coalesce", ["feature-state", "water_change_perc"], -70],
-        -100,
-        "#67000d",  # near-total water loss
-        -75,
-        "#de2d26",
-        -50,
-        "#fb6a4a",
-        -25,
-        "#fcae91",  # smallest loss that still counts as drained
-    ]
+    # unknown_conf_fill = [
+    #     "interpolate",
+    #     ["linear"],
+    #     ["coalesce", ["feature-state", "water_change_perc"], -70],
+    #     -100,
+    #     "#67000d",  # near-total water loss
+    #     -75,
+    #     "#de2d26",
+    #     -50,
+    #     "#fb6a4a",
+    #     -25,
+    #     "#fcae91",  # smallest loss that still counts as drained
+    # ]
 
     fill_color = [
         "match",

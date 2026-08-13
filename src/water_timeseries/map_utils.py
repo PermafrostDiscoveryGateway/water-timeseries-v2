@@ -598,7 +598,7 @@ def build_pmtiles_map(
             # lakes the user asked to hide. The drained overlay is unaffected.
             for layer in (base_points_layer, lakes_fill_layer, lakes_line_layer):
                 layer["layout"] = {"visibility": "none"}
-        layer_style_switch_level = 8 # starting zoom level where lake polygons are being rendered
+        layer_style_switch_level = 8  # starting zoom level where lake polygons are being rendered
         layers.extend(
             [
                 # Centroids below zoomlevel, where the polygons are sub-pixel: this is
@@ -612,7 +612,7 @@ def build_pmtiles_map(
                     "maxzoom": layer_style_switch_level,
                     "paint": {
                         "circle-color": drained_fill,
-                        "circle-opacity": min(drained_opacity*2, 1),
+                        "circle-opacity": min(drained_opacity * 2, 1),
                         "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.5, 5, 4],
                         "circle-stroke-color": drained_line,
                         "circle-stroke-width": 0.5,
@@ -623,7 +623,7 @@ def build_pmtiles_map(
                     "source": "nrt_pmtiles",
                     "source-layer": "drained",
                     "type": "fill",
-                    "minzoom": layer_style_switch_level+1,
+                    "minzoom": layer_style_switch_level + 1,
                     "paint": {"fill-color": drained_fill, "fill-opacity": drained_opacity},
                 },
                 {
