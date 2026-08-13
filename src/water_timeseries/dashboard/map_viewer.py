@@ -919,7 +919,7 @@ def _render_drain_heatmap(
             df.query("analysis_month == @selected_analysis_month")["drained_lake_count"].sum() if not df.empty else 0
         )
 
-        c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drained")
+        c.markdown(f"**{month_name} {sel_year_disp}** — {count_row} drainage candidates")
 
         if count_row > 0 and precomputed_breaks is not None:
             month_breaks = precomputed_breaks.query("analysis_month == @selected_analysis_month").copy()
@@ -1353,7 +1353,7 @@ def create_app(
                 year_months,
                 index=len(year_months) - 1,
                 key="nrt_confidence_month",
-                format_func=lambda m: f"{m}  ·  {int(month_counts.get(m, 0))} drained",
+                format_func=lambda m: f"{m}  ·  {int(month_counts.get(m, 0))} drainage candidates",
                 help="Colors lakes by their drainage signal for the selected month.",
             )
 
