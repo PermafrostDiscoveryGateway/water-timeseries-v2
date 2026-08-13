@@ -1,5 +1,6 @@
 import functools
 from pathlib import Path
+from typing import ClassVar
 
 import branca.element
 import folium
@@ -80,7 +81,7 @@ class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
             """
     )
 
-    default_js = [
+    default_js: ClassVar = [
         ("pmtiles", "https://unpkg.com/pmtiles@2.5.0/dist/index.js"),
         ("maplibre-lib", "https://unpkg.com/maplibre-gl@2.2.1/dist/maplibre-gl.js"),
         (
