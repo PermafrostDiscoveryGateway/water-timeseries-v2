@@ -271,11 +271,11 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         0,
         "#bdbdbd",  # light grey
         1,
-        "#b58900",
+        "#f9c80e",
         2,
-        "#a04d00",
+        "#e67e22",
         3,
-        "#8b0000",
+        "#d73027",
         "#bdbdbd",
     ]
     line_width = [
