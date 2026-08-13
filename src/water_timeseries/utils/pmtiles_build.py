@@ -57,6 +57,14 @@ NRT_MONTHLY_TILE_PROPERTIES: tuple[str, ...] = (
     "water_predicted_upper_90",
 )
 
+# Zoom at which the NRT drained overlay switches from centroids to polygons:
+# below it the tileset carries only `drained_points`, at it and above only
+# `drained`. Both the baked per-feature zoom ranges (see `_write_features`) and
+# the style's layer minzoom/maxzoom are derived from this single value -- they
+# have to agree, since a style that paints circles above the zoom where point
+# features stop being baked paints nothing at all.
+NRT_POINT_POLY_SWITCH_ZOOM: int = 8
+
 # The monthly overlay holds tens of thousands of features, not millions, and
 # every one of them must survive: a dropped feature is a drained lake missing
 # from the map. So no density dropping/coalescing and no tile size limits,
@@ -465,11 +473,11 @@ def build_pmtiles_nrt_monthly(
                 keep_columns,
                 fh_poly,
                 fh_points,
-                poly_zoom=(6, poly_max_zoom),
-                points_zoom=(0, 5),
+                poly_zoom=(NRT_POINT_POLY_SWITCH_ZOOM, poly_max_zoom),
+                points_zoom=(0, NRT_POINT_POLY_SWITCH_ZOOM - 1),
             )
 
-        # Polygons above z6 and centroids below it, mirroring the base tileset,
+        # Polygons at NRT_POINT_POLY_SWITCH_ZOOM and above, centroids below it,
         # so drained lakes stay visible when zoomed out (where the polygons are
         # sub-pixel) without needing per-lake browser markers. The zoom split
         # is enforced by the per-feature "tippecanoe" property written above,

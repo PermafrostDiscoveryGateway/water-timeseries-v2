@@ -115,9 +115,7 @@ def test_build_nrt_pmtiles_cli_config_file(tmp_path):
 
     config_path = tmp_path / "dashboard_config.yaml"
     config_path.write_text(
-        f"vector_file: {TEST_PARQUET}\n"
-        f"precomputed_nrt_dir: {breaks_dir}\n"
-        f"nrt_pmtiles_dir: {tmp_path / 'tiles'}\n"
+        f"vector_file: {TEST_PARQUET}\nprecomputed_nrt_dir: {breaks_dir}\nnrt_pmtiles_dir: {tmp_path / 'tiles'}\n"
     )
 
     build_nrt_pmtiles(config_file=config_path, months="2018-07")
@@ -198,6 +196,55 @@ def test_build_pmtiles_map_monthly_tiles_layers():
     fallback_html = fallback.get_root().render()
     assert "setFeatureState" in fallback_html
     assert "b7uefy0bvcrc" in fallback_html
+
+
+def test_nrt_drained_centroid_polygon_handoff_has_no_gap():
+    """Circles must stay visible right up to the zoom the polygons take over at.
+
+    MapLibre hides a layer at zoom >= maxzoom but shows it at zoom >= minzoom,
+    so the centroid maxzoom and the polygon minzoom have to be the same number
+    to cover every zoom exactly once. Splitting them (e.g. points maxzoom 8 with
+    fill minzoom 9) leaves z8 with no drained lakes drawn at all.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+    from water_timeseries.utils.pmtiles_build import NRT_POINT_POLY_SWITCH_ZOOM
+
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="nrt_drainage",
+        nrt_monthly_tiles_url="http://localhost:1/nrt_2026-07_drainage.pmtiles",
+    )
+    html = m.get_root().render()
+
+    # The page renders more than one style block; find the one holding the
+    # drained overlay rather than assuming it comes first.
+    layers = {}
+    marker = '"layers": '
+    offset = html.find(marker)
+    while offset != -1 and "nrt-drained-points" not in layers:
+        try:
+            layer_list, _ = json.JSONDecoder().raw_decode(html[offset + len(marker) :])
+        except json.JSONDecodeError:
+            layer_list = []
+        if isinstance(layer_list, list):
+            layers = {layer["id"]: layer for layer in layer_list if isinstance(layer, dict) and "id" in layer}
+        offset = html.find(marker, offset + 1)
+    assert "nrt-drained-points" in layers, "no style block contained the drained overlay layers"
+
+    points = layers["nrt-drained-points"]
+    fill = layers["nrt-drained-fill"]
+    line = layers["nrt-drained-line"]
+
+    assert points["maxzoom"] == NRT_POINT_POLY_SWITCH_ZOOM
+    assert fill["minzoom"] == NRT_POINT_POLY_SWITCH_ZOOM
+    assert line["minzoom"] == NRT_POINT_POLY_SWITCH_ZOOM
+
+    # Every zoom must draw the month's drained lakes exactly one way. Guards the
+    # gap directly rather than trusting the three numbers above to stay in sync.
+    for zoom in range(15):
+        as_circles = zoom < points["maxzoom"]
+        as_polygons = zoom >= fill["minzoom"]
+        assert as_circles != as_polygons, f"z{zoom} draws drained lakes {'twice' if as_circles else 'not at all'}"
 
 
 def test_build_pmtiles_map_hide_stable_lakes_hides_base_layers():
