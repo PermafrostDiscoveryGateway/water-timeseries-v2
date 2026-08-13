@@ -1487,10 +1487,14 @@ def create_app(
         sync_flag_param("hide_nodata", not nrt_category_checkboxes["no_data"])
         hidden_nrt_categories = frozenset(cat for cat, shown in nrt_category_checkboxes.items() if not shown)
 
-    # Historical drainage overlay. Hidden entirely in Near Real-Time mode,
-    # which has its own per-month drainage controls.
-    show_drained = False
-    if viz_configuration_name != "nrt_drainage":
+    # Historical drainage heatmap overlay. NRT mode drives its own month
+    # selection (see the drainage-confidence month selector above), so the
+    # historical month × year heatmap is deactivated there entirely.
+    if viz_configuration_name == "nrt_drainage":
+        show_drained = False
+        st.session_state["show_drained_toggle"] = False
+        st.query_params.pop("drained", None)
+    else:
         st.sidebar.divider()
         st.sidebar.subheader("Historical Drainage")
         st.session_state.setdefault("show_drained_toggle", default_activate_historical)
