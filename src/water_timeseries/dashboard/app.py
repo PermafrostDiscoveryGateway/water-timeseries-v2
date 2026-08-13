@@ -88,8 +88,13 @@ def _resolve_default_nrt_tiles_dir(pmtiles_file: str | Path | None) -> Path | No
     Looks next to the base ``.pmtiles`` archive first, then the conventional
     repo locations, so a local run picks the tilesets up without a flag.
     """
+    from water_timeseries.utils.io import is_remote_path
+
     candidates = []
-    if pmtiles_file:
+    if pmtiles_file and not is_remote_path(pmtiles_file):
+        # Skipped for remote archives: Path() would mangle the ``gs://`` prefix,
+        # and a remote sibling directory can't be probed for existence here, so
+        # remote tilesets must be passed explicitly via ``--nrt-pmtiles-dir``.
         candidates.append(Path(pmtiles_file).parent / "nrt_tiles")
     candidates += [_REPO_ROOT / "precomputed" / "nrt_tiles", Path("data/nrt_tiles"), Path("downloads/nrt_tiles")]
     for candidate in candidates:
