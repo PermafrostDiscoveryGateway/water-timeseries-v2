@@ -28,10 +28,17 @@ class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
     maplibre-gl-leaflet only syncs the GL canvas on throttled Leaflet ``move``
     events, so the final update of a drag (especially a fast one, or during
     inertia) can be lost and the polygons stay offset from the basemap until
-    the next interaction. Registering an unthrottled ``moveend`` resync
-    guarantees the GL transform lands on the final map position. Also bumps
-    maplibre-gl-leaflet 0.0.17 -> 0.0.22, which rounds fractional container
-    positions (sub-pixel misalignment at certain window widths).
+    the next interaction. A single ``moveend`` resync is not reliable on its
+    own: ``_update()`` mutates ``transform.center``/``transform.zoom``
+    directly from whatever the map's current animation state is, so calling
+    it once at the "wrong" instant (e.g. mid-inertia, before layout settles)
+    can itself desync the GL layer. We therefore also register our own
+    unthrottled ``move`` listener -- calling ``_update()`` on every move is
+    cheap and means the transform is recomputed continuously through the
+    drag rather than only once at the end, so a single bad sample doesn't
+    stick. Also bumps maplibre-gl-leaflet 0.0.17 -> 0.0.22, which rounds
+    fractional container positions (sub-pixel misalignment at certain
+    window widths).
     """
 
     _template = branca.element.Template(
@@ -53,12 +60,21 @@ class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
                 interactive: true,
             }).addTo({{ this._parent.get_name() }});
 
-            // Hard resync after every pan/zoom so the GL polygons can never be
-            // left offset from the basemap by a lost throttled 'move' update.
-            {{ this._parent.get_name() }}.on('moveend', function () {
+            // Resync on every 'move' (unthrottled, unlike the library's own
+            // handler) plus once more after 'moveend' settles, so the GL
+            // transform tracks the drag continuously instead of depending on
+            // a single throttled or end-of-drag sample landing correctly.
+            {{ this._parent.get_name() }}.on('move', function () {
                 if ({{ this.get_name() }}._glMap) {
                     {{ this.get_name() }}._update();
                 }
+            });
+            {{ this._parent.get_name() }}.on('moveend', function () {
+                requestAnimationFrame(function () {
+                    if ({{ this.get_name() }}._glMap) {
+                        {{ this.get_name() }}._update();
+                    }
+                }.bind(this));
             });
             {%- endmacro %}
             """
