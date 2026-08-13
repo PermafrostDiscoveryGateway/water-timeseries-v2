@@ -45,7 +45,7 @@ from water_timeseries.utils.earthengine import (
     cached_visualize_cube,
     initialize_earth_engine,
 )
-from water_timeseries.utils.io import load_vector_dataset
+from water_timeseries.utils.io import is_remote_path, load_vector_dataset
 from water_timeseries.utils.map_styling import (
     format_tooltip_columns,
     get_colored_style_function,
@@ -129,7 +129,8 @@ class MapViewer:
             zoom: Initial zoom level for the map.
             map_backend: Which mapping backend to use ("folium" or "pmtiles").
             max_features: Maximum number of features to display (for performance).
-            pmtiles_file: Local ``.pmtiles`` archive (vector tiles; fast for millions of lakes).
+            pmtiles_file: ``.pmtiles`` archive (vector tiles; fast for millions of lakes).
+                Either a local path or a remote ``gs://``/``http(s)://`` URI.
             pmtiles_url: Remote HTTP(S) URL to a ``.pmtiles`` file (e.g. on S3).
             drained_gdf: Optional GeoDataFrame of recently drained lakes to overlay.
             drained_label: Optional label to show in the legend for the drained layer.
@@ -144,7 +145,12 @@ class MapViewer:
         self.map_center = map_center
         self.map_backend = map_backend  # "folium" or "pmtiles"
         self.max_features = max_features  # Limit features for faster loading
-        self.pmtiles_file = Path(pmtiles_file) if pmtiles_file else None
+        # Remote URIs (gs://, http(s)://) must stay strings: Path() collapses the
+        # double slash to ``gs:/`` and downstream resolution then treats it as a
+        # local path. resolve_pmtiles_url() maps the remote form to a URL.
+        self.pmtiles_file: Path | str | None = None
+        if pmtiles_file:
+            self.pmtiles_file = str(pmtiles_file) if is_remote_path(pmtiles_file) else Path(pmtiles_file)
         self.pmtiles_url = pmtiles_url
         self._parquet_path = Path(parquet_path) if parquet_path else None
         self.drained_gdf = drained_gdf
