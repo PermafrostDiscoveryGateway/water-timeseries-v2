@@ -243,7 +243,7 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         "match",
         conf,
         0,
-        unknown_conf_fill,
+        "#bdbdbd",
         1,
         "#f9c80e",  # gold - low confidence
         2,
@@ -269,7 +269,7 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         "match",
         conf,
         0,
-        "#7f0000",  # dark red border for unknown-confidence drained
+        "#bdbdbd",  # light grey
         1,
         "#b58900",
         2,
@@ -346,6 +346,8 @@ def get_style_pmtiles_nrt_monthly_tiles() -> tuple:
 
     fill_color = [
         "case",
+        ["==", conf, 0],
+        "#bdbdbd",
         ["==", conf, 1],
         "#f9c80e",  # gold - low confidence
         ["==", conf, 2],
@@ -357,6 +359,8 @@ def get_style_pmtiles_nrt_monthly_tiles() -> tuple:
     fill_opacity = 0.3
     line_color = [
         "case",
+        ["==", conf, 0],
+        "#bdbdbd",
         ["==", conf, 1],
         "#f9c80e",
         ["==", conf, 2],
