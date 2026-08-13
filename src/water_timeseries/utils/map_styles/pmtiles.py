@@ -256,13 +256,13 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         "match",
         conf,
         0,
-        0.85,
+        0.15,
         1,
-        0.85,
+        0.2,
         2,
-        0.85,
+        0.2,
         3,
-        0.85,
+        0.2,
         0 if hide_stable_lakes else 0.35,
     ]
     line_color = [
@@ -354,15 +354,15 @@ def get_style_pmtiles_nrt_monthly_tiles() -> tuple:
         "#d73027",  # red - high confidence
         unknown_conf_fill,
     ]
-    fill_opacity = 0.85
+    fill_opacity = 0.3
     line_color = [
         "case",
         ["==", conf, 1],
-        "#b58900",
+        "#f9c80e",
         ["==", conf, 2],
-        "#a04d00",
+        "#e67e22",
         ["==", conf, 3],
-        "#8b0000",
+        "#d73027",
         "#7f0000",  # dark red border for unknown-confidence drained
     ]
     line_width = [
