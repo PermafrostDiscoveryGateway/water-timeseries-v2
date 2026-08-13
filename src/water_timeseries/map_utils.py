@@ -516,14 +516,20 @@ def resolve_pmtiles_url(pmtiles_file: str) -> str:
     if not pmtiles_path.is_file():
         raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
 
-    return _get_pmtiles_server(str(pmtiles_path)).url_for(pmtiles_path.name)
+    return _get_pmtiles_server().pmtiles_url_for(pmtiles_path)
 
 
 @functools.cache
-def _get_pmtiles_server(path_str: str):
+def _get_pmtiles_server():
+    """The one tile server for this process; archives are mounted onto it.
+
+    Not one server per archive: switching dashboard modes brings in a second
+    tileset, and the port may be pinned via ``PMTILES_PORT`` (Docker), so a
+    second server could not bind.
+    """
     from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
-    return PmtilesServer(Path(path_str)).start()
+    return PmtilesServer(None).start()
 
 
 def geohash_to_human_readable_name(geohash: str) -> str:

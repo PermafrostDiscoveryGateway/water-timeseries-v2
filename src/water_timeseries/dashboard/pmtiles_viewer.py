@@ -56,19 +56,26 @@ def _bounds_center_zoom(gdf: gpd.GeoDataFrame) -> tuple[list[float], float]:
 
 
 @st.cache_resource
+def _get_shared_server() -> PmtilesServer:
+    """The single background server for this process (map page + local tiles).
+
+    One instance, not one per archive: the port may be pinned via
+    ``PMTILES_PORT`` (Docker), so a second server could not bind when a user
+    switches dashboard modes. Archives are mounted onto it as they are used.
+    """
+    return PmtilesServer(None).start()
+
+
 def _get_or_start_server(pmtiles_file: str) -> PmtilesServer:
-    """Start (or reuse) a global server that hosts both the map page and .pmtiles file."""
-    pmtiles_path = Path(pmtiles_file).resolve()
-    if not pmtiles_path.is_file():
-        raise FileNotFoundError(f"PMTiles file not found: {pmtiles_path}")
-
-    return PmtilesServer(pmtiles_path).start()
+    """Serve the given .pmtiles file from the shared server."""
+    server = _get_shared_server()
+    server.register_pmtiles(pmtiles_file)
+    return server
 
 
-@st.cache_resource
 def _get_html_server() -> PmtilesServer:
     """Map-HTML-only server (pmtiles served remotely, no local file)."""
-    return PmtilesServer(None).start()
+    return _get_shared_server()
 
 
 def _build_map_config(
@@ -211,6 +218,7 @@ def render_pmtiles_map(
     server = _get_or_start_server(str(pmtiles_file))
     config = _build_map_config(
         pmtiles_file=pmtiles_file,
+        pmtiles_url=server.pmtiles_url_for(pmtiles_file),
         vector_file_for_bounds=vector_file_for_bounds if pmtiles_file is None else None,
         id_column=id_column,
         viz_configuration=viz_configuration,

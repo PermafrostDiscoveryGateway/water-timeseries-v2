@@ -536,6 +536,34 @@ uv run water-timeseries build-pmtiles /path/to/lakes.parquet \
     --viz-configuration nrt_drainage
 ```
 
+### Switching Between Historical and Near Real-Time
+
+A running dashboard is not locked to the config it was launched with. The sidebar
+has a **View mode** switch between:
+
+| Mode | Config | Visualization |
+|------|--------|---------------|
+| Historical | `configs/dashboard_historical.yaml` | `drainage_year` |
+| Near Real-Time | `configs/dashboard_nrt.yaml` | `nrt_drainage` |
+
+Switching re-reads the other config and swaps its dataset, PMTiles archive and
+map styling; deployment settings (Earth Engine project, offline mode, logging)
+stay as launched. The active mode is recorded in the `mode` query param
+(`?mode=nrt`), so it survives a reload and is included in "Copy link to this
+view".
+
+The switch appears only when both configs are readable — a deployment that ships
+just one of them shows no switcher. Override which configs back the modes with
+the `DASHBOARD_MODES` environment variable:
+
+```bash
+DASHBOARD_MODES="historical=configs/mine.yaml,nrt=configs/mine_nrt.yaml" \
+    uv run water-timeseries dashboard --config-file configs/mine.yaml
+```
+
+Both archives are served by one tile server, so switching modes works with the
+fixed `PMTILES_PORT` used in Docker.
+
 ### Dashboard Arguments
 
 The `create_app()` function accepts these parameters:

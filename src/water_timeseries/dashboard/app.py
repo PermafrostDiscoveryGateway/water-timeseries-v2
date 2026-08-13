@@ -219,6 +219,41 @@ def main(
     """
     setup_logging(logfile=logfile, verbose=verbose)
 
+    # Let the sidebar mode switcher (?mode=historical|nrt) swap in the other
+    # config's dataset/tiles/styling before any path validation happens.
+    import streamlit as st
+
+    from water_timeseries.dashboard.modes import MODE_PARAM, apply_mode_override
+
+    launch_settings = {
+        "vector_file": vector_file,
+        "dw_dataset_file": dw_dataset_file,
+        "jrc_dataset_file": jrc_dataset_file,
+        "precomputed_nrt_dir": precomputed_nrt_dir,
+        "viz_configuration": viz_configuration,
+        "pmtiles_file": pmtiles_file,
+        "pmtiles_url": pmtiles_url,
+        "dw_start_year": dw_start_year,
+        "dw_end_year": dw_end_year,
+        "dw_start_month": dw_start_month,
+        "dw_end_month": dw_end_month,
+    }
+    settings, active_mode, modes = apply_mode_override(
+        launch_settings,
+        requested_mode=st.query_params.get(MODE_PARAM),
+    )
+    vector_file = settings["vector_file"]
+    dw_dataset_file = settings["dw_dataset_file"]
+    jrc_dataset_file = settings["jrc_dataset_file"]
+    precomputed_nrt_dir = settings["precomputed_nrt_dir"]
+    viz_configuration = settings["viz_configuration"]
+    pmtiles_file = settings["pmtiles_file"]
+    pmtiles_url = settings["pmtiles_url"]
+    dw_start_year = settings["dw_start_year"]
+    dw_end_year = settings["dw_end_year"]
+    dw_start_month = settings["dw_start_month"]
+    dw_end_month = settings["dw_end_month"]
+
     # Default paths to test data
     default_vector_file = _REPO_ROOT / "tests" / "data" / "lake_polygons.parquet"
     default_dw_dataset_file = _REPO_ROOT / "tests" / "data" / "lakes_dw_test.zarr"
@@ -277,6 +312,8 @@ def main(
         viz_configuration_name=viz_configuration,
         pmtiles_file=pmtiles_file,
         pmtiles_url=pmtiles_url,
+        modes=modes,
+        active_mode=active_mode,
     )
 
 
