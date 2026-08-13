@@ -40,7 +40,19 @@ DEFAULT_LON = -164.1
 DEFAULT_ZOOM = 10.0
 
 #: All query-param keys owned by this module (plus the pre-existing selected_lake).
-STATE_PARAM_KEYS = ("selected_lake", "lat", "lon", "zoom", "drained", "month", "hide_stable")
+STATE_PARAM_KEYS = (
+    "selected_lake",
+    "lat",
+    "lon",
+    "zoom",
+    "drained",
+    "month",
+    "hide_stable",
+    "hide_high",
+    "hide_medium",
+    "hide_low",
+    "hide_nodata",
+)
 
 #: Prefix applied to state params when mirrored onto a parent site's URL.
 PARENT_PARAM_PREFIX = "wt_"
@@ -69,6 +81,10 @@ class UrlState:
     drained: bool = False
     month: str | None = None
     hide_stable: bool = False
+    hide_high: bool = False
+    hide_medium: bool = False
+    hide_low: bool = False
+    hide_nodata: bool = False
 
 
 def _parse_float(value: str | None) -> float | None:
@@ -111,6 +127,10 @@ def decode_url_state(params: Mapping[str, str]) -> UrlState:
         drained=params.get("drained") == "1",
         month=str(month) if month else None,
         hide_stable=params.get("hide_stable") == "1",
+        hide_high=params.get("hide_high") == "1",
+        hide_medium=params.get("hide_medium") == "1",
+        hide_low=params.get("hide_low") == "1",
+        hide_nodata=params.get("hide_nodata") == "1",
     )
 
 
@@ -216,6 +236,7 @@ def apply_url_state_once() -> None:
 
     Must run in create_app BEFORE the recenter-to-selection block and before
     any widget it seeds (show_drained_toggle, toggle_hide_stable_lakes,
+    nrt_show_high/nrt_show_medium/nrt_show_low/nrt_show_stable/nrt_show_nodata,
     heatmap_selected_cell) is instantiated.
     """
     if st.session_state.get("_url_state_applied"):
@@ -248,6 +269,15 @@ def apply_url_state_once() -> None:
 
     if state.hide_stable:
         st.session_state["toggle_hide_stable_lakes"] = True
+        st.session_state["nrt_show_stable"] = False
+    if state.hide_high:
+        st.session_state["nrt_show_high"] = False
+    if state.hide_medium:
+        st.session_state["nrt_show_medium"] = False
+    if state.hide_low:
+        st.session_state["nrt_show_low"] = False
+    if state.hide_nodata:
+        st.session_state["nrt_show_nodata"] = False
 
 
 def current_state_params() -> dict:
