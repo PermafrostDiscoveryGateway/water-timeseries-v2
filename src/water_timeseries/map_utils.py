@@ -451,7 +451,7 @@ def build_pmtiles_map(
                 column_aliases=aliases,
                 filter_layers=["nrt-drained-fill", "lakes-fill"],
                 suppressed_properties={"lakes-fill": ["date", "drainage_confidence"]},
-                min_zoom=8,
+                min_zoom=9,
                 max_zoom=14,
             )
             # The month's drained lakes come from their own tileset (added
@@ -462,7 +462,7 @@ def build_pmtiles_map(
             tooltip = PMTilesMapLibreTooltipWithRounding(
                 column_aliases=aliases,
                 filter_layers=["lakes-fill"],
-                min_zoom=8,
+                min_zoom=9,
                 max_zoom=14,
                 property_overrides=nrt_tooltip_overrides,
             )
@@ -598,9 +598,10 @@ def build_pmtiles_map(
             # lakes the user asked to hide. The drained overlay is unaffected.
             for layer in (base_points_layer, lakes_fill_layer, lakes_line_layer):
                 layer["layout"] = {"visibility": "none"}
+        layer_style_switch_level = 8 # starting zoom level where lake polygons are being rendered
         layers.extend(
             [
-                # Centroids below z6, where the polygons are sub-pixel: this is
+                # Centroids below zoomlevel, where the polygons are sub-pixel: this is
                 # what keeps drained lakes findable when zoomed out, without
                 # per-lake browser markers.
                 {
@@ -608,10 +609,10 @@ def build_pmtiles_map(
                     "source": "nrt_pmtiles",
                     "source-layer": "drained_points",
                     "type": "circle",
-                    "maxzoom": 6,
+                    "maxzoom": layer_style_switch_level,
                     "paint": {
                         "circle-color": drained_fill,
-                        "circle-opacity": drained_opacity,
+                        "circle-opacity": min(drained_opacity*2, 1),
                         "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.5, 5, 4],
                         "circle-stroke-color": drained_line,
                         "circle-stroke-width": 0.5,
@@ -622,7 +623,7 @@ def build_pmtiles_map(
                     "source": "nrt_pmtiles",
                     "source-layer": "drained",
                     "type": "fill",
-                    "minzoom": 6,
+                    "minzoom": layer_style_switch_level+1,
                     "paint": {"fill-color": drained_fill, "fill-opacity": drained_opacity},
                 },
                 {
@@ -630,7 +631,7 @@ def build_pmtiles_map(
                     "source": "nrt_pmtiles",
                     "source-layer": "drained",
                     "type": "line",
-                    "minzoom": 6,
+                    "minzoom": layer_style_switch_level,
                     "paint": {
                         "line-color": drained_line,
                         "line-width": drained_width,
