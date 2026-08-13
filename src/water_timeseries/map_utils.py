@@ -417,6 +417,7 @@ def build_pmtiles_map(
     max_zoom=15,
     hide_stable_lakes: bool = False,
     drained_label: str | None = None,
+    hidden_categories: frozenset[str] = frozenset(),
     nrt_confidence_by_id: dict[str, int | None] | None = None,
     nrt_tooltip_overrides: dict[str, dict] | None = None,
     nrt_monthly_tiles_url: str | None = None,
@@ -570,12 +571,12 @@ def build_pmtiles_map(
                 # Monthly overlay: static feature-state paint, values pushed at
                 # runtime by PMTilesMapLibreFeatureState (added below).
                 fill_color, fill_opacity, line_color, line_width, line_opacity = (
-                    get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes=hide_stable_lakes)
+                    get_style_pmtiles_nrt_confidence_featurestate(hidden_categories=hidden_categories)
                 )
             else:
                 # Convert to number to handle string values in PMTiles
                 fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_drainage(
-                    hide_stable_lakes=hide_stable_lakes
+                    hidden_categories=hidden_categories
                 )
         legend = get_legend_html_nrt_drainage()
 
@@ -738,54 +739,67 @@ def build_pmtiles_map(
         }
         layers.insert(0, base_points_layer)
 
-        if hide_stable_lakes:
+        if hide_stable_lakes or "stable" in hidden_categories:
             # Switch the base layers off rather than painting them at zero
             # opacity: a zero-opacity layer still counts as rendered, so
             # queryRenderedFeatures would keep producing hover popups for the
             # lakes the user asked to hide. The drained overlay is unaffected.
             for layer in (base_points_layer, lakes_fill_layer, lakes_line_layer):
                 layer["layout"] = {"visibility": "none"}
-        layers.extend(
-            [
-                # Centroids below z6, where the polygons are sub-pixel: this is
-                # what keeps drained lakes findable when zoomed out, without
-                # per-lake browser markers.
-                {
-                    "id": "nrt-drained-points",
-                    "source": "nrt_pmtiles",
-                    "source-layer": "drained_points",
-                    "type": "circle",
-                    "maxzoom": 6,
-                    "paint": {
-                        "circle-color": drained_fill,
-                        "circle-opacity": drained_opacity,
-                        "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.5, 5, 4],
-                        "circle-stroke-color": drained_line,
-                        "circle-stroke-width": 0.5,
-                    },
-                },
-                {
-                    "id": "nrt-drained-fill",
-                    "source": "nrt_pmtiles",
-                    "source-layer": "drained",
-                    "type": "fill",
-                    "minzoom": 6,
-                    "paint": {"fill-color": drained_fill, "fill-opacity": drained_opacity},
-                },
-                {
-                    "id": "nrt-drained-line",
-                    "source": "nrt_pmtiles",
-                    "source-layer": "drained",
-                    "type": "line",
-                    "minzoom": 6,
-                    "paint": {
-                        "line-color": drained_line,
-                        "line-width": drained_width,
-                        "line-opacity": drained_line_opacity,
-                    },
-                },
-            ]
-        )
+
+        nrt_drained_points_layer = {
+            # Centroids below z6, where the polygons are sub-pixel: this is
+            # what keeps drained lakes findable when zoomed out, without
+            # per-lake browser markers.
+            "id": "nrt-drained-points",
+            "source": "nrt_pmtiles",
+            "source-layer": "drained_points",
+            "type": "circle",
+            "maxzoom": 6,
+            "paint": {
+                "circle-color": drained_fill,
+                "circle-opacity": drained_opacity,
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.5, 5, 4],
+                "circle-stroke-color": drained_line,
+                "circle-stroke-width": 0.5,
+            },
+        }
+        nrt_drained_fill_layer = {
+            "id": "nrt-drained-fill",
+            "source": "nrt_pmtiles",
+            "source-layer": "drained",
+            "type": "fill",
+            "minzoom": 6,
+            "paint": {"fill-color": drained_fill, "fill-opacity": drained_opacity},
+        }
+        nrt_drained_line_layer = {
+            "id": "nrt-drained-line",
+            "source": "nrt_pmtiles",
+            "source-layer": "drained",
+            "type": "line",
+            "minzoom": 6,
+            "paint": {
+                "line-color": drained_line,
+                "line-width": drained_width,
+                "line-opacity": drained_line_opacity,
+            },
+        }
+
+        # drainage_confidence is absent (coalesced to -1) for drained lakes
+        # with no ARIMA confidence score -- that's the "no data" category.
+        hidden_confidence_values = {
+            "no_data": -1,
+            "low": 1,
+            "medium": 2,
+            "high": 3,
+        }
+        hidden_values = [v for cat, v in hidden_confidence_values.items() if cat in hidden_categories]
+        if hidden_values:
+            drained_filter = ["!", ["in", ["coalesce", ["get", "drainage_confidence"], -1], ["literal", hidden_values]]]
+            for layer in (nrt_drained_points_layer, nrt_drained_fill_layer, nrt_drained_line_layer):
+                layer["filter"] = drained_filter
+
+        layers.extend([nrt_drained_points_layer, nrt_drained_fill_layer, nrt_drained_line_layer])
 
     layers.extend(selected_overlay_layers)
 

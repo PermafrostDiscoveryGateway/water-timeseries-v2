@@ -118,7 +118,20 @@ def get_style_pmtiles_drainage_year(hide_stable_lakes: bool = False) -> tuple:
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
-def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
+def get_style_pmtiles_nrt_drainage(hidden_categories: frozenset[str] = frozenset()) -> tuple:
+    """Paint for the baked ``drainage_confidence`` property (0=stable, 1-3=drained, NaN=no data).
+
+    ``hidden_categories`` drops opacity/width to 0 for any of
+    ``{"no_data", "stable", "low", "medium", "high"}`` the user unchecked in
+    the sidebar legend controls, so hidden features are invisible to both
+    rendering and ``queryRenderedFeatures`` hover.
+    """
+    hide_no_data = "no_data" in hidden_categories
+    hide_stable = "stable" in hidden_categories
+    hide_low = "low" in hidden_categories
+    hide_medium = "medium" in hidden_categories
+    hide_high = "high" in hidden_categories
+
     # Helper expressions for NaN vs zero
     is_nan = [
         "any",
@@ -147,24 +160,18 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
         ],
     ]
 
-    if hide_stable_lakes:
-        fill_opacity = [
-            "case",
-            is_nan,
-            0,  # Hide NaN
-            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            0,  # Hide stable
-            0.2,  # Show drained lakes
-        ]
-    else:
-        fill_opacity = [
-            "case",
-            is_nan,
-            0.5,  # Show NaN at medium opacity
-            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            0.15,  # Stable lakes (Very faint)
-            0.2,  # Drained lakes
-        ]
+    fill_opacity = [
+        "case",
+        is_nan,
+        0 if hide_no_data else 0.5,
+        ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+        0 if hide_stable else 0.15,
+        ["==", ["to-number", ["get", "drainage_confidence"]], 1],
+        0 if hide_low else 0.2,
+        ["==", ["to-number", ["get", "drainage_confidence"]], 2],
+        0 if hide_medium else 0.2,
+        0 if hide_high else 0.2,
+    ]
 
     line_color = [
         "case",
@@ -185,54 +192,35 @@ def get_style_pmtiles_nrt_drainage(hide_stable_lakes: bool = False) -> tuple:
         ],
     ]
 
-    if hide_stable_lakes:
-        line_opacity = [
-            "case",
-            is_nan,
-            0,  # Hide NaN line
-            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            0,  # Hide stable line
-            1,  # Show drained lake lines
-        ]
-        line_width = [
-            "case",
-            is_nan,
-            0,  # Width 0 for NaN
-            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            0,  # Width 0 for stable
-            [
-                "case",
-                ["==", ["to-number", ["get", "drainage_confidence"]], 1],
-                1,
-                ["==", ["to-number", ["get", "drainage_confidence"]], 2],
-                1,
-                3,  # Width 3 for confidence 3
-            ],
-        ]
-    else:
-        line_opacity = [
-            "case",
-            is_nan,
-            0.5,  # Show NaN lines
-            1,  # Show all others at full opacity
-        ]
-        line_width = [
-            "case",
-            is_nan,
-            0.5,  # Width 0.5 for NaN
-            ["==", ["to-number", ["get", "drainage_confidence"]], 0],
-            1,  # Width 1 for stable
-            ["==", ["to-number", ["get", "drainage_confidence"]], 1],
-            1,  # Width 1 for confidence 1
-            ["==", ["to-number", ["get", "drainage_confidence"]], 2],
-            1,  # Width 1 for confidence 2
-            3,  # Width 3 for confidence 3
-        ]
+    line_opacity = [
+        "case",
+        is_nan,
+        0 if hide_no_data else 0.5,
+        ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+        0 if hide_stable else 1,
+        ["==", ["to-number", ["get", "drainage_confidence"]], 1],
+        0 if hide_low else 1,
+        ["==", ["to-number", ["get", "drainage_confidence"]], 2],
+        0 if hide_medium else 1,
+        0 if hide_high else 1,
+    ]
+    line_width = [
+        "case",
+        is_nan,
+        0 if hide_no_data else 0.5,
+        ["==", ["to-number", ["get", "drainage_confidence"]], 0],
+        0 if hide_stable else 1,
+        ["==", ["to-number", ["get", "drainage_confidence"]], 1],
+        0 if hide_low else 1,
+        ["==", ["to-number", ["get", "drainage_confidence"]], 2],
+        0 if hide_medium else 1,
+        0 if hide_high else 3,
+    ]
 
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
-def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = False) -> tuple:
+def get_style_pmtiles_nrt_confidence_featurestate(hidden_categories: frozenset[str] = frozenset()) -> tuple:
     """Static paint for the NRT monthly drainage overlay driven by feature-state.
 
     The per-month, per-lake confidence values are pushed into the map at
@@ -249,6 +237,12 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
     This is the fallback for deployments without per-month drainage tilesets;
     see ``build_pmtiles_nrt_monthly``.
     """
+    hide_no_data = "no_data" in hidden_categories
+    hide_low = "low" in hidden_categories
+    hide_medium = "medium" in hidden_categories
+    hide_high = "high" in hidden_categories
+    hide_stable = "stable" in hidden_categories
+
     conf = ["coalesce", ["feature-state", "confidence"], -1]
 
     fill_color = [
@@ -268,14 +262,14 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         "match",
         conf,
         0,
-        0.85,
+        0 if hide_no_data else 0.85,
         1,
-        0.85,
+        0 if hide_low else 0.85,
         2,
-        0.85,
+        0 if hide_medium else 0.85,
         3,
-        0.85,
-        0 if hide_stable_lakes else 0.35,
+        0 if hide_high else 0.85,
+        0 if hide_stable else 0.35,
     ]
     line_color = [
         "match",
@@ -294,27 +288,27 @@ def get_style_pmtiles_nrt_confidence_featurestate(hide_stable_lakes: bool = Fals
         "match",
         conf,
         0,
-        2.0,
+        0 if hide_no_data else 2.0,
         1,
-        1,
+        0 if hide_low else 1,
         2,
-        1,
+        0 if hide_medium else 1,
         3,
-        3,
-        0 if hide_stable_lakes else 1,
+        0 if hide_high else 3,
+        0 if hide_stable else 1,
     ]
     line_opacity = [
         "match",
         conf,
         0,
+        0 if hide_no_data else 1,
         1,
-        1,
-        1,
+        0 if hide_low else 1,
         2,
-        1,
+        0 if hide_medium else 1,
         3,
-        1,
-        0 if hide_stable_lakes else 0.9,
+        0 if hide_high else 1,
+        0 if hide_stable else 0.9,
     ]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
