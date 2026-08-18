@@ -55,13 +55,18 @@ def get_style_pmtiles_drainage_year(hide_stable_lakes: bool = False) -> tuple:
             "interpolate",
             ["linear"],
             ["to-number", ["get", "date_break_year"]],
-            2017,
-            "#fff5f0",
-            2021,
-            "#f46d43",
-            2025,
-            "#67000d",
-        ],
+            2017, "#4575b4",
+            2018, "#74add1",
+            2019, "#abd9e9",
+            2020, "#e0f3f8",
+            2021, "#ffffbf",
+            2022, "#fee090",
+            2023, "#fdae61",
+            2024, "#f46d43",
+            2025, "#d73027"
+        ]
+
+
     ]
     line_opacity = 1
     # switch to disable non drained lakes (stable lakes) from being displayed on the map
