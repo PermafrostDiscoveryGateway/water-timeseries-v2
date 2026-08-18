@@ -64,7 +64,7 @@ _VIZ_TO_MODE = {
     "nrt_drainage": "nrt_drainage",
 }
 
-_LABELS = {"drainage_year": "Historical", "nrt_drainage": "Near Real-Time"}
+_LABELS = {"drainage_year": "Historical Drainage (2016-2025)", "nrt_drainage": "Near Real-Time Anomalies (2026)"}
 
 #: Session/query state that describes one mode's view and must not leak into
 #: the other (different lakes, different months, different toggles).
