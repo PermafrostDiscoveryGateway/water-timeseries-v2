@@ -97,47 +97,81 @@ def get_legend_html_net_change() -> str:
 
 # Add legend for NetChange_perc color scale
 def get_legend_html_date_drainage_year() -> str:
-    """Generate HTML legend for net change percentage visualization.
+    """Generate HTML legend for Drainage Year visualization with a two-column layout.
 
     Returns:
-        HTML string containing a styled legend for the Drainage Year color scale.
-        The legend displays a gradient from red (decrease) to blue (increase)
-        with labels ranging from -40% to +40%.
-
-    Example:
-        >>> legend_html = get_legend_html_net_change()
-        >>> # Use in folium map
-        >>> m.get_root().html.add_child(folium.Element(legend_html))
+        HTML string containing a styled legend that uses discrete patches arranged in
+        two columns (2016-2020 on left, 2021-2025 on right) with 90% opacity background.
     """
-    LEGEND_HTML_NET_CHANGE = """
+    LEGEND_HTML_DATE_DRAINAGE = """
         <div style="
             position: fixed;
             bottom: 40px;
             right: 10px;
-            width: 180px;
+            width: 200px;
             height: auto;
             border: 2px solid grey;
             z-index: 9999;
             font-size: 12px;
-            background-color: white;
+            background-color: rgba(255, 255, 255, 0.9);
             color: #222;
             padding: 10px;
             border-radius: 5px;
             box-shadow: 0 0 15px rgba(0,0,0,0.2);
         ">
-        <p style="margin: 0 0 5px 0; font-weight: bold;">Drainage Year</p>
-        <div style="
-            background: linear-gradient(to right, #313695, #4575b4, #74add1, #abd9e9, #e0f3f8, #fee090, #fdae61, #f46d43, #d73027, #a50026);
-            width: 100%;
-            height: 20px;
-            border: 1px solid #ccc;
-        "></div>
-        <div style="display: flex; justify-content: space-between; width: 100%; margin-top: 3px;">
-            <span>2016</span>
-            <span>2025</span>
+        <p style="margin: 0 0 8px 0; font-weight: bold; text-align: center;">Drainage Year</p>
+        
+        <div style="display: flex; justify-content: space-between;">
+            <!-- Left Column: 2016 - 2020 -->
+            <div style="display: flex; flex-direction: column; gap: 4px; width: 48%;">
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #313695; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2016</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #4575b4; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2017</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #74add1; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2018</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #abd9e9; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2019</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #e0f3f8; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2020</span>
+                </div>
+            </div>
+
+            <!-- Right Column: 2021 - 2025 -->
+            <div style="display: flex; flex-direction: column; gap: 4px; width: 48%;">
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #fee090; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2021</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #fdae61; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2022</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #f46d43; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2023</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #d73027; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2024</span>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <div style="width: 20px; height: 20px; background-color: #a50026; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+                    <span>2025</span>
+                </div>
+            </div>
         </div>
     """
-    return LEGEND_HTML_NET_CHANGE
+    return LEGEND_HTML_DATE_DRAINAGE
 
 
 # Add legend for NRT drainage confidence (grey to white)
