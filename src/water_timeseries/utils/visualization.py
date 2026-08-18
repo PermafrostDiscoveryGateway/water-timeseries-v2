@@ -127,15 +127,14 @@ def get_legend_html_date_drainage_year() -> str:
         ">
         <p style="margin: 0 0 5px 0; font-weight: bold;">Drainage Year</p>
         <div style="
-            background: linear-gradient(to right, #fff5f0, #f46d43, #67000d);
+            background: linear-gradient(to right, #313695, #4575b4, #74add1, #abd9e9, #e0f3f8, #fee090, #fdae61, #f46d43, #d73027, #a50026);
             width: 100%;
             height: 20px;
             border: 1px solid #ccc;
         "></div>
         <div style="display: flex; justify-content: space-between; width: 100%; margin-top: 3px;">
-            <span>2017</span>
+            <span>2016</span>
             <span>2025</span>
-        </div>
         </div>
     """
     return LEGEND_HTML_NET_CHANGE
