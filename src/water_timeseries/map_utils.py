@@ -265,8 +265,18 @@ def build_pmtiles_map(
     max_zoom=15,
     hide_stable_lakes: bool = False,
     drained_label: str | None = None,
+    selected_id: str | None = None,
+    id_column: str = "id_geohash",
 ) -> folium.Map:
-    """Return a Folium map with a PMTiles vector layer for lake polygons."""
+    """Return a Folium map with a PMTiles vector layer for lake polygons.
+
+    Args:
+        selected_id: Lake whose outline is highlighted on top of every other
+            layer, so the current selection stays identifiable after the map
+            re-centers on it.
+        id_column: Tile property holding the lake id (matched against
+            ``selected_id``).
+    """
 
     m = leafmap.Map(
         location=center,
@@ -429,6 +439,40 @@ def build_pmtiles_map(
             },
         ]
 
+    # The selected lake is outlined on top of everything else. Its own filter
+    # means the highlight survives the "hide stable lakes" filter below, and the
+    # dark casing under the red core keeps it readable over the red drained
+    # overlay as well as over the light basemaps.
+    selected_overlay_layers: list[dict] = []
+    if selected_id:
+        selected_filter = ["==", ["get", id_column], selected_id]
+        selected_overlay_layers = [
+            {
+                "id": "lakes-line-selected-casing",
+                "source": "lakes_pmtiles",
+                "source-layer": source_layer,
+                "type": "line",
+                "filter": selected_filter,
+                "paint": {
+                    "line-color": "#1a1a1a",
+                    "line-width": 6.0,
+                    "line-opacity": 0.8,
+                },
+            },
+            {
+                "id": "lakes-line-selected",
+                "source": "lakes_pmtiles",
+                "source-layer": source_layer,
+                "type": "line",
+                "filter": selected_filter,
+                "paint": {
+                    "line-color": "#ff2d2d",
+                    "line-width": 2.5,
+                    "line-opacity": 1.0,
+                },
+            },
+        ]
+
     if viz_configuration_name == "drainage_year" and hide_stable_lakes:
         nan_filter = [
             "all",
@@ -452,7 +496,12 @@ def build_pmtiles_map(
                     "url": "pmtiles://" + pmtiles_url,
                 }
             },
-            "layers": [lakes_fill_layer, lakes_line_layer, *drained_overlay_layers],
+            "layers": [
+                lakes_fill_layer,
+                lakes_line_layer,
+                *drained_overlay_layers,
+                *selected_overlay_layers,
+            ],
         },
         tooltip=tooltip,
     )
