@@ -149,7 +149,7 @@ class MapViewer:
         self.drained_gdf = drained_gdf
         self.drained_label = drained_label
         self.show_main_layer = show_main_layer
-        self.drained_data = None
+        self.drained_ids: list[str] | None = None
         self.viz_configuration_name = viz_configuration_name
         self.hide_stable_lakes = hide_stable_lakes
 
@@ -356,10 +356,9 @@ class MapViewer:
         center = [self.map_center.get("lat", 65.5), self.map_center.get("lon", -164.1)]
         logger.info(f"Using provided map center: lat={center[0]}, lon={center[1]}")
 
-        drained_ids = None
-        if getattr(self, "drained_data", None) is not None:
-            drained_ids = list(self.drained_data.keys())
-            logger.info(f"Drained data overlay: {len(drained_ids) if drained_ids else 0} lakes")
+        drained_ids = getattr(self, "drained_ids", None) or None
+        if drained_ids is not None:
+            logger.info(f"Drained data overlay: {len(drained_ids)} lakes")
         logger.info("Setting up map")
         tooltip = None
         m = build_pmtiles_map(
@@ -370,6 +369,7 @@ class MapViewer:
             viz_configuration_name=viz_configuration_name,
             tooltip=tooltip,
             hide_stable_lakes=self.hide_stable_lakes,
+            drained_label=getattr(self, "drained_label", None),
         )
 
         # Render the map and get click data
@@ -1298,16 +1298,19 @@ def create_app(
     precomputed_counts: pd.DataFrame | None = st.session_state.precomputed_nrt_counts
     precomputed_breaks: pd.DataFrame | None = st.session_state.precomputed_nrt_breaks
 
-    # Near-real-time drainage overlay
-    st.sidebar.divider()
-    st.sidebar.subheader("Historical Drainage")
-    st.session_state.setdefault("show_drained_toggle", default_activate_historical)
-    show_drained = st.sidebar.toggle(
-        "Show temporal drainage statistics",
-        key="show_drained_toggle",
-        help="Activates visualization of number of drained lakes per month.",
-    )
-    sync_flag_param("drained", show_drained)
+    # Historical drainage overlay. Hidden entirely in Near Real-Time mode,
+    # which has its own per-month drainage controls.
+    show_drained = False
+    if viz_configuration_name != "nrt_drainage":
+        st.sidebar.divider()
+        st.sidebar.subheader("Historical Drainage")
+        st.session_state.setdefault("show_drained_toggle", default_activate_historical)
+        show_drained = st.sidebar.toggle(
+            "Show temporal drainage statistics",
+            key="show_drained_toggle",
+            help="Activates visualization of number of drained lakes per month.",
+        )
+        sync_flag_param("drained", show_drained)
     if not show_drained:
         st.query_params.pop("month", None)
     # Jump to the drainage overview zoom only when the toggle flips on,
@@ -1444,10 +1447,9 @@ def create_app(
                 if show_drained and drained_breaks is not None and not drained_breaks.empty:
                     drained_ids = drained_breaks.index.unique().tolist()
                     if map_backend == "pmtiles":
-                        breaks_df = drained_breaks.copy()
-                        if "date" in breaks_df.columns:
-                            breaks_df["date"] = breaks_df["date"].astype(str)
-                        viewer.drained_data = breaks_df.to_dict(orient="index")
+                        # Only the ids reach the map style, so skip building a
+                        # row-dict for every drained lake just to drop the values.
+                        viewer.drained_ids = drained_ids
                         viewer.drained_label = drained_label
                         viewer.show_main_layer = True
                     else:
@@ -1461,7 +1463,7 @@ def create_app(
                         viewer.show_main_layer = True
                 elif show_drained:
                     viewer.drained_gdf = None
-                    viewer.drained_data = None
+                    viewer.drained_ids = None
                     viewer.drained_label = drained_label
                     viewer.show_main_layer = True
 
