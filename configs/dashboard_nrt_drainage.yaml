@@ -1,5 +1,5 @@
 # CONFIG File for PMTILES config - near-real-time lake drainage, pan-arctic
-# Use via DASHBOARD_CONFIG=configs/dashboard_nrt.yaml.
+# Use via DASHBOARD_CONFIG=configs/dashboard_nrt_drainage.yaml.
 
 ee_project: pdg-project-406720
 

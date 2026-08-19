@@ -261,13 +261,13 @@ def build_pmtiles(
     ``.pmtiles`` file to object storage (S3, GCS, etc.) and pass ``--pmtiles-url`` to
     the dashboard, or use ``--pmtiles-file`` for local development.
 
-    The same dashboard config (e.g. ``configs/dashboard_historical.yaml``) that hosts
+    The same dashboard config (e.g. ``configs/dashboard_drainage_year.yaml``) that hosts
     the dashboard can be reused here: its ``pmtiles_file`` key is accepted as the
     build output path, so ``--config-file`` works for both building and serving tiles.
 
     Example:
         water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
-        water-timeseries build-pmtiles --config-file configs/dashboard_historical.yaml
+        water-timeseries build-pmtiles --config-file configs/dashboard_drainage_year.yaml
         water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
     """
     # Load config file if provided

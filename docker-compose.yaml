@@ -5,12 +5,12 @@ services:
     working_dir: /app
     # Use the installed CLI (same launch path as production/helm). All data
     # paths live in the config file; point DASHBOARD_CONFIG at another YAML
-    # (e.g. configs/dashboard_nrt.yaml) to switch datasets.
+    # (e.g. configs/dashboard_nrt_drainage.yaml) to switch datasets.
     command:
       - water-timeseries
       - dashboard
       - --config-file
-      - ${DASHBOARD_CONFIG:-configs/dashboard_historical.yaml}
+      - ${DASHBOARD_CONFIG:-configs/dashboard_drainage_year.yaml}
     volumes:
       - .:/app
       # Keep image .venv; a plain .:/app mount would hide it with an empty host dir
