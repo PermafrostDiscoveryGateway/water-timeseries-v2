@@ -9,8 +9,10 @@ can serve both views.
 The active mode lives in the ``mode`` query param, which keeps it shareable and
 survives a browser reload (see :mod:`water_timeseries.dashboard.share_state`).
 
-Modes are discovered from ``configs/dashboard_*.yaml`` in the repo root. Set
-``DASHBOARD_MODES`` to override, e.g.::
+Modes come from the ``modes:`` block of the launch config, so one mounted file
+carries every view (see :func:`water_timeseries.utils.cli.mode_configs`). A flat
+single-mode config has no such block; those deployments fall back to the default
+config below, or to ``DASHBOARD_MODES`` when it names one file per mode::
 
     DASHBOARD_MODES="drainage_year=configs/a.yaml,nrt_drainage=configs/b.yaml"
 """
@@ -24,7 +26,7 @@ from pathlib import Path
 import streamlit as st
 from loguru import logger
 
-from water_timeseries.utils.cli import load_config
+from water_timeseries.utils.cli import flatten_mode, load_config, mode_configs
 from water_timeseries.utils.io import is_remote_path
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent
@@ -51,11 +53,8 @@ _MODE_SETTING_KEYS = (
     "dw_end_month",
 )
 
-#: Built-in modes: key -> (label, config path relative to the repo root).
-_DEFAULT_MODES: tuple[tuple[str, str, str], ...] = (
-    ("drainage_year", "Historical", "configs/dashboard_drainage_year.yaml"),
-    ("nrt_drainage", "Near Real-Time", "configs/dashboard_nrt_drainage.yaml"),
-)
+#: Multi-mode config used when the launch config carries no ``modes:`` block.
+_DEFAULT_CONFIG = "configs/dashboard_panarctic.yaml"
 
 #: Mode settings that name a local file or directory, and so need resolving
 #: against the repo root before the mode can be offered.
@@ -167,37 +166,72 @@ def _missing_required_paths(settings: dict) -> list[str]:
     return missing
 
 
-def available_modes() -> list[DashboardMode]:
-    """Discover selectable modes, dropping any that aren't usable here.
+def _mode_specs(launch_config: dict | None) -> list[tuple[str, str, Path, dict]]:
+    """Candidate ``(key, label, config_path, settings)`` tuples, before filtering.
 
-    A mode is dropped when its config is missing, and also when the data it
-    points at isn't present: switching to a mode whose ``vector_file`` is
-    absent used to leave a map that painted but ignored every click, because
-    :func:`app.main` quietly substituted the tiny test fixture for the missing
-    parquet (issue #229).
-
-    Returns an empty list when fewer than two modes are usable — a switcher
-    with nothing to switch to would only be noise.
+    Preference order: the launch config's own ``modes:`` block, then
+    ``DASHBOARD_MODES``, then the built-in multi-mode config.
     """
+    config_path = Path(launch_config.get("config_file")) if (launch_config or {}).get("config_file") else None
+    modes = mode_configs(launch_config or {})
+    if modes:
+        return [
+            (
+                key,
+                values.get("label") or _LABELS.get(key, key.replace("_", " ").title()),
+                config_path or _resolve(_DEFAULT_CONFIG),
+                flatten_mode(launch_config, key),
+            )
+            for key, values in modes.items()
+        ]
+
     env_raw = os.environ.get(MODES_ENV, "").strip()
     if env_raw:
-        specs = [
-            (key, _LABELS.get(key, key.replace("_", " ").title()), path) for key, path in _parse_modes_env(env_raw)
-        ]
-    else:
-        specs = list(_DEFAULT_MODES)
+        specs = []
+        for key, path in _parse_modes_env(env_raw):
+            path = _resolve(path)
+            specs.append((key, _LABELS.get(key, key.replace("_", " ").title()), path, load_config(path, logger)))
+        return specs
 
+    # Flat launch config: fall back to the shipped multi-mode file.
+    default_path = _resolve(_DEFAULT_CONFIG)
+    default_config = load_config(default_path, logger)
+    return [
+        (
+            key,
+            values.get("label") or _LABELS.get(key, key.replace("_", " ").title()),
+            default_path,
+            flatten_mode(default_config, key),
+        )
+        for key, values in mode_configs(default_config).items()
+    ]
+
+
+def available_modes(launch_config: dict | None = None) -> list[DashboardMode]:
+    """Discover selectable modes, dropping any that aren't usable here.
+
+    A mode is dropped when its data isn't present: switching to a mode whose
+    ``vector_file`` is absent used to leave a map that painted but ignored every
+    click, because :func:`app.main` quietly substituted the tiny test fixture
+    for the missing parquet (issue #229).
+
+    Args:
+        launch_config: The config the dashboard was launched with. Its
+            ``modes:`` block, when present, defines the modes.
+
+    Returns:
+        The usable modes, or an empty list when fewer than two are usable --
+        a switcher with nothing to switch to would only be noise.
+    """
     modes = []
-    for key, label, path in specs:
-        config_path = _resolve(path)
-        settings = load_config(config_path, logger)
+    for key, label, config_path, settings in _mode_specs(launch_config):
         if not settings:
             logger.debug(f"Skipping mode {key!r}: no usable config at {config_path}")
             continue
         settings = _resolve_mode_paths(settings)
         missing = _missing_required_paths(settings)
         if missing:
-            logger.warning(f"Skipping mode {key!r} ({config_path}): missing data — {', '.join(missing)}")
+            logger.warning(f"Skipping mode {key!r} ({config_path}): missing data -- {', '.join(missing)}")
             continue
         modes.append(DashboardMode(key=key, label=label, config_path=config_path, settings=settings))
 
@@ -226,22 +260,31 @@ def apply_mode_override(
     launch_settings: dict,
     *,
     requested_mode: str | None,
+    launch_config: dict | None = None,
 ) -> tuple[dict, str, list[DashboardMode]]:
     """Overlay the requested mode's config onto the launch settings.
 
     Args:
         launch_settings: Data settings the dashboard was launched with.
         requested_mode: Mode key from the ``mode`` query param (may be None).
+        launch_config: The launch config file's contents, whose ``modes:``
+            block defines the selectable modes.
 
     Returns:
         ``(settings, active_mode_key, modes)`` — settings with the mode's data
         keys applied, the key now in effect, and the selectable modes.
     """
-    modes = available_modes()
+    modes = available_modes(launch_config)
     launch_key = mode_key_for_viz(launch_settings.get("viz_configuration"))
 
     active = resolve_mode(requested_mode, modes)
-    if active is None or active.key == launch_key:
+    if active is None:
+        return dict(launch_settings), launch_key, modes
+    # Same key: the launch config is that mode's authoritative version, so keep
+    # its paths -- unless it named none, as when launched on the shared
+    # `dashboard_panarctic_base.yaml`. Short-circuiting there stranded the run
+    # on the test fixture with no way to reach the real data from the switcher.
+    if active.key == launch_key and any(launch_settings.get(k) for k in _MODE_REQUIRED_PATH_KEYS + ("pmtiles_url",)):
         return dict(launch_settings), launch_key, modes
 
     settings = dict(launch_settings)

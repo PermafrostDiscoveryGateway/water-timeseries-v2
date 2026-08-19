@@ -21,7 +21,13 @@ from loguru import logger
 # imported lazily inside their subcommands: they pull in Rbeast's C extension,
 # which is unavailable on some platforms, and must not block e.g. `dashboard`.
 from water_timeseries.scripts.repartition_parquet import repartition_parquet as repartition_parquet_file
-from water_timeseries.utils.cli import load_config, merge_config_with_args
+from water_timeseries.utils.cli import (
+    flatten_mode,
+    load_config,
+    load_required_config,
+    merge_config_with_args,
+    mode_configs,
+)
 from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_archive
 from water_timeseries.utils.pmtiles_build import (
     build_pmtiles_drainage_year,
@@ -135,7 +141,10 @@ viz_configuration: The visualization configuration name for the map viewer.
         water-timeseries dashboard --config-file configs/dashboard_config.yaml
     """
     # Load config file if provided"
-    config_dict = load_config(config_file, logger) if config_file else {}
+    raw_config = load_required_config(config_file, logger)
+    # A multi-mode config launches on its `default_mode`; the sidebar switcher
+    # re-reads the same file for the others (see dashboard.modes).
+    config_dict = flatten_mode(raw_config)
 
     # Debug: Log loaded config
     logger.debug(f"Loaded config from {config_file}: {config_dict}")
@@ -164,6 +173,12 @@ viz_configuration: The visualization configuration name for the map viewer.
         verbose=verbose,
         config_file=config_file,
     )
+
+    if config_file and not any(config_dict.get(k) for k in ("vector_file", "pmtiles_file", "pmtiles_url")):
+        logger.warning(
+            f"{config_file} names no vector_file/pmtiles_file/pmtiles_url, so the dashboard will start on the "
+            "test-data fixture. Did you mean configs/dashboard_panarctic.yaml?"
+        )
 
     # Get values from merged config with defaults
     vector_file = config_dict.get("vector_file")
@@ -226,6 +241,8 @@ viz_configuration: The visualization configuration name for the map viewer.
         script_args.extend(["--pmtiles-file", pmtiles_file])
     if pmtiles_url:
         script_args.extend(["--pmtiles-url", pmtiles_url])
+    if config_file:
+        script_args.extend(["--config-file", str(config_file)])
     if logfile:
         script_args.extend(["--logfile", logfile])
     if script_args:
@@ -254,6 +271,7 @@ def build_pmtiles(
     logfile: str | None = None,
     verbose: int = 0,
     config_file: Path | None = None,
+    mode: str | None = None,
 ):
     """Convert a lake GeoParquet file to a single .pmtiles archive for fast map rendering.
 
@@ -261,17 +279,19 @@ def build_pmtiles(
     ``.pmtiles`` file to object storage (S3, GCS, etc.) and pass ``--pmtiles-url`` to
     the dashboard, or use ``--pmtiles-file`` for local development.
 
-    The same dashboard config (e.g. ``configs/dashboard_drainage_year.yaml``) that hosts
-    the dashboard can be reused here: its ``pmtiles_file`` key is accepted as the
-    build output path, so ``--config-file`` works for both building and serving tiles.
+    The same dashboard config that hosts the dashboard can be reused here: its
+    ``pmtiles_file`` key is accepted as the build output path, so ``--config-file``
+    works for both building and serving tiles. A multi-mode config builds one mode
+    at a time -- ``--mode`` picks which, defaulting to the config's ``default_mode``.
 
     Example:
         water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
-        water-timeseries build-pmtiles --config-file configs/dashboard_drainage_year.yaml
+        water-timeseries build-pmtiles --config-file configs/dashboard_panarctic.yaml
+        water-timeseries build-pmtiles --config-file configs/dashboard_panarctic.yaml --mode nrt_drainage
         water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
     """
-    # Load config file if provided
-    config_dict = load_config(config_file, logger) if config_file else {}
+    # Load config file if provided, selecting one mode from a multi-mode config
+    config_dict = flatten_mode(load_required_config(config_file, logger), mode)
 
     # Merge config with CLI args
     config_dict = merge_config_with_args(
@@ -331,30 +351,34 @@ def serve_tiles(
     """Serve PMTiles over HTTP with Range request support.
 
     PATH may be a .pmtiles file, a directory of files, or a dashboard config
-    YAML (the ``pmtiles_file`` key is resolved at runtime).
+    YAML. For a multi-mode config every mode's ``pmtiles_file`` is served, since
+    switching modes in the browser fetches the other mode's tiles from this same
+    server; a flat config contributes its single ``pmtiles_file``.
 
     Example:
         water-timeseries serve-tiles tiles/lakes.pmtiles --port 8080
-        water-timeseries serve-tiles configs/dashboard.yaml --port 8080
+        water-timeseries serve-tiles configs/dashboard_panarctic.yaml --port 8080
     """
     if logfile:
         logfile = setup_logging(logfile=logfile, verbose=verbose)
     resolved = Path(path).resolve()
 
-    if resolved.suffix in (".yaml", ".yml"):
-        import yaml
-
-        with open(resolved) as f:
-            cfg = yaml.safe_load(f)
-        pmtiles_field = cfg.get("pmtiles_file")
-        if not pmtiles_field:
+    extra_archives: list[Path] = []
+    if resolved.suffix in (".yaml", ".yml", ".json"):
+        cfg = load_config(resolved, logger)
+        modes = mode_configs(cfg)
+        fields = [flatten_mode(cfg, key).get("pmtiles_file") for key in modes] if modes else [cfg.get("pmtiles_file")]
+        archives = [Path(field).resolve() for field in fields if field]
+        if not archives:
             raise ValueError(f"No pmtiles_file key found in {resolved}")
-        serve_path = Path(pmtiles_field).resolve()
+        serve_path, extra_archives = archives[0], archives[1:]
     else:
         serve_path = resolved
 
     with PmtilesServer(serve_path, host=host, port=port) as server:
-        logger.info(f"Serving at {server.base_url} (Ctrl+C to stop)")
+        for archive in extra_archives:
+            server.register_pmtiles(archive)
+        logger.info(f"Serving {1 + len(extra_archives)} archive(s) at {server.base_url} (Ctrl+C to stop)")
         try:
             import time
 

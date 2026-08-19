@@ -4,20 +4,20 @@ services:
     image: water-timeseries-streamlit:latest
     working_dir: /app
     # Use the installed CLI (same launch path as production/helm). All data
-    # paths live in the config file; point DASHBOARD_CONFIG at another YAML
-    # (e.g. configs/dashboard_nrt_drainage.yaml) to switch datasets.
+    # paths live in the config file, which carries both view modes; point
+    # DASHBOARD_CONFIG at another YAML to switch datasets.
     command:
       - water-timeseries
       - dashboard
       - --config-file
-      - ${DASHBOARD_CONFIG:-configs/dashboard_drainage_year.yaml}
+      - ${DASHBOARD_CONFIG:-configs/dashboard_panarctic.yaml}
     volumes:
       - .:/app
       # Keep image .venv; a plain .:/app mount would hide it with an empty host dir
       - /app/.venv
       # Large/local datasets (gitignored downloads/; override host dirs via .env)
       - ${DOWNLOADS_DIR:-./downloads}:/app/downloads:ro
-      # Datasets referenced by configs/dashboard_*.yaml (data/... paths, as in production)
+      # Datasets referenced by configs/dashboard_panarctic.yaml (data/... paths, as in production)
       - ${DATA_DIR:-./data}:/app/data:ro
       # Optional: host EE credentials (alternative to EARTHENGINE_TOKEN in .env)
       - ${EARTHENGINE_CREDENTIALS_DIR:-${HOME}/.config/earthengine}:/root/.config/earthengine:ro

@@ -10,6 +10,7 @@ from water_timeseries.dashboard.modes import (
     mode_key_for_viz,
     resolve_mode,
 )
+from water_timeseries.utils.cli import flatten_mode, mode_configs
 
 
 def _write_config(path, **values):
@@ -44,6 +45,34 @@ def _two_configs(tmp_path):
         dw_end_year=2026,
     )
     return historical, nrt
+
+
+def _multi_mode_config(tmp_path):
+    """One config holding both modes, as configs/dashboard_panarctic.yaml does."""
+    paths = {
+        name: _touch(tmp_path / "data" / name)
+        for name in ("historical.parquet", "historical.pmtiles", "nrt.parquet", "nrt.pmtiles")
+    }
+    return _write_config(
+        tmp_path / "panarctic.yaml",
+        ee_project="shared-project",
+        dw_end_year=2026,
+        default_mode="drainage_year",
+        modes={
+            "drainage_year": {
+                "label": "Historical",
+                "vector_file": str(paths["historical.parquet"]),
+                "pmtiles_file": str(paths["historical.pmtiles"]),
+                "viz_configuration": "drainage_year",
+            },
+            "nrt_drainage": {
+                "label": "Near Real-Time",
+                "vector_file": str(paths["nrt.parquet"]),
+                "pmtiles_file": str(paths["nrt.pmtiles"]),
+                "viz_configuration": "nrt_drainage",
+            },
+        },
+    )
 
 
 def _paths(tmp_path):
@@ -174,16 +203,126 @@ def test_available_modes_accepts_hosted_tiles(tmp_path, monkeypatch):
     assert [mode.key for mode in available_modes()] == ["drainage_year", "nrt_drainage"]
 
 
-def test_default_modes_point_at_repo_configs():
-    """The shipped configs are the two modes users switch between."""
-    keys = [key for key, _label, _path in modes_mod._DEFAULT_MODES]
-    assert keys == ["drainage_year", "nrt_drainage"]
+def test_shipped_config_defines_both_modes():
+    """The shipped config carries both modes users switch between."""
+    config = modes_mod.load_config(modes_mod._resolve(modes_mod._DEFAULT_CONFIG), modes_mod.logger)
+    assert config, "missing configs/dashboard_panarctic.yaml"
+    assert list(mode_configs(config)) == ["drainage_year", "nrt_drainage"]
+    assert config["default_mode"] in mode_configs(config)
 
     # Data presence is deployment-specific (available_modes() drops modes whose
-    # datasets are absent), so check the shipped configs themselves.
-    for key, _label, path in modes_mod._DEFAULT_MODES:
-        settings = modes_mod.load_config(modes_mod._resolve(path), modes_mod.logger)
-        assert settings, f"missing config for mode {key}"
+    # datasets are absent), so check the shipped config itself.
+    for key in mode_configs(config):
+        settings = flatten_mode(config, key)
         assert modes_mod.mode_key_for_viz(settings["viz_configuration"]) == key
         for required in modes_mod._MODE_REQUIRED_PATH_KEYS:
             assert settings.get(required) or settings.get("pmtiles_url")
+        # Shared top-level keys reach every mode.
+        assert settings["ee_project"] == config["ee_project"]
+        assert "modes" not in settings and "label" not in settings
+
+
+def test_apply_mode_override_fills_in_dataless_launch(tmp_path, monkeypatch):
+    """Launching the shared base config leaves no data; picking a mode supplies it."""
+    historical, nrt = _two_configs(tmp_path)
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={historical},nrt_drainage={nrt}")
+
+    # What a config naming no data produces: no vector_file/pmtiles_file, and
+    # the CLI's default viz_configuration.
+    launch = {"vector_file": None, "pmtiles_file": None, "viz_configuration": "colored_historical"}
+
+    settings, active, _ = apply_mode_override(launch, requested_mode="drainage_year")
+
+    assert active == "drainage_year"
+    assert settings["vector_file"] == _paths(tmp_path)["historical.parquet"]
+    assert settings["viz_configuration"] == "drainage_year"
+
+
+def _load(path):
+    return modes_mod.load_config(path, modes_mod.logger)
+
+
+def test_available_modes_from_multi_mode_config(tmp_path, monkeypatch):
+    """Both modes come out of one config, with no DASHBOARD_MODES involved."""
+    monkeypatch.delenv(MODES_ENV, raising=False)
+    config = _load(_multi_mode_config(tmp_path))
+
+    found = available_modes(config)
+
+    assert [mode.key for mode in found] == ["drainage_year", "nrt_drainage"]
+    # The mode's own `label` wins over the built-in default.
+    assert [mode.label for mode in found] == ["Historical", "Near Real-Time"]
+    assert found[1].settings["vector_file"] == _paths(tmp_path)["nrt.parquet"]
+    # Shared top-level keys are inherited by each mode.
+    assert found[0].settings["ee_project"] == "shared-project"
+
+
+def test_apply_mode_override_swaps_within_one_config(tmp_path, monkeypatch):
+    monkeypatch.delenv(MODES_ENV, raising=False)
+    config = _load(_multi_mode_config(tmp_path))
+    expected = _paths(tmp_path)
+
+    launch = flatten_mode(config)
+    assert launch["vector_file"] == expected["historical.parquet"]
+
+    settings, active, found = apply_mode_override(launch, requested_mode="nrt_drainage", launch_config=config)
+
+    assert active == "nrt_drainage"
+    assert len(found) == 2
+    assert settings["vector_file"] == expected["nrt.parquet"]
+    assert settings["viz_configuration"] == "nrt_drainage"
+    # Deployment settings stay as launched.
+    assert settings["ee_project"] == "shared-project"
+
+
+def test_multi_mode_config_takes_precedence_over_env(tmp_path, monkeypatch):
+    """A config carrying its own modes ignores DASHBOARD_MODES."""
+    historical, nrt = _two_configs(tmp_path / "flat")
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={historical},nrt_drainage={nrt}")
+    config = _load(_multi_mode_config(tmp_path))
+
+    found = available_modes(config)
+
+    assert [mode.label for mode in found] == ["Historical", "Near Real-Time"]
+    assert found[0].settings["vector_file"] == _paths(tmp_path)["historical.parquet"]
+
+
+def test_flatten_mode_leaves_flat_config_alone():
+    """A single-mode config has no modes: block and passes through untouched."""
+    flat = {"vector_file": "a.parquet", "viz_configuration": "drainage_year"}
+
+    assert mode_configs(flat) == {}
+    assert flatten_mode(flat) == flat
+    assert flatten_mode(flat, "nrt_drainage") == flat
+
+
+def test_flatten_mode_falls_back_to_a_real_mode(tmp_path):
+    """An unknown or absent mode key resolves to default_mode, not a crash."""
+    config = _load(_multi_mode_config(tmp_path))
+
+    assert flatten_mode(config, "bogus")["viz_configuration"] == "drainage_year"
+    assert flatten_mode(config, None)["viz_configuration"] == "drainage_year"
+
+    del config["default_mode"]
+    assert flatten_mode(config)["viz_configuration"] == "drainage_year"
+
+
+def test_missing_config_file_is_fatal(tmp_path):
+    """An explicitly named config that isn't there stops the launch (not a silent fixture fallback)."""
+    import pytest
+
+    from water_timeseries.utils.cli import load_required_config
+
+    _write_config(tmp_path / "real.yaml", vector_file="a.parquet")
+
+    with pytest.raises(SystemExit):
+        load_required_config(tmp_path / "gone.yaml", modes_mod.logger)
+
+    # An empty/unparseable config is just as useless as a missing one.
+    (tmp_path / "empty.yaml").write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit):
+        load_required_config(tmp_path / "empty.yaml", modes_mod.logger)
+
+    # No config at all stays valid -- that's "use the defaults".
+    assert load_required_config(None, modes_mod.logger) == {}
+    assert load_required_config(tmp_path / "real.yaml", modes_mod.logger)["vector_file"] == "a.parquet"
