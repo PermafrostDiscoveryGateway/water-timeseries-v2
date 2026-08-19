@@ -25,6 +25,7 @@ import streamlit as st
 from loguru import logger
 
 from water_timeseries.utils.cli import load_config
+from water_timeseries.utils.io import is_remote_path
 
 _REPO_ROOT = Path(__file__).parent.parent.parent.parent
 
@@ -55,6 +56,21 @@ _DEFAULT_MODES: tuple[tuple[str, str, str], ...] = (
     ("historical", "Historical", "configs/dashboard_historical.yaml"),
     ("nrt", "Near Real-Time", "configs/dashboard_nrt.yaml"),
 )
+
+#: Mode settings that name a local file or directory, and so need resolving
+#: against the repo root before the mode can be offered.
+_MODE_PATH_KEYS = (
+    "vector_file",
+    "pmtiles_file",
+    "dw_dataset_file",
+    "jrc_dataset_file",
+    "precomputed_nrt_dir",
+)
+
+#: Paths a mode cannot work without: the tiles it paints and the polygons that
+#: turn a map click into a lake id (see ``MapViewer.find_lake_id_at_point``).
+#: A mode missing either would render but not respond, so it isn't offered.
+_MODE_REQUIRED_PATH_KEYS = ("vector_file", "pmtiles_file")
 
 #: ``viz_configuration`` -> mode key, used to name the launch config's mode when
 #: it isn't one of the discovered YAMLs.
@@ -121,8 +137,44 @@ def _resolve(path: str | Path) -> Path:
     return _REPO_ROOT / candidate
 
 
+def _resolve_mode_paths(settings: dict) -> dict:
+    """Return ``settings`` with local data paths resolved against the repo root.
+
+    Mode YAMLs spell their data paths relative to the repo root (``data/...``),
+    but the dashboard's working directory is whatever it was launched from, so
+    the raw values only work by luck. Remote URIs are left untouched.
+    """
+    resolved = dict(settings)
+    for key in _MODE_PATH_KEYS:
+        value = resolved.get(key)
+        if value and not is_remote_path(value):
+            resolved[key] = str(_resolve(value))
+    return resolved
+
+
+def _missing_required_paths(settings: dict) -> list[str]:
+    """Required local paths this mode names but that don't exist on disk."""
+    missing = []
+    for key in _MODE_REQUIRED_PATH_KEYS:
+        value = settings.get(key)
+        if not value:
+            missing.append(key)
+        elif not is_remote_path(value) and not Path(value).exists():
+            missing.append(f"{key}={value}")
+    # A hosted tileset stands in for a local pmtiles_file.
+    if settings.get("pmtiles_url"):
+        missing = [item for item in missing if not item.startswith("pmtiles_file")]
+    return missing
+
+
 def available_modes() -> list[DashboardMode]:
-    """Discover selectable modes, dropping any whose config is missing.
+    """Discover selectable modes, dropping any that aren't usable here.
+
+    A mode is dropped when its config is missing, and also when the data it
+    points at isn't present: switching to a mode whose ``vector_file`` is
+    absent used to leave a map that painted but ignored every click, because
+    :func:`app.main` quietly substituted the tiny test fixture for the missing
+    parquet (issue #229).
 
     Returns an empty list when fewer than two modes are usable — a switcher
     with nothing to switch to would only be noise.
@@ -141,6 +193,11 @@ def available_modes() -> list[DashboardMode]:
         settings = load_config(config_path, logger)
         if not settings:
             logger.debug(f"Skipping mode {key!r}: no usable config at {config_path}")
+            continue
+        settings = _resolve_mode_paths(settings)
+        missing = _missing_required_paths(settings)
+        if missing:
+            logger.warning(f"Skipping mode {key!r} ({config_path}): missing data — {', '.join(missing)}")
             continue
         modes.append(DashboardMode(key=key, label=label, config_path=config_path, settings=settings))
 

@@ -265,7 +265,16 @@ def main(
     if vector_file is not None and not is_remote_path(vector_file):
         path = Path(vector_file)
         if not path.exists():
-            warnings.warn(f"Vector file not found: {vector_file}. Falling back to default test data.")
+            # Loudly: with the test fixture standing in, the map still paints
+            # from its own tiles but no click lands on a lake, which reads as a
+            # dead map rather than a missing file (issue #229).
+            message = (
+                f"Vector file not found: {vector_file}. Falling back to the test fixture — "
+                "map clicks will not resolve to lakes."
+            )
+            warnings.warn(message)
+            logger.error(message)
+            st.error(message)
             vector_file = None
 
     if dw_dataset_file is not None and not is_remote_path(dw_dataset_file):
