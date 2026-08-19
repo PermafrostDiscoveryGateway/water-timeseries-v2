@@ -142,3 +142,52 @@ def test_pmtiles_server_map_page(tmp_path):
         assert resp.status == 200
         assert "maplibregl" in html
         assert server.url_for("lakes.pmtiles") in html
+
+
+def test_pmtiles_server_serves_mounted_archives(tmp_path):
+    """Two archives from different directories stay reachable at once.
+
+    Switching dashboard modes swaps the tileset, but one process serves every
+    browser session, so the previous archive must keep working.
+    """
+    import urllib.request
+
+    first_dir = tmp_path / "historical"
+    second_dir = tmp_path / "nrt"
+    first_dir.mkdir()
+    second_dir.mkdir()
+    # Same filename in both directories: mounts must keep them apart.
+    (first_dir / "lakes.pmtiles").write_bytes(b"a" * 100)
+    (second_dir / "lakes.pmtiles").write_bytes(b"b" * 200)
+
+    with PmtilesServer(None, port=0) as server:
+        first_url = server.pmtiles_url_for(first_dir / "lakes.pmtiles")
+        second_url = server.pmtiles_url_for(second_dir / "lakes.pmtiles")
+        assert first_url != second_url
+
+        with urllib.request.urlopen(first_url) as resp:
+            assert resp.read() == b"a" * 100
+        with urllib.request.urlopen(second_url) as resp:
+            assert resp.read() == b"b" * 200
+
+        # Re-registering the same archive reuses its mount.
+        assert server.pmtiles_url_for(first_dir / "lakes.pmtiles") == first_url
+
+
+def test_pmtiles_server_map_page_keeps_config_url(tmp_path):
+    """A config that carries its own tile URL is not rewritten by the server."""
+    import urllib.request
+
+    archive_dir = tmp_path / "tiles"
+    archive_dir.mkdir()
+    (archive_dir / "nrt.pmtiles").write_bytes(b"0" * 100)
+    default = tmp_path / "default.pmtiles"
+    default.write_bytes(b"0" * 100)
+
+    with PmtilesServer(default, port=0) as server:
+        tile_url = server.pmtiles_url_for(archive_dir / "nrt.pmtiles")
+        map_url = server.map_iframe_url({"pmtiles_url": tile_url, "center": [-164, 66.5], "zoom": 8})
+        with urllib.request.urlopen(map_url) as resp:
+            html = resp.read().decode("utf-8")
+        assert tile_url in html
+        assert server.url_for("default.pmtiles") not in html

@@ -74,9 +74,11 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
             self.send_error(400, "Missing config or config_id query parameter")
             return
 
-        # Only modify the pmtiles_url if we're actually serving a local file
+        # Only fill in the pmtiles_url when the config didn't bring its own
+        # (mounted archives resolve theirs up front, per session, in
+        # PmtilesServer.pmtiles_url_for).
         pmtiles_name = getattr(self.server, "pmtiles_filename", None)
-        if pmtiles_name:
+        if pmtiles_name and not config.get("pmtiles_url"):
             config["pmtiles_url"] = f"{self.server.base_url}/{pmtiles_name}"  # type: ignore[attr-defined]
 
         template = _MAP_HTML.read_text(encoding="utf-8")
@@ -113,13 +115,24 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
             return
 
         logger.info(f"Serving file: {rel_path}")
+
+        # Archives mounted via register_pmtiles() live under /<token>/<name>.
+        directory = None
+        mounts = getattr(self.server, "mounts", None) or {}
+        token, _, remainder = rel_path.partition("/")
+        if remainder and token in mounts:
+            directory = mounts[token]
+            rel_path = remainder
         # In HTML-only remote URL mode, the server won't have a static file directory mapped.
-        if not getattr(self.server, "directory", None):
+        elif getattr(self.server, "directory", None):
+            directory = self.server.directory  # type: ignore[attr-defined]
+
+        if directory is None:
             self.send_error(404, "Not found")
             return
 
-        path = (self.server.directory / rel_path).resolve()  # type: ignore[attr-defined]
-        directory = self.server.directory.resolve()  # type: ignore[attr-defined]
+        path = (directory / rel_path).resolve()
+        directory = directory.resolve()
         if not str(path).startswith(str(directory)) or not path.is_file():
             logger.warning(f"File not found: {rel_path}")
             self.send_error(404, "Not found")
@@ -203,6 +216,33 @@ class PmtilesServer:
         self._httpd: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self.config_cache: dict[str, Any] = {}
+        # Extra directories mounted under /<token>/ by register_pmtiles().
+        self.mounts: dict[str, Path] = {}
+
+    def register_pmtiles(self, pmtiles_file: Path | str) -> str:
+        """Mount an extra .pmtiles archive and return its URL path.
+
+        One process serves every browser session, and switching dashboard modes
+        swaps the tileset -- so archives are *added* rather than swapped in
+        place: a session still viewing the other mode keeps working. Each
+        parent directory gets a short mount token, which also keeps two
+        same-named archives in different directories apart.
+        """
+        path = Path(pmtiles_file).resolve()
+        if not path.is_file():
+            raise FileNotFoundError(f"PMTiles file not found: {path}")
+
+        parent = path.parent
+        token = next((tok for tok, mounted in self.mounts.items() if mounted == parent), None)
+        if token is None:
+            token = f"t{len(self.mounts)}"
+            self.mounts[token] = parent
+            logger.info(f"PMTiles server mounted {parent} at /{token}")
+        return f"{token}/{path.name}"
+
+    def pmtiles_url_for(self, pmtiles_file: Path | str) -> str:
+        """Absolute URL the browser should fetch this archive from."""
+        return f"{self.base_url}/{self.register_pmtiles(pmtiles_file)}"
 
     @property
     def base_url(self) -> str:
@@ -221,6 +261,7 @@ class PmtilesServer:
         self._httpd.directory = self.directory
         self._httpd.pmtiles_filename = self.pmtiles_filename
         self._httpd.config_cache = self.config_cache
+        self._httpd.mounts = self.mounts
         self._httpd.path_prefix = self.path_prefix
         self._httpd.base_url = ""  # set after bind
         self.port = self._httpd.server_port
