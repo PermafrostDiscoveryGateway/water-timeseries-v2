@@ -18,6 +18,7 @@ from water_timeseries.utils.map_styles.pmtiles import (
 )
 from water_timeseries.utils.visualization import (
     get_legend_html_date_drainage_year,
+    get_legend_html_drained_month,
     get_legend_html_net_change,
     get_legend_html_nrt_drainage,
 )
@@ -263,6 +264,7 @@ def build_pmtiles_map(
     min_zoom=4,
     max_zoom=15,
     hide_stable_lakes: bool = False,
+    drained_label: str | None = None,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons."""
 
@@ -361,35 +363,21 @@ def build_pmtiles_map(
         tcvis_tile_layer.add_to(m)
         tile_layer_esriworld.add_to(m)
 
+    # The drained set can run to tens of thousands of ids for a single month.
+    # Styling it via per-property ["match", ..., drained_ids, ...] expressions
+    # serialized the id list once per paint property (four copies, ~0.5 MB
+    # each) into the map HTML. Instead the base layers get plain constant
+    # paint for "not drained", and the drained lakes are painted by two
+    # overlay layers whose *filter* carries the id list -- two copies, and
+    # MapLibre applies it as a feature filter rather than a per-property
+    # expression evaluated four times over.
+    drained_overlay_layers: list[dict] = []
     if drained_ids:
-        fill_color = [
-            "match",
-            ["get", "id_geohash"],
-            drained_ids,
-            "#d73027",  # Red fill for drained
-            "#ADD8E6",  # Default color ramp for non-drained
-        ]
-        fill_opacity = [
-            "match",
-            ["get", "id_geohash"],
-            drained_ids,
-            0.9,  # High opacity for drained
-            0.3,  # Dimmer opacity for non-drained
-        ]
-        line_color = [
-            "match",
-            ["get", "id_geohash"],
-            drained_ids,
-            "#7f0000",  # Dark red border for drained
-            "#eeeeee",  # Default border color
-        ]
-        line_width = [
-            "match",
-            ["get", "id_geohash"],
-            drained_ids,
-            2.0,  # Thicker border for drained
-            0.5,  # Default border width
-        ]
+        legend = get_legend_html_drained_month(drained_label)
+        fill_color = "#ADD8E6"  # Default color ramp for non-drained
+        fill_opacity = 0.3  # Dimmer opacity for non-drained
+        line_color = "#eeeeee"  # Default border color
+        line_width = 0.5  # Default border width
 
     lakes_fill_layer = {
         "id": "lakes-fill",
@@ -412,6 +400,34 @@ def build_pmtiles_map(
             "line-opacity": line_opacity,
         },
     }
+
+    if drained_ids:
+        drained_filter = ["in", ["get", "id_geohash"], ["literal", drained_ids]]
+        drained_overlay_layers = [
+            {
+                "id": "lakes-fill-drained",
+                "source": "lakes_pmtiles",
+                "source-layer": source_layer,
+                "type": "fill",
+                "filter": drained_filter,
+                "paint": {
+                    "fill-color": "#d73027",  # Red fill for drained
+                    "fill-opacity": 0.9,  # High opacity for drained
+                },
+            },
+            {
+                "id": "lakes-line-drained",
+                "source": "lakes_pmtiles",
+                "source-layer": source_layer,
+                "type": "line",
+                "filter": drained_filter,
+                "paint": {
+                    "line-color": "#7f0000",  # Dark red border for drained
+                    "line-width": 2.0,  # Thicker border for drained
+                    "line-opacity": line_opacity,
+                },
+            },
+        ]
 
     if viz_configuration_name == "drainage_year" and hide_stable_lakes:
         nan_filter = [
@@ -436,7 +452,7 @@ def build_pmtiles_map(
                     "url": "pmtiles://" + pmtiles_url,
                 }
             },
-            "layers": [lakes_fill_layer, lakes_line_layer],
+            "layers": [lakes_fill_layer, lakes_line_layer, *drained_overlay_layers],
         },
         tooltip=tooltip,
     )

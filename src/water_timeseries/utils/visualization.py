@@ -1,5 +1,6 @@
 """Visualization utilities for GeoDataFrames and map rendering."""
 
+from html import escape
 from typing import Any
 
 import pandas as pd
@@ -339,3 +340,46 @@ def gdf_to_geojson_feature_collection(gdf: pd.DataFrame) -> dict:
         GeoJSON feature collection dictionary.
     """
     return gdf.__geo_interface__
+
+
+# Add legend for the historical drained-lakes month overlay
+def get_legend_html_drained_month(label: str | None = None) -> str:
+    """Generate HTML legend for the drained-lakes overlay of a single month.
+
+    Args:
+        label: Optional month label (e.g. "2019-07") shown in the legend title.
+
+    Returns:
+        HTML string matching the colors used by the drained overlay in
+        ``build_pmtiles_map``: red for drained lakes, light blue for the rest.
+    """
+    title = f"Drained Lakes — {escape(label)}" if label else "Drained Lakes"
+    return f"""
+        <div style="
+            position: fixed;
+            bottom: 40px;
+            right: 10px;
+            width: 200px;
+            height: auto;
+            border: 2px solid grey;
+            z-index: 9999;
+            font-size: 12px;
+            background-color: white;
+            color: #222;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.2);
+        ">
+        <p style="margin: 0 0 8px 0; font-weight: bold;">{title}</p>
+
+        <div style="display: flex; align-items: center; margin-bottom: 4px;">
+            <div style="width: 20px; height: 20px; background-color: rgba(215, 48, 39, 0.9); border: 2px solid #7f0000; border-radius: 3px; margin-right: 8px;"></div>
+            <span>Drained this month</span>
+        </div>
+
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: rgba(173, 216, 230, 0.3); border: 1px solid #eeeeee; border-radius: 3px; margin-right: 8px;"></div>
+            <span>Other lakes</span>
+        </div>
+        </div>
+    """
