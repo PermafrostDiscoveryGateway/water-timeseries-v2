@@ -370,6 +370,8 @@ class MapViewer:
             tooltip=tooltip,
             hide_stable_lakes=self.hide_stable_lakes,
             drained_label=getattr(self, "drained_label", None),
+            selected_id=st.session_state.get("selected_geohash"),
+            id_column=self.id_column,
         )
 
         # Render the map and get click data
@@ -634,6 +636,36 @@ class MapViewer:
                     ).add_to(drained_markers)
                 drained_markers.add_to(m)
                 # -----------------------------------------------
+
+        # Outline the current selection on top of everything else, so it stays
+        # identifiable after the map re-centers on it. Loaded by id rather than
+        # taken from valid_gdf, which may have been sampled down by max_features.
+        selected_id = st.session_state.get("selected_geohash")
+        if selected_id:
+            try:
+                selected_gdf = self.load_drained_gdf([selected_id])
+            except Exception as e:  # noqa: BLE001
+                logger.warning(f"Could not load geometry for selected lake {selected_id}: {e}")
+                selected_gdf = None
+            if selected_gdf is not None and len(selected_gdf) > 0:
+                selected_geojson = _sanitize_geojson_properties(selected_gdf)
+                # Dark casing under a red core, so the outline reads over the
+                # red end of the net-change ramp as well as over pale lakes.
+                for edge_color, edge_weight in (("#1a1a1a", 7), ("#ff2d2d", 3)):
+                    folium.GeoJson(
+                        selected_geojson,
+                        name="Selected lake",
+                        style_function=get_default_style_function(
+                            fill_color="#ff2d2d",
+                            edge_color=edge_color,
+                            edge_weight=edge_weight,
+                            fill_opacity=0.0,
+                        ),
+                        # The layer sits above the lakes, so let hover/click
+                        # fall through to the feature underneath it.
+                        interactive=False,
+                        control=False,
+                    ).add_to(m)
 
         folium.LayerControl().add_to(m)
 

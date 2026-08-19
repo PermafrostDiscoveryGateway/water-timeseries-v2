@@ -56,3 +56,65 @@ def test_resolve_pmtiles_url_passthrough():
 
     url = "https://storage.googleapis.com/bucket/lakes.pmtiles"
     assert resolve_pmtiles_url(url) == url
+
+
+def _pmtiles_style_layers(m):
+    """Return the MapLibre style layers of the PMTiles child layer of a folium map."""
+    for child in m._children.values():
+        if "pmtiles" in str(type(child)).lower():
+            return child.style["layers"]
+    raise AssertionError("No PMTiles layer found on the map")
+
+
+def test_build_pmtiles_map_without_selection_has_no_highlight():
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    m = build_pmtiles_map("https://example.com/lakes.pmtiles")
+    layer_ids = [lyr["id"] for lyr in _pmtiles_style_layers(m)]
+    assert "lakes-line-selected" not in layer_ids
+
+
+def test_build_pmtiles_map_highlights_selected_lake():
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    selected_id = "bd7jm4wqnb0h"
+    m = build_pmtiles_map("https://example.com/lakes.pmtiles", selected_id=selected_id)
+    layers = _pmtiles_style_layers(m)
+    layer_ids = [lyr["id"] for lyr in layers]
+
+    # Casing below the red core, and both on top of every other layer.
+    assert layer_ids[-2:] == ["lakes-line-selected-casing", "lakes-line-selected"]
+
+    highlight = layers[-1]
+    assert highlight["type"] == "line"
+    assert highlight["filter"] == ["==", ["get", "id_geohash"], selected_id]
+    assert highlight["paint"]["line-color"] == "#ff2d2d"
+
+
+def test_build_pmtiles_map_highlight_respects_id_column():
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    m = build_pmtiles_map(
+        "https://example.com/lakes.pmtiles",
+        selected_id="lake-42",
+        id_column="lake_id",
+    )
+    highlight = _pmtiles_style_layers(m)[-1]
+    assert highlight["filter"] == ["==", ["get", "lake_id"], "lake-42"]
+
+
+def test_build_pmtiles_map_highlight_survives_hide_stable_lakes():
+    """The highlight carries its own filter, so hiding stable lakes can't drop it."""
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    selected_id = "bd7jm4wqnb0h"
+    m = build_pmtiles_map(
+        "https://example.com/lakes.pmtiles",
+        viz_configuration_name="drainage_year",
+        hide_stable_lakes=True,
+        selected_id=selected_id,
+    )
+    layers = {lyr["id"]: lyr for lyr in _pmtiles_style_layers(m)}
+
+    assert layers["lakes-fill"]["filter"][0] == "all"  # stable lakes filtered out
+    assert layers["lakes-line-selected"]["filter"] == ["==", ["get", "id_geohash"], selected_id]
