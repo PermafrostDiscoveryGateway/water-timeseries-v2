@@ -219,7 +219,7 @@ def main(
     """
     setup_logging(logfile=logfile, verbose=verbose)
 
-    # Let the sidebar mode switcher (?mode=historical|nrt) swap in the other
+    # Let the sidebar mode switcher (?mode=drainage_year|nrt_drainage) swap in the other
     # config's dataset/tiles/styling before any path validation happens.
     import streamlit as st
 

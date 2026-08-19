@@ -23,7 +23,7 @@ Example
         data/DW_NRT/.../..._allGeoms_v3_repartitioned.parquet \\
         --row-group-size 2000
 
-Afterwards point ``vector_file`` in ``configs/dashboard_nrt.yaml`` at the
+Afterwards point ``vector_file`` in ``configs/dashboard_nrt_drainage.yaml`` at the
 repartitioned file.
 """
 

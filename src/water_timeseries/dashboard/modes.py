@@ -12,7 +12,7 @@ survives a browser reload (see :mod:`water_timeseries.dashboard.share_state`).
 Modes are discovered from ``configs/dashboard_*.yaml`` in the repo root. Set
 ``DASHBOARD_MODES`` to override, e.g.::
 
-    DASHBOARD_MODES="historical=configs/a.yaml,nrt=configs/b.yaml"
+    DASHBOARD_MODES="drainage_year=configs/a.yaml,nrt_drainage=configs/b.yaml"
 """
 
 from __future__ import annotations
@@ -53,8 +53,8 @@ _MODE_SETTING_KEYS = (
 
 #: Built-in modes: key -> (label, config path relative to the repo root).
 _DEFAULT_MODES: tuple[tuple[str, str, str], ...] = (
-    ("historical", "Historical", "configs/dashboard_historical.yaml"),
-    ("nrt", "Near Real-Time", "configs/dashboard_nrt.yaml"),
+    ("drainage_year", "Historical", "configs/dashboard_drainage_year.yaml"),
+    ("nrt_drainage", "Near Real-Time", "configs/dashboard_nrt_drainage.yaml"),
 )
 
 #: Mode settings that name a local file or directory, and so need resolving
@@ -75,12 +75,12 @@ _MODE_REQUIRED_PATH_KEYS = ("vector_file", "pmtiles_file")
 #: ``viz_configuration`` -> mode key, used to name the launch config's mode when
 #: it isn't one of the discovered YAMLs.
 _VIZ_TO_MODE = {
-    "colored_historical": "historical",
-    "drainage_year": "historical",
-    "nrt_drainage": "nrt",
+    "colored_historical": "drainage_year",
+    "drainage_year": "drainage_year",
+    "nrt_drainage": "nrt_drainage",
 }
 
-_LABELS = {"historical": "Historical", "nrt": "Near Real-Time"}
+_LABELS = {"drainage_year": "Historical Drainage (2016-2025)", "nrt_drainage": "Near Real-Time Anomalies (2026)"}
 
 #: Session/query state that describes one mode's view and must not leak into
 #: the other (different lakes, different months, different toggles).
@@ -208,7 +208,7 @@ def available_modes() -> list[DashboardMode]:
 
 def mode_key_for_viz(viz_configuration: str | None) -> str:
     """Mode key implied by a ``viz_configuration`` name."""
-    return _VIZ_TO_MODE.get(viz_configuration or "", "historical")
+    return _VIZ_TO_MODE.get(viz_configuration or "", "drainage_year")
 
 
 def resolve_mode(requested: str | None, modes: list[DashboardMode]) -> DashboardMode | None:

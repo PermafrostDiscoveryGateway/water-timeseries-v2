@@ -54,26 +54,29 @@ def _paths(tmp_path):
 
 
 def test_mode_key_for_viz():
-    assert mode_key_for_viz("drainage_year") == "historical"
-    assert mode_key_for_viz("colored_historical") == "historical"
-    assert mode_key_for_viz("nrt_drainage") == "nrt"
-    assert mode_key_for_viz(None) == "historical"
+    assert mode_key_for_viz("drainage_year") == "drainage_year"
+    assert mode_key_for_viz("colored_historical") == "drainage_year"
+    assert mode_key_for_viz("nrt_drainage") == "nrt_drainage"
+    assert mode_key_for_viz(None) == "drainage_year"
 
 
 def test_available_modes_from_env(tmp_path, monkeypatch):
     historical, nrt = _two_configs(tmp_path)
-    monkeypatch.setenv(MODES_ENV, f"historical={historical},nrt={nrt}")
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={historical},nrt_drainage={nrt}")
 
     found = available_modes()
 
-    assert [mode.key for mode in found] == ["historical", "nrt"]
-    assert [mode.label for mode in found] == ["Historical", "Near Real-Time"]
+    assert [mode.key for mode in found] == ["drainage_year", "nrt_drainage"]
+    assert [mode.label for mode in found] == [
+        "Historical Drainage (2016-2025)",
+        "Near Real-Time Anomalies (2026)",
+    ]
     assert found[1].settings["viz_configuration"] == "nrt_drainage"
 
 
 def test_available_modes_empty_when_config_missing(tmp_path, monkeypatch):
     historical, _ = _two_configs(tmp_path)
-    monkeypatch.setenv(MODES_ENV, f"historical={historical},nrt={tmp_path / 'gone.yaml'}")
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={historical},nrt_drainage={tmp_path / 'gone.yaml'}")
 
     # A lone mode is nothing to switch to, so no switcher is offered.
     assert available_modes() == []
@@ -81,17 +84,17 @@ def test_available_modes_empty_when_config_missing(tmp_path, monkeypatch):
 
 def test_resolve_mode_ignores_unknown_key(tmp_path, monkeypatch):
     historical, nrt = _two_configs(tmp_path)
-    monkeypatch.setenv(MODES_ENV, f"historical={historical},nrt={nrt}")
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={historical},nrt_drainage={nrt}")
     found = available_modes()
 
-    assert resolve_mode("nrt", found).key == "nrt"
+    assert resolve_mode("nrt_drainage", found).key == "nrt_drainage"
     assert resolve_mode("bogus", found) is None
     assert resolve_mode(None, found) is None
 
 
 def test_apply_mode_override_swaps_data_settings(tmp_path, monkeypatch):
     historical, nrt = _two_configs(tmp_path)
-    monkeypatch.setenv(MODES_ENV, f"historical={historical},nrt={nrt}")
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={historical},nrt_drainage={nrt}")
 
     expected = _paths(tmp_path)
     launch = {
@@ -101,9 +104,9 @@ def test_apply_mode_override_swaps_data_settings(tmp_path, monkeypatch):
         "ee_project": "launch-project",
         "dw_end_year": 2025,
     }
-    settings, active, found = apply_mode_override(launch, requested_mode="nrt")
+    settings, active, found = apply_mode_override(launch, requested_mode="nrt_drainage")
 
-    assert active == "nrt"
+    assert active == "nrt_drainage"
     assert settings["vector_file"] == expected["nrt.parquet"]
     assert settings["pmtiles_file"] == expected["nrt.pmtiles"]
     assert settings["viz_configuration"] == "nrt_drainage"
@@ -117,24 +120,24 @@ def test_apply_mode_override_swaps_data_settings(tmp_path, monkeypatch):
 
 def test_apply_mode_override_keeps_launch_settings_without_request(tmp_path, monkeypatch):
     historical, nrt = _two_configs(tmp_path)
-    monkeypatch.setenv(MODES_ENV, f"historical={historical},nrt={nrt}")
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={historical},nrt_drainage={nrt}")
 
     launch = {"vector_file": _paths(tmp_path)["historical.parquet"], "viz_configuration": "drainage_year"}
 
-    for requested in (None, "historical", "nonsense"):
+    for requested in (None, "drainage_year", "nonsense"):
         settings, active, _ = apply_mode_override(launch, requested_mode=requested)
-        assert active == "historical"
+        assert active == "drainage_year"
         assert settings["vector_file"] == launch["vector_file"]
 
 
 def test_apply_mode_override_without_configs(tmp_path, monkeypatch):
-    monkeypatch.setenv(MODES_ENV, f"historical={tmp_path / 'nope.yaml'}")
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={tmp_path / 'nope.yaml'}")
 
     launch = {"vector_file": "data/nrt.parquet", "viz_configuration": "nrt_drainage"}
-    settings, active, found = apply_mode_override(launch, requested_mode="historical")
+    settings, active, found = apply_mode_override(launch, requested_mode="drainage_year")
 
     assert found == []
-    assert active == "nrt"
+    assert active == "nrt_drainage"
     assert settings == launch
 
 
@@ -152,7 +155,7 @@ def test_available_modes_skips_mode_with_missing_data(tmp_path, monkeypatch):
         pmtiles_file=str(tmp_path / "data" / "nrt.pmtiles"),
         viz_configuration="nrt_drainage",
     )
-    monkeypatch.setenv(MODES_ENV, f"historical={historical},nrt={nrt}")
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={historical},nrt_drainage={nrt}")
 
     assert available_modes() == []
 
@@ -166,15 +169,15 @@ def test_available_modes_accepts_hosted_tiles(tmp_path, monkeypatch):
         pmtiles_url="https://example.org/nrt.pmtiles",
         viz_configuration="nrt_drainage",
     )
-    monkeypatch.setenv(MODES_ENV, f"historical={historical},nrt={nrt}")
+    monkeypatch.setenv(MODES_ENV, f"drainage_year={historical},nrt_drainage={nrt}")
 
-    assert [mode.key for mode in available_modes()] == ["historical", "nrt"]
+    assert [mode.key for mode in available_modes()] == ["drainage_year", "nrt_drainage"]
 
 
 def test_default_modes_point_at_repo_configs():
     """The shipped configs are the two modes users switch between."""
     keys = [key for key, _label, _path in modes_mod._DEFAULT_MODES]
-    assert keys == ["historical", "nrt"]
+    assert keys == ["drainage_year", "nrt_drainage"]
 
     # Data presence is deployment-specific (available_modes() drops modes whose
     # datasets are absent), so check the shipped configs themselves.
