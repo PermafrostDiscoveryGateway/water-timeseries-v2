@@ -172,6 +172,12 @@ def parse_args():
         help="HTTP(S) URL to a hosted .pmtiles file (e.g. on S3). Overrides local tile server.",
     )
     parser.add_argument(
+        "--config-file",
+        type=str,
+        default=None,
+        help="Dashboard config YAML. Its `modes:` block backs the sidebar view-mode switcher.",
+    )
+    parser.add_argument(
         "--logfile",
         type=str,
         default=None,
@@ -202,6 +208,7 @@ def main(
     dw_end_year: int | None = None,
     dw_start_month: int | None = None,
     dw_end_month: int | None = None,
+    config_file: str | Path | None = None,
     logfile: str | None = None,
     verbose: int = 0,
 ):
@@ -215,9 +222,49 @@ def main(
             Auto-detected from ``precomputed/nrt/`` in the repo root when present.
         offline_mode: If True, disables Google Earth Engine download functionality.
         viz_configuration: The visualization configuration name for the map viewer.
+        config_file: Config the dashboard was launched with. Re-read here so the
+            sidebar switcher can pull the other modes out of its ``modes:`` block.
         verbose: Verbosity level for logging.
     """
     setup_logging(logfile=logfile, verbose=verbose)
+
+    # Let the sidebar mode switcher (?mode=drainage_year|nrt_drainage) swap in the other
+    # config's dataset/tiles/styling before any path validation happens.
+    import streamlit as st
+
+    from water_timeseries.dashboard.modes import MODE_PARAM, apply_mode_override
+    from water_timeseries.utils.cli import load_config
+
+    launch_settings = {
+        "vector_file": vector_file,
+        "dw_dataset_file": dw_dataset_file,
+        "jrc_dataset_file": jrc_dataset_file,
+        "precomputed_nrt_dir": precomputed_nrt_dir,
+        "viz_configuration": viz_configuration,
+        "pmtiles_file": pmtiles_file,
+        "pmtiles_url": pmtiles_url,
+        "dw_start_year": dw_start_year,
+        "dw_end_year": dw_end_year,
+        "dw_start_month": dw_start_month,
+        "dw_end_month": dw_end_month,
+    }
+    launch_config = load_config(Path(config_file), logger) if config_file else {}
+    settings, active_mode, modes = apply_mode_override(
+        launch_settings,
+        requested_mode=st.query_params.get(MODE_PARAM),
+        launch_config={**launch_config, "config_file": str(config_file)} if config_file else None,
+    )
+    vector_file = settings["vector_file"]
+    dw_dataset_file = settings["dw_dataset_file"]
+    jrc_dataset_file = settings["jrc_dataset_file"]
+    precomputed_nrt_dir = settings["precomputed_nrt_dir"]
+    viz_configuration = settings["viz_configuration"]
+    pmtiles_file = settings["pmtiles_file"]
+    pmtiles_url = settings["pmtiles_url"]
+    dw_start_year = settings["dw_start_year"]
+    dw_end_year = settings["dw_end_year"]
+    dw_start_month = settings["dw_start_month"]
+    dw_end_month = settings["dw_end_month"]
 
     # Default paths to test data
     default_vector_file = _REPO_ROOT / "tests" / "data" / "lake_polygons.parquet"
@@ -230,7 +277,16 @@ def main(
     if vector_file is not None and not is_remote_path(vector_file):
         path = Path(vector_file)
         if not path.exists():
-            warnings.warn(f"Vector file not found: {vector_file}. Falling back to default test data.")
+            # Loudly: with the test fixture standing in, the map still paints
+            # from its own tiles but no click lands on a lake, which reads as a
+            # dead map rather than a missing file (issue #229).
+            message = (
+                f"Vector file not found: {vector_file}. Falling back to the test fixture — "
+                "map clicks will not resolve to lakes."
+            )
+            warnings.warn(message)
+            logger.error(message)
+            st.error(message)
             vector_file = None
 
     if dw_dataset_file is not None and not is_remote_path(dw_dataset_file):
@@ -277,6 +333,8 @@ def main(
         viz_configuration_name=viz_configuration,
         pmtiles_file=pmtiles_file,
         pmtiles_url=pmtiles_url,
+        modes=modes,
+        active_mode=active_mode,
     )
 
 
@@ -296,6 +354,7 @@ if __name__ == "__main__":
         viz_configuration=args.viz_configuration,
         pmtiles_file=args.pmtiles_file,
         pmtiles_url=args.pmtiles_url,
+        config_file=args.config_file,
         logfile=args.logfile,
         verbose=args.verbose,
     )

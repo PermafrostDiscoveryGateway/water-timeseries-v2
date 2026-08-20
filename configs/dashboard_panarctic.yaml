@@ -1,0 +1,46 @@
+# Pan-arctic dashboard, both view modes in one file.
+#
+# Everything the modes share sits at the top level; `modes:` holds only what
+# actually differs between Historical and Near Real-Time. The dashboard starts
+# on `default_mode` and the sidebar "View mode" switch reads the other entry
+# out of this same file -- so a deployment that mounts this one config (as helm
+# does at /data/dashboard-config.yaml) gets a working switcher.
+
+ee_project: pdg-project-406720
+
+# Zarr copy of the dataset production reads as .nc; both come from
+# gs://pdg-storage-default/workflows_optimization/lake_change_detection/
+dw_dataset_file: data/lakes_dw_V2d_2016-2026-06_gapfilled_chunked.zarr
+
+dw_start_year: 2017
+dw_end_year: 2026
+dw_start_month: 6
+dw_end_month: 9
+
+logfile: logs/dashboard_panarctic.log
+
+default_mode: drainage_year
+
+modes:
+  drainage_year:
+    label: Historical
+    vector_file: data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet
+    pmtiles_file: data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.pmtiles
+    # Historical breaks only (break_method=simple). Kept in its own directory --
+    # it previously shared DW_historicalbp_simple_merged_breaks_nogeoms_v4 with
+    # NRT mode, which had mixed 2026-06/07 NRT confidence rows into this file.
+    precomputed_nrt_dir: data/precomputed_historical
+    viz_configuration: drainage_year
+
+  nrt_drainage:
+    label: Near Real-Time
+    # Full pan-arctic geoms for the completed 2026-06 NRT run. 2026-07 only has
+    # a small local subset (no full geoms/pmtiles built yet) so it isn't wired
+    # in as the active vector/tile source -- point this at the full 2026-07 run
+    # once it's downloaded.
+    vector_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3_repartitioned.parquet
+    pmtiles_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3.pmtiles
+    # NRT confidence breaks only, currently 2026-06 (see the 2026-07 note above).
+    # Kept out of the historical precomputed dir for the same reason.
+    precomputed_nrt_dir: data/precomputed_nrt
+    viz_configuration: nrt_drainage

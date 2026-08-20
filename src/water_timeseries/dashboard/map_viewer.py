@@ -15,6 +15,7 @@ import streamlit as st
 from loguru import logger
 from streamlit_folium import st_folium
 
+from water_timeseries.dashboard.modes import render_mode_switcher
 from water_timeseries.dashboard.share_state import (
     adopt_live_view,
     apply_theme_param,
@@ -1118,6 +1119,8 @@ def create_app(
     pmtiles_file: str | Path | None = None,
     pmtiles_url: str | None = None,
     logfile: str | None = None,
+    modes: list | None = None,
+    active_mode: str | None = None,
 ):
     """Create the Streamlit app with map viewer.
 
@@ -1139,6 +1142,10 @@ def create_app(
         viz_configuration_name: Map styling preset.
         pmtiles_file: Path to a ``.pmtiles`` archive (enables fast vector-tile map).
         pmtiles_url: HTTP(S) URL to a hosted ``.pmtiles`` file (e.g. on S3).
+        modes: Selectable :class:`~water_timeseries.dashboard.modes.DashboardMode`
+            views (Historical / Near Real-Time). The sidebar switcher is hidden
+            when fewer than two are available.
+        active_mode: Key of the mode currently in effect.
     """
 
     def _set_center_to_selected():
@@ -1211,6 +1218,11 @@ def create_app(
     # st.sidebar.header("Settings")
     with st.sidebar.divider():
         show_help_button(config_name=viz_configuration_name)
+
+    # Switch between the Historical and Near Real-Time datasets. Reruns the app
+    # with the other config (see water_timeseries.dashboard.modes).
+    if modes:
+        render_mode_switcher(modes, active_mode or "", container=st.sidebar)
 
     # Copy-link button: copies a URL that restores the exact window state
     # (hidden via show_share=false, e.g. when an embedding parent has its own).

@@ -40,7 +40,7 @@ DEFAULT_LON = -164.1
 DEFAULT_ZOOM = 10.0
 
 #: All query-param keys owned by this module (plus the pre-existing selected_lake).
-STATE_PARAM_KEYS = ("selected_lake", "lat", "lon", "zoom", "drained", "month", "hide_stable")
+STATE_PARAM_KEYS = ("mode", "selected_lake", "lat", "lon", "zoom", "drained", "month", "hide_stable")
 
 #: Prefix applied to state params when mirrored onto a parent site's URL.
 PARENT_PARAM_PREFIX = "wt_"

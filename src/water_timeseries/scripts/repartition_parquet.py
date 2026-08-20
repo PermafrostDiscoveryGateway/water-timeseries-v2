@@ -23,7 +23,8 @@ Example
         data/DW_NRT/.../..._allGeoms_v3_repartitioned.parquet \\
         --row-group-size 2000
 
-Afterwards point ``vector_file`` in ``configs/dashboard_nrt_drainage.yaml`` at the
+Afterwards point the ``nrt_drainage`` mode's ``vector_file`` in
+``configs/dashboard_panarctic.yaml`` at the
 repartitioned file.
 """
 

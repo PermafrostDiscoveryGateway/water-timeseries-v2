@@ -536,6 +536,60 @@ uv run water-timeseries build-pmtiles /path/to/lakes.parquet \
     --viz-configuration nrt_drainage
 ```
 
+### Switching Between Historical and Near Real-Time
+
+A running dashboard is not locked to the config it was launched with. The sidebar
+has a **View mode** switch between:
+
+| Mode | `?mode=` key | Visualization |
+|------|--------------|---------------|
+| Historical | `drainage_year` | `drainage_year` |
+| Near Real-Time | `nrt_drainage` | `nrt_drainage` |
+
+Both modes live in one config, `configs/dashboard_panarctic.yaml`. Keys the modes
+share sit at the top level and `modes:` holds only what differs, so a deployment
+that mounts this single file (as helm does at `/data/dashboard-config.yaml`) gets
+a working switcher:
+
+```yaml
+ee_project: pdg-project-406720          # shared by every mode
+dw_dataset_file: data/lakes_dw_....zarr
+
+default_mode: drainage_year
+modes:
+  drainage_year:
+    label: Historical
+    vector_file: data/DW_historicalbp_..._v4.parquet
+    pmtiles_file: data/DW_historicalbp_..._v4.pmtiles
+    viz_configuration: drainage_year
+  nrt_drainage:
+    label: Near Real-Time
+    vector_file: data/DW_NRT/.../..._repartitioned.parquet
+    pmtiles_file: data/DW_NRT/.../....pmtiles
+    viz_configuration: nrt_drainage
+```
+
+The dashboard launches on `default_mode`. Switching swaps that mode's dataset,
+PMTiles archive and map styling; deployment settings (Earth Engine project,
+offline mode, logging) stay as launched. The active mode is recorded in the
+`mode` query param (`?mode=nrt_drainage`), so it survives a reload and is
+included in "Copy link to this view".
+
+The switch appears only when at least two modes have their data present on disk —
+a deployment that ships one dataset shows no switcher.
+
+A flat single-mode config (no `modes:` block) still launches normally; it takes
+its modes from `configs/dashboard_panarctic.yaml`, or from one file per mode
+named by the `DASHBOARD_MODES` environment variable:
+
+```bash
+DASHBOARD_MODES="drainage_year=configs/mine.yaml,nrt_drainage=configs/mine_nrt.yaml" \
+    uv run water-timeseries dashboard --config-file configs/mine.yaml
+```
+
+Both archives are served by one tile server, so switching modes works with the
+fixed `PMTILES_PORT` used in Docker.
+
 ### Dashboard Arguments
 
 The `create_app()` function accepts these parameters:
