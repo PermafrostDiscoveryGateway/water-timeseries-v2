@@ -41,6 +41,12 @@ class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
     stick. Also bumps maplibre-gl-leaflet 0.0.17 -> 0.0.22, which rounds
     fractional container positions (sub-pixel misalignment at certain
     window widths).
+
+    Also disables MapLibre's own interaction handlers: the layer needs
+    ``interactive: true`` for tooltips, but the library passes that flag on to
+    the MapLibre constructor, which then drives the GL view in parallel with
+    Leaflet -- most visibly at Leaflet's zoom limits, where the basemap stops
+    but the polygons keep zooming.
     """
 
     _template = branca.element.Template(
@@ -61,6 +67,28 @@ class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
                 style: {{ this.style|tojson}},
                 interactive: true,
             }).addTo({{ this._parent.get_name() }});
+
+            // The GL map is built with `interactive: true` so its canvas keeps
+            // pointer events (the tooltip listens for mousemove/click on it),
+            // but maplibre-gl-leaflet forwards that flag straight into the
+            // MapLibre constructor, which also switches on MapLibre's *own*
+            // scroll/drag/rotate handlers. Those then run alongside Leaflet's
+            // on the very same gesture, using MapLibre's zoom range (-2..22)
+            // instead of the basemap's. While Leaflet is still moving, the
+            // resync below hides it -- but once Leaflet clamps at its min/max
+            // zoom it stops emitting 'move', so the GL map goes on zooming by
+            // itself and the polygons shrink away from the basemap for good.
+            // Rotate/pitch never resync at all, since the library's
+            // `_transformGL` only writes center and zoom. Leaflet owns the
+            // view, so turn MapLibre's handlers off.
+            (function (glMap) {
+                ['scrollZoom', 'boxZoom', 'dragRotate', 'dragPan', 'keyboard',
+                 'doubleClickZoom', 'touchZoomRotate', 'touchPitch'].forEach(function (handler) {
+                    if (glMap[handler] && glMap[handler].disable) {
+                        glMap[handler].disable();
+                    }
+                });
+            })({{ this.get_name() }}.getMaplibreMap());
 
             // Resync on every 'move' (unthrottled, unlike the library's own
             // handler) plus once more after 'moveend' settles, so the GL
