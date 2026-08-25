@@ -46,6 +46,7 @@ nav:
   - Getting Started: getting_started.md
   - Examples: examples.md
   - Embedding & Shareable Links: embedding.md
+  - NRT Monthly Update: nrt_monthly_update.md
   - API Reference:
     - Overview: api/index.md
     - Dataset: api/dataset.md
