@@ -66,9 +66,16 @@ def _extract_month_confidence(
     and needed columns are pulled over the network — no full download.
     """
     fs = gcsfs.GCSFileSystem()
-    dataset_path = f"{gcs_prefix.rstrip('/')}/{gcs_glob}"
-    logger.info(f"Reading {dataset_path} from GCS...")
-    dset = ds.dataset(dataset_path, format="parquet", filesystem=fs)
+    pattern = f"{gcs_prefix.rstrip('/')}/{gcs_glob}"
+    logger.info(f"Reading {pattern} from GCS...")
+    # pyarrow does not expand globs -- it treats the pattern as a literal object
+    # name and raises a bare FileNotFoundError. Resolve it through gcsfs first,
+    # which also catches a typo'd run name here rather than deep in pyarrow.
+    paths = sorted(fs.glob(pattern))
+    if not paths:
+        raise FileNotFoundError(f"No GCS objects match {pattern}")
+    logger.info(f"Matched {len(paths)} object(s): {', '.join(paths)}")
+    dset = ds.dataset(paths, format="parquet", filesystem=fs)
 
     table = dset.to_table(
         columns=list(TARGET_COLS),
