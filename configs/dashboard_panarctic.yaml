@@ -44,3 +44,15 @@ modes:
     # Kept out of the historical precomputed dir for the same reason.
     precomputed_nrt_dir: data/precomputed_nrt
     viz_configuration: nrt_drainage
+    # Per-month drained-lakes tilesets for the "Drainage Status" overlay. The
+    # selected month's archive is layered over pmtiles_file above, so the
+    # month's confidence is read from baked tile properties instead of being
+    # pushed into the browser per lake on every rerun. Rebuild after each new
+    # NRT month with:
+    #   uv run water-timeseries build-nrt-pmtiles \
+    #     --breaks-file data/precomputed_nrt/nrt_monthly_drain_breaks.parquet \
+    #     --geometry-file <vector_file above> \
+    #     --output-dir data/nrt_tiles --months <YYYY-MM>
+    # May also be an http(s):// or gs:// prefix when the tilesets are hosted.
+    # Months with no tileset fall back to the runtime feature-state path.
+    nrt_pmtiles_dir: data/nrt_tiles
