@@ -422,7 +422,7 @@ def build_pmtiles_map(
                 "filter": drained_filter,
                 "paint": {
                     "fill-color": "#d73027",  # Red fill for drained
-                    "fill-opacity": 0.9,  # High opacity for drained
+                    "fill-opacity": 0.3,  # High opacity for drained
                 },
             },
             {

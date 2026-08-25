@@ -254,7 +254,7 @@ def get_style_pmtiles_drained_ids(drained_ids: list[str]):
         "match",
         ["get", "id_geohash"],
         drained_ids,
-        0.9,  # High opacity for drained
+        0.3,  # High opacity for drained
         0.3,  # Dimmer opacity for non-drained
     ]
     line_color = [
