@@ -492,11 +492,14 @@ def merge_nrt_confidence(
             (default ``-0.25``, must match ``precompute-nrt-monthly``).
         config_file: A dashboard config YAML; its ``precomputed_nrt_dir`` is
             read as breaks_file when ``--breaks-file`` isn't set directly.
+            Top-level keys only -- a multi-mode config (``configs/dashboard_panarctic.yaml``)
+            keeps ``precomputed_nrt_dir`` under ``modes.nrt_drainage``, where this
+            does not look, so pass ``--breaks-file`` for those.
 
     Example:
         water-timeseries merge-nrt-confidence 2026-06 \\
             "DW_NRT_2026-06_run2025-06-25_allGeoms_v*.parquet" \\
-            --config-file configs/dashboard_nrt.yaml
+            --breaks-file data/precomputed_nrt/nrt_monthly_drain_breaks.parquet
     """
     logfile = setup_logging(logfile=logfile, verbose=verbose)
 

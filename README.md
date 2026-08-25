@@ -58,8 +58,8 @@ Features:
 In NRT mode (`viz_configuration: nrt_drainage`), the "Drainage Status" overlay reads
 each month's drained lakes from its own small PMTiles archive instead of pushing
 per-lake values into the browser on every rerun. Build one archive per month after
-each new NRT month lands (`aggregate-nrt`), then point the dashboard config at the
-output directory with `nrt_pmtiles_dir`:
+each new NRT month lands, then point the dashboard config at the output directory
+with `nrt_pmtiles_dir`:
 
 ```bash
 uv run water-timeseries build-nrt-pmtiles \
