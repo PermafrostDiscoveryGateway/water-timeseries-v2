@@ -398,7 +398,7 @@ def render_state_bridge() -> None:
 
 
 def render_copy_link_button() -> None:
-    """Sidebar "Copy link" button restoring the exact window state.
+    """Sidebar “Copy link” button restoring the exact window state.
 
     Copies the app's own URL (embed params stripped). Falls back to a
     selectable text input when the clipboard is unavailable.
@@ -409,6 +409,7 @@ def render_copy_link_button() -> None:
         app_url = str(st.context.url or "")
     except Exception:  # noqa: BLE001
         pass
+
     config = json.dumps(
         {
             "fallbackParams": json.loads(fallback_params_json),
@@ -417,25 +418,48 @@ def render_copy_link_button() -> None:
             "stateKeys": list(STATE_PARAM_KEYS),
         }
     )
+
     st.iframe(
         """
         <style>
-            body { margin: 0; font-family: "Source Sans Pro", sans-serif; color: #e9f6fb}
+            body { 
+                margin: 0; 
+                font-family: "Source Sans Pro", sans-serif; 
+                color: #e9f6fb;
+            }
             #wt-copy {
-                width: 100%; padding: 0.4rem 0.75rem; cursor: pointer;
-                border: 1px solid #3f8ba3; border-radius: 0.4rem;
-                background-color: #15708e; color: #e9f6fb; opacity: 1; font-size: 0.875rem;
+                width: 100%; 
+                padding: 0.4rem 0.75rem; 
+                cursor: pointer;
+                border: 1px solid #3f8ba3; 
+                border-radius: 0.4rem;
+                background-color: #15708e; 
+                color: #e9f6fb; 
+                opacity: 1; 
+                font-size: 0.875rem;
+                /* ---- NEW: remove the bottom gap ---- */
+                margin-bottom: 0;
             }
             #wt-copy:hover { 
-                color: #e9f6fb; font-size: 0.875rem;
-                border: 1px solid #3f8ba3; border-radius: 0.4rem;
-                background-color: #328099; }
+                color: #e9f6fb; 
+                font-size: 0.875rem;
+                border: 1px solid #3f8ba3; 
+                border-radius: 0.4rem;
+                background-color: #328099; 
+            }
             #wt-url {
-                width: 100%; margin-top: 0.25rem; padding: 0.25rem;
-                font-size: 0.75rem; box-sizing: border-box; display: none;
+                width: 100%; 
+                margin-top: 0.25rem; 
+                padding: 0.25rem;
+                font-size: 0.75rem; 
+                box-sizing: border-box; 
+                display: none;
             }
             @media (prefers-color-scheme: dark) {
-                #wt-copy { border-color: rgba(250, 250, 250, 0.2); color: #fafafa; }
+                #wt-copy { 
+                    border-color: rgba(250, 250, 250, 0.2); 
+                    color: #fafafa; 
+                }
             }
         </style>
         <button id="wt-copy" title="Copy a link that restores this exact view">🔗 Copy link to this view</button>
@@ -465,7 +489,7 @@ def render_copy_link_button() -> None:
                 if (!base) return null;
                 var u = new URL(base);
                 u.searchParams.delete("embed");
-                u.searchParams.delete("embed_options");
+                u.searchParams("embed_options");
                 u.searchParams.delete("theme");
                 u.searchParams.delete("show_share");
                 CFG.stateKeys.forEach(function(k) { u.searchParams.delete(k); });
@@ -507,5 +531,5 @@ def render_copy_link_button() -> None:
         })();
         </script>
         """.replace("__WT_CONFIG__", config),
-        height=70,
+        height=40,
     )

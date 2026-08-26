@@ -1269,16 +1269,18 @@ def create_app(
     with st.sidebar.divider():
         show_help_button(config_name=viz_configuration_name)
 
-    # Switch between the Historical and Near Real-Time datasets. Reruns the app
-    # with the other config (see water_timeseries.dashboard.modes).
-    if modes:
-        render_mode_switcher(modes, active_mode or "", container=st.sidebar)
-
     # Copy-link button: copies a URL that restores the exact window state
     # (hidden via show_share=false, e.g. when an embedding parent has its own).
     if share_button_enabled():
         with st.sidebar:
             render_copy_link_button()
+
+    st.sidebar.divider()
+
+    # Switch between the Historical and Near Real-Time datasets. Reruns the app
+    # with the other config (see water_timeseries.dashboard.modes).
+    if modes:
+        render_mode_switcher(modes, active_mode or "", container=st.sidebar)
 
     # Show offline mode indicator
     if offline_mode:
