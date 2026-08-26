@@ -336,7 +336,7 @@ def show_help_button(config_name: str | None = None, label: str = "Open Help") -
         from tutorial_popup import show_help_button
         show_help_button(config_name=viz_configuration_name)
     """
-    if st.button(label, key="tutorial_help_btn", use_container_width=True):
+    if st.button(label, key="tutorial_help_btn", width="stretch"):
         # Reset the flag so the dialog shows
         st.session_state["tutorial_dialog_shown"] = False
         show_tutorial_popup(config_name=config_name, auto_show=False)

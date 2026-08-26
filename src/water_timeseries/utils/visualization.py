@@ -407,7 +407,7 @@ def get_legend_html_drained_month(label: str | None = None) -> str:
         <p style="margin: 0 0 8px 0; font-weight: bold;">{title}</p>
 
         <div style="display: flex; align-items: center; margin-bottom: 4px;">
-            <div style="width: 20px; height: 20px; background-color: rgba(215, 48, 39, 0.9); border: 2px solid #7f0000; border-radius: 3px; margin-right: 8px;"></div>
+            <div style="width: 20px; height: 20px; background-color: rgba(215, 48, 39, 0.3); border: 2px solid #7f0000; border-radius: 3px; margin-right: 8px;"></div>
             <span>Drained this month</span>
         </div>
 

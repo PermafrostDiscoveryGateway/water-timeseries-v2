@@ -939,6 +939,9 @@ def _render_drain_heatmap(
         if count_row > 0 and precomputed_breaks is not None:
             month_breaks = precomputed_breaks.query("analysis_month == @selected_analysis_month").copy()
             if not month_breaks.empty:
+                # --------------------------------------------------------------
+                # Build a *display* copy and round the two numeric columns.
+                # --------------------------------------------------------------
                 display_cols = [
                     col
                     for col in [
@@ -952,19 +955,34 @@ def _render_drain_heatmap(
                     ]
                     if col in month_breaks.columns
                 ]
-                df_show = month_breaks[display_cols].reset_index(drop=True)
+
+                # Work on a copy so the original data stays unchanged.
+                df_show = month_breaks[display_cols].reset_index(drop=True).copy()
+
+                # Simple rounding – keep only two decimals.
+                if "water_change_ha" in df_show.columns:
+                    df_show["water_change_ha"] = df_show["water_change_ha"].round(2)
+                if "water_change_perc" in df_show.columns:
+                    df_show["water_change_perc"] = df_show["water_change_perc"].round(2)
+
+                # Sort and rename for UI display.
                 if "water_change_ha" in month_breaks.columns:
                     df_show = df_show.sort_values("water_change_ha", ascending=True).rename(
-                        columns={"water_change_ha": "Water Change [ha]", "water_change_perc": "Water Change [%]"}
+                        columns={
+                            "water_change_ha": "Water Change [ha]",
+                            "water_change_perc": "Water Change [%]",
+                        }
                     )
                 elif "water_residual" in month_breaks.columns:
                     df_show = df_show.sort_values("water_residual", ascending=True).rename(
                         columns={"water_residual": "Water Residual [%]"}
                     )
-                # reset index to start rank
+
+                # Reset index so the ranking starts at 1 (as before).
                 df_show.reset_index(drop=True, inplace=True)
                 df_show.index += 1
-                # show df
+
+                # Show the (rounded) DataFrame.
                 dataframe_selection = c.dataframe(
                     df_show.rename(columns={"id_geohash": "Lake ID"}),
                     width="content",
@@ -1251,16 +1269,18 @@ def create_app(
     with st.sidebar.divider():
         show_help_button(config_name=viz_configuration_name)
 
-    # Switch between the Historical and Near Real-Time datasets. Reruns the app
-    # with the other config (see water_timeseries.dashboard.modes).
-    if modes:
-        render_mode_switcher(modes, active_mode or "", container=st.sidebar)
-
     # Copy-link button: copies a URL that restores the exact window state
     # (hidden via show_share=false, e.g. when an embedding parent has its own).
     if share_button_enabled():
         with st.sidebar:
             render_copy_link_button()
+
+    st.sidebar.divider()
+
+    # Switch between the Historical and Near Real-Time datasets. Reruns the app
+    # with the other config (see water_timeseries.dashboard.modes).
+    if modes:
+        render_mode_switcher(modes, active_mode or "", container=st.sidebar)
 
     # Show offline mode indicator
     if offline_mode:
@@ -1413,9 +1433,7 @@ def create_app(
                     if st.query_params.get("month") != selected_analysis_month:
                         st.query_params["month"] = selected_analysis_month
                     if selected_analysis_month not in selectable_months:
-                        st.sidebar.caption(
-                            f"Month {selected_analysis_month} from the shared link is not available."
-                        )
+                        st.sidebar.caption(f"Month {selected_analysis_month} from the shared link is not available.")
 
                 if precomputed_breaks is not None and "analysis_month" in precomputed_breaks.columns:
                     month_slice = precomputed_breaks.query("analysis_month == @selected_analysis_month")
