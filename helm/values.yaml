@@ -10,8 +10,8 @@ replicaCount: 1
 image:
   ## @param image.repository Container image repository path.
   repository: ghcr.io/permafrostdiscoverygateway/water-timeseries-v2
-  ## @param image.tag Container image tag to deploy, use .Chart.AppVersion if unset here.
-  # tag: v0.16.1
+  ## @param image.tag Container image tag to deploy (defaults to .Chart.AppVersion when empty).
+  tag: ""
   ## @param image.pullPolicy Image pull policy. Use 'Always' to force re-pulling on every pod start.
   pullPolicy: IfNotPresent
 
