@@ -398,7 +398,7 @@ def render_state_bridge() -> None:
 
 
 def render_copy_link_button() -> None:
-    """Sidebar “Copy link” button restoring the exact window state.
+    """Sidebar "Copy link" button restoring the exact window state.
 
     Copies the app's own URL (embed params stripped). Falls back to a
     selectable text input when the clipboard is unavailable.
@@ -436,13 +436,16 @@ def render_copy_link_button() -> None:
                 background-color: #15708e; 
                 color: #e9f6fb; 
                 opacity: 1; 
-                font-size: 0.875rem;
-                /* ---- NEW: remove the bottom gap ---- */
+                font-size: 0.860rem;
+                font-weight: 400;
+                letter-spacing: normal;
+                text-align: center;
                 margin-bottom: 0;
+                # transition: background-color 0.2s ease;
             }
             #wt-copy:hover { 
                 color: #e9f6fb; 
-                font-size: 0.875rem;
+                font-size: 0.860rem;
                 border: 1px solid #3f8ba3; 
                 border-radius: 0.4rem;
                 background-color: #328099; 
@@ -458,7 +461,7 @@ def render_copy_link_button() -> None:
             @media (prefers-color-scheme: dark) {
                 #wt-copy { 
                     border-color: rgba(250, 250, 250, 0.2); 
-                    color: #fafafa; 
+                    color: #e9f6fb; 
                 }
             }
         </style>
