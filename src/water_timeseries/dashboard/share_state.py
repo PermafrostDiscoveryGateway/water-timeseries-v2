@@ -420,13 +420,16 @@ def render_copy_link_button() -> None:
     st.iframe(
         """
         <style>
-            body { margin: 0; font-family: "Source Sans Pro", sans-serif; }
+            body { margin: 0; font-family: "Source Sans Pro", sans-serif; color: #e9f6fb}
             #wt-copy {
                 width: 100%; padding: 0.4rem 0.75rem; cursor: pointer;
-                border: 1px solid rgba(49, 51, 63, 0.2); border-radius: 0.5rem;
-                background: transparent; color: inherit; font-size: 0.875rem;
+                border: 1px solid #3f8ba3; border-radius: 0.4rem;
+                background-color: #15708e; color: #e9f6fb; opacity: 1; font-size: 0.875rem;
             }
-            #wt-copy:hover { border-color: #ff4b4b; color: #ff4b4b; }
+            #wt-copy:hover { 
+                color: #e9f6fb; font-size: 0.875rem;
+                border: 1px solid #3f8ba3; border-radius: 0.4rem;
+                background-color: #328099; }
             #wt-url {
                 width: 100%; margin-top: 0.25rem; padding: 0.25rem;
                 font-size: 0.75rem; box-sizing: border-box; display: none;
