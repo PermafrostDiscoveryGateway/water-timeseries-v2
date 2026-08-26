@@ -54,7 +54,7 @@ jobs:
           args: >-
             --bump ${{ github.event.inputs.bump }} --v-prefix --create --actor-name "GitHub Actions" --actor-mail "github-actions[bot]@users.noreply.github.com"
 
-      - name: Update pyproject.toml version
+      - name: Update pyproject.toml and Chart.yaml version
         run: |
           VERSION="${{ steps.update_version.outputs.tag-number }}"
           VERSION_NO_V="${VERSION#v}"
@@ -62,6 +62,9 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           sed -i "s/^version = \".*\"/version = \"$VERSION_NO_V\"/" pyproject.toml
           git add pyproject.toml
+          sed -i "s/^version: .*/version: $VERSION_NO_V/" helm/Chart.yaml
+          sed -i "s/^appVersion: \".*\"/appVersion: \"$VERSION\"/" helm/Chart.yaml
+          git add helm/Chart.yaml
           git commit -m "Update version to $VERSION_NO_V"
           git push
           git tag -f $VERSION
