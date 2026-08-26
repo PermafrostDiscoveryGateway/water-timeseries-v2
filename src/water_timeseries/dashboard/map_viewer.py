@@ -43,6 +43,7 @@ from water_timeseries.utils.dashboard import (
 from water_timeseries.utils.earthengine import (
     cached_get_rioxarray_ds_from_lake,
     cached_visualize_cube,
+    get_unique_dates_from_xee_ds,
     initialize_earth_engine,
 )
 from water_timeseries.utils.io import load_vector_dataset
@@ -1932,7 +1933,100 @@ def create_app(
 
                 recent_imagery_section()
 
-            ###################### END Recent imagery plotter #############################
+            ###################### END Recent imagery plotter ############################
+            st.divider()
+            ###################### START Yearly thumbnail plotter ############################
+
+            @st.fragment
+            def yearly_thumbnail_section():
+                st.markdown(
+                    """
+                    ##### 📅 Yearly thumbnails<a id="yearly-thumbnails-header"></a>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+                # ── Year selection via checkboxes ─────────────────────────────
+                year_range = list(range(2016, datetime.now().year + 1))  # 2016..2026
+
+                # Quick actions
+                btn_cols = st.columns([1, 1, 4])
+                if btn_cols[0].button("Select all", key="yt_select_all"):
+                    st.session_state.update({f"yt_year_{y}": True for y in year_range})
+                if btn_cols[1].button("Clear", key="yt_clear_all"):
+                    st.session_state.update({f"yt_year_{y}": False for y in year_range})
+
+                # 5-column grid → compact, tightly packed checkboxes
+                cols = st.columns(len(year_range))
+                selected_years = []
+                for i, year in enumerate(year_range):
+                    with cols[i % len(cols)]:
+                        if st.checkbox(str(year), value=False, key=f"yt_year_{year}"):
+                            selected_years.append(year)
+
+                if not selected_years:
+                    st.caption("Select at least one year to generate thumbnails.")
+                    return
+
+                # ── Fixed seasonal window: May 1 – Oct 31 per year ───────────
+                date_windows = tuple((f"{y}-05-01", f"{y}-10-31") for y in sorted(selected_years))
+
+                # ── Fetch + render ────────────────────────────────────────────
+                fig = None
+                with st.spinner(
+                    f"Pulling satellite thumbnails for {len(selected_years)} year(s) "
+                    "(May–Oct each)… This may take around 10 seconds per year."
+                ):
+                    lake_gdf = load_lake_polygon_cached(data_path_input, current)
+                    if lake_gdf.empty:
+                        st.caption("⚠️ Lake polygon not found; cannot pull satellite imagery.")
+                        return
+                    try:
+                        ds = cached_get_rioxarray_ds_from_lake(
+                            lake_gdf,
+                            id_geohash=current,
+                            start_date=min(w[0] for w in date_windows),
+                            end_date=max(w[1] for w in date_windows),
+                            bands=("B2", "B3", "B4"),
+                            date_windows=date_windows,
+                            grid_scale=20,
+                        )
+                        ref_date_strs = get_unique_dates_from_xee_ds(ds)
+                        fig = cached_visualize_cube(
+                            ds, dates=ref_date_strs, style="rgb", id_geohash=current, exact_dates=True
+                        )
+                    except Exception as e:  # noqa: BLE001
+                        logger.error(f"Failed to load yearly thumbnails for lake {current}: {e}")
+                        st.warning(f"Could not load satellite imagery for this lake: {e}")
+                        return
+
+                if fig is None:
+                    return
+
+                st.pyplot(fig, width="content")
+                logger.info("Loaded yearly satellite thumbnails")
+
+                # ── Save the figure as a PNG ──────────────────────────────────
+                import io
+
+                buf = io.BytesIO()
+                fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+                png_bytes = buf.getvalue()
+
+                year_label = "_".join(str(y) for y in sorted(selected_years))
+                file_name = f"lake_{current}_thumbnails_{year_label}.png"
+
+                st.download_button(
+                    "💾 Download thumbnails (PNG)",
+                    data=png_bytes,
+                    file_name=file_name,
+                    mime="image/png",
+                    key=f"yt_download_{current}",
+                )
+
+            yearly_thumbnail_section()
+
+            ###################### END Yearly thumbnail plotter ############################
 
     except Exception as e:  # noqa: BLE001
         st.error(f"Error loading data: {e!s}")
