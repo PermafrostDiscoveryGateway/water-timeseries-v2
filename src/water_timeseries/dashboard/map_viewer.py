@@ -1867,7 +1867,7 @@ def create_app(
                     )
 
                     # setup today's date and one year go
-                    today = datetime.now(tz=datetime.UTC).astimezone()
+                    today = datetime.now(tz=UTC).astimezone()
                     if viz_configuration_name == "drainage_year":
                         local_gdf = load_lake_polygon_cached(data_path_input, current)
                         if local_gdf.empty or pd.isna(local_gdf.iloc[0]["date_break"]):
@@ -1920,7 +1920,7 @@ def create_app(
                                 end_date=max(w[1] for w in date_windows),
                                 bands=("B2", "B3", "B4"),  # only the rendered RGB bands
                                 date_windows=date_windows,
-                                grid_scale=20,  # thumbnail resolution, 4x fewer pixels than native 10 m
+                                grid_scale=10,  # thumbnail resolution, 4x fewer pixels than native 10 m
                             )
                             fig = cached_visualize_cube(ds, dates=viz_date_strs, style="rgb", id_geohash=current)
                         except Exception as e:  # noqa: BLE001
@@ -1947,7 +1947,7 @@ def create_app(
                 )
 
                 # ── Year selection via checkboxes ─────────────────────────────
-                year_range = list(range(2016, datetime.now(tz=datetime.UTC).year + 1))  # 2016..2026
+                year_range = list(range(2016, datetime.now(tz=UTC).year + 1))  # 2016..2026
 
                 # Quick actions
                 btn_cols = st.columns([1, 1, 4])
