@@ -1867,7 +1867,7 @@ def create_app(
                     )
 
                     # setup today's date and one year go
-                    today = datetime.now().astimezone()
+                    today = datetime.now(tz=datetime.UTC).astimezone()
                     if viz_configuration_name == "drainage_year":
                         local_gdf = load_lake_polygon_cached(data_path_input, current)
                         if local_gdf.empty or pd.isna(local_gdf.iloc[0]["date_break"]):
@@ -1947,7 +1947,7 @@ def create_app(
                 )
 
                 # ── Year selection via checkboxes ─────────────────────────────
-                year_range = list(range(2016, datetime.now().year + 1))  # 2016..2026
+                year_range = list(range(2016, datetime.now(tz=datetime.UTC).year + 1))  # 2016..2026
 
                 # Quick actions
                 btn_cols = st.columns([1, 1, 4])
