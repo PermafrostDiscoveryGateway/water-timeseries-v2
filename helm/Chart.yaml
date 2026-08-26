@@ -4,5 +4,5 @@ description: Helm chart for the Water Timeseries Streamlit dashboard
 sources:
   - https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2
 type: application
-version: 0.16.1
-appVersion: "v0.16.1"
+version: 0.16.2
+appVersion: "v0.16.2"
