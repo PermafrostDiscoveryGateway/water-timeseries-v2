@@ -489,7 +489,7 @@ def render_copy_link_button() -> None:
                 if (!base) return null;
                 var u = new URL(base);
                 u.searchParams.delete("embed");
-                u.searchParams("embed_options");
+                u.searchParams.delete("embed_options");
                 u.searchParams.delete("theme");
                 u.searchParams.delete("show_share");
                 CFG.stateKeys.forEach(function(k) { u.searchParams.delete(k); });
