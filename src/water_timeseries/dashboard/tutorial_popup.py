@@ -153,11 +153,12 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
         <div class="info-box">
             <div class="logo-row">
                 <img src="https://www.awi.de/_assets/978631966794c5093250775de182779d/Images/AWI/awi_logo.svg" alt="AWI">
-                <img src="https://pdg.open.uaf.edu/wp-content/uploads/sites/46/2023/06/PDG_logo_compact_transparent_bkg.png" alt="PDG">
                 <img src="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ5o8cBYEkcRNtWKws2y7tZPZvy2OeEC5pp-S-13KPd_g&s=10" alt="Arctic ODS">
                 <img src="https://images.seeklogo.com/logo-png/63/1/national-center-for-supercomputing-applications-logo-png_seeklogo-637758.png" alt="NCSA">
                 <img src="https://arcticdata.io/wp-content/themes/aurora/library/images/logo_.png" alt="Arctic Data">
                 <img src="https://www.google.com/s2/favicons?domain=woodwellclimate.org&sz=64" alt="Woodwell">
+                <img src="https://pdg.open.uaf.edu/wp-content/uploads/sites/46/2023/06/PDG_logo_compact_transparent_bkg.png" alt="PDG">
+                <img src="https://www.petcat.earth/pics/logos/PeTCaT-Logo_RGB.png" alt="PeTCaT">
             </div>
             <div class="text-row">
                 <b>Lost Lakes</b> is part of the <i>Permafrost Discovery Gateway</i> Project. The Permafrost Discovery Gateway (PDG) is an online platform for creating, analyzing, and visualizing big geospatial permafrost products funded through the <i>Google.org Impact Challenge</i>.<br><br>
