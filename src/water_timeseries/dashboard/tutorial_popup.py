@@ -1,7 +1,16 @@
 """Tutorial popup helper for map_viewer dashboard."""
 
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as _pkg_version
+
 import streamlit as st
 import streamlit.components.v1 as components
+
+# Set this to the *distribution* name of your installed package (the name shown
+# by `pip show <name>`, i.e. the `name` field in pyproject.toml / setup.cfg).
+# If it can't be resolved in the current environment, the version line is
+# simply hidden (no error).
+PACKAGE_NAME = "water_timeseries"
 
 # Close button rendered as plain HTML that triggers the dialog's built-in
 # dismissal (the "X") from the browser, instead of an st.button. An st.button
@@ -75,6 +84,26 @@ _CLOSE_BUTTON_HTML = r"""
 
 
 # =============================================================================
+# VERSION LOOKUP
+# =============================================================================
+@st.cache_resource(show_spinner=False)
+def _get_installed_version(package_name: str = PACKAGE_NAME) -> str | None:
+    """Return the installed version of `package_name`, or None if not found.
+
+    Reads the installed distribution metadata (egg-info/dist-info) via
+    importlib.metadata, so it reflects the version actually installed in the
+    current environment rather than a hard-coded string. Cached with
+    st.cache_resource so it is resolved once per process, not on every rerun.
+    """
+    if not package_name:
+        return None
+    try:
+        return _pkg_version(package_name)
+    except PackageNotFoundError:
+        return None
+
+
+# =============================================================================
 # INTERNAL DIALOG - DO NOT CALL DIRECTLY
 # =============================================================================
 @st.dialog("Welcome to Lost Lakes", width="large")
@@ -109,8 +138,14 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
 
     with col_sidebar:
         # Info box with logos and acknowledgment
-        st.markdown(
-            """
+        # Resolve the installed version once; render a small line inside the
+        # box (hidden entirely if the package isn't installed/resolvable).
+        version = _get_installed_version()
+        version_row = (
+            f'<div class="text-row" style="margin-top:6px;"><b>Version:</b> {version}</div>' if version else ""
+        )
+
+        info_box_html = """
         <style>
             .info-box {
                 background-color: #ffffff;
@@ -142,8 +177,8 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
                 width: auto;
             }
             .text-row {
-                font-size: 10px;
-                line-height: 1.4;
+                font-size: 12px;
+                line-height: 1.5;
             }
             [data-testid="stHorizontalBlock"] [data-testid="stVerticalBlock"]:nth-child(3) > div {
                 margin-top: 0 !important;
@@ -165,10 +200,11 @@ def _show_tutorial_dialog(sections: dict[str, str]) -> None:
                 <b>Team:</b> Created by Ingmar Nitze (AWI), Todd Nicholson (NCSA), Drshika Asher (NCSA), Kayla Hardie (Google), Matt Jones (NCEAS/ADC). With support from many PDG Team members.<br><br>
                 <b>Contact:</b> <a href="mailto:ingmar.nitze@awi.de?subject=Lost%20Lakes%20Viewer">ingmar.nitze@awi.de</a>
             </div>
+            <!--VERSION_ROW-->
         </div>
-        """,
-            unsafe_allow_html=True,
-        )
+        """
+        info_box_html = info_box_html.replace("<!--VERSION_ROW-->", version_row)
+        st.markdown(info_box_html, unsafe_allow_html=True)
 
         # Photos stacked vertically, matching info box width
         photos_html = """
