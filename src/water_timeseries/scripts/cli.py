@@ -1081,6 +1081,8 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
                     df["analysis_month"] = df.date.dt.strftime("%Y-%m")
                 except AttributeError:
                     pass
+            if df.index.name == "id_geohash":
+                df = df.reset_index(drop=False)
 
             dfs.append(df)
         except (OSError, ValueError) as e:
