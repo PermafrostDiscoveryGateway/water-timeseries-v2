@@ -1058,12 +1058,14 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
     # scan over multiple patterns
     include_patterns = ["nrt_*_drain_breaks.parquet", "DW_*breaks.parquet*"]
     nrt_dir = Path(nrt_dir)
+
     monthly_files = []
     for pattern in include_patterns:
         monthly_files_result = sorted(
             [f for f in nrt_dir.glob(pattern) if f.name != "nrt_monthly_drain_breaks.parquet"]
         )
-        monthly_files = monthly_files_result
+        if monthly_files_result:
+            monthly_files = monthly_files + monthly_files_result
 
     if not monthly_files:
         logger.info(f"No individual monthly NRT files found in {nrt_dir} to aggregate.")
@@ -1074,6 +1076,12 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
     for file_path in monthly_files:
         try:
             df = pd.read_parquet(file_path)
+            if "analysis_month" not in df.columns and "date" in df.columns:
+                try:
+                    df["analysis_month"] = df.date.dt.strftime("%Y-%m")
+                except AttributeError:
+                    pass
+
             dfs.append(df)
         except (OSError, ValueError) as e:
             logger.warning(f"Failed to read {file_path}: {e}")
@@ -1087,7 +1095,7 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
     if "analysis_month" not in breaks_df.columns:
         if "date" in breaks_df.columns:
             logger.info("Adding column 'analysis_month' from 'date column'")
-            df["analysis_month"] = df.date.dt.strftime("%Y-%m")
+            breaks_df["analysis_month"] = df.date.dt.strftime("%Y-%m")
         else:
             logger.info("No column 'analysis_month' or 'date' found")
 
