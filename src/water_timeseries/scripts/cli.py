@@ -1055,10 +1055,16 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # scan over multiple patterns
+    include_patterns = ["nrt_*_drain_breaks.parquet", "DW_*breaks.parquet*"]
     nrt_dir = Path(nrt_dir)
-    monthly_files = sorted(
-        [f for f in nrt_dir.glob("nrt_*_drain_breaks.parquet") if f.name != "nrt_monthly_drain_breaks.parquet"]
-    )
+    monthly_files = []
+    for pattern in include_patterns:
+        monthly_files_result = sorted(
+            [f for f in nrt_dir.glob(pattern) if f.name != "nrt_monthly_drain_breaks.parquet"]
+        )
+        monthly_files = monthly_files_result
+
     if not monthly_files:
         logger.info(f"No individual monthly NRT files found in {nrt_dir} to aggregate.")
         return
@@ -1077,6 +1083,14 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
         return
 
     breaks_df = pd.concat(dfs, ignore_index=True)
+
+    if "analysis_month" not in breaks_df.columns:
+        if "date" in breaks_df.columns:
+            logger.info("Adding column 'analysis_month' from 'date column'")
+            df["analysis_month"] = df.date.dt.strftime("%Y-%m")
+        else:
+            logger.info("No column 'analysis_month' or 'date' found")
+
     breaks_path = output_dir / "nrt_monthly_drain_breaks.parquet"
     breaks_df.to_parquet(breaks_path, index=False)
     logger.info(f"Wrote consolidated breaks to {breaks_path}")
