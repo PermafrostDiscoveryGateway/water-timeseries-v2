@@ -115,9 +115,7 @@ def test_build_nrt_pmtiles_cli_config_file(tmp_path):
 
     config_path = tmp_path / "dashboard_config.yaml"
     config_path.write_text(
-        f"vector_file: {TEST_PARQUET}\n"
-        f"precomputed_nrt_dir: {breaks_dir}\n"
-        f"nrt_pmtiles_dir: {tmp_path / 'tiles'}\n"
+        f"vector_file: {TEST_PARQUET}\nprecomputed_nrt_dir: {breaks_dir}\nnrt_pmtiles_dir: {tmp_path / 'tiles'}\n"
     )
 
     build_nrt_pmtiles(config_file=config_path, months="2018-07")
@@ -135,6 +133,148 @@ def test_build_nrt_pmtiles_cli_missing_paths_raises(tmp_path):
 
     with pytest.raises(SystemExit):
         build_nrt_pmtiles()
+
+
+def test_resolve_nrt_monthly_tiles_url(tmp_path, monkeypatch):
+    from water_timeseries.map_utils import resolve_nrt_monthly_tiles_url
+
+    monkeypatch.delenv("PMTILES_BASE_URL", raising=False)
+
+    assert resolve_nrt_monthly_tiles_url(None, "2026-07") is None
+    # Missing month -> None, which is the caller's signal to use the fallback path.
+    assert resolve_nrt_monthly_tiles_url(tmp_path, "2026-07") is None
+
+    (tmp_path / nrt_monthly_tiles_filename("2026-07")).write_bytes(b"0" * 100)
+    local_url = resolve_nrt_monthly_tiles_url(tmp_path, "2026-07")
+    assert local_url is not None
+    assert local_url.endswith("nrt_2026-07_drainage.pmtiles")
+    assert local_url.startswith("http://")
+
+    assert (
+        resolve_nrt_monthly_tiles_url("https://example.com/tiles/", "2026-06")
+        == "https://example.com/tiles/nrt_2026-06_drainage.pmtiles"
+    )
+    assert (
+        resolve_nrt_monthly_tiles_url("gs://bucket/tiles", "2026-06")
+        == "https://storage.googleapis.com/bucket/tiles/nrt_2026-06_drainage.pmtiles"
+    )
+
+
+def test_build_pmtiles_map_monthly_tiles_layers():
+    """The monthly tileset becomes its own source/layers, with nothing per-lake inlined."""
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    tiles_url = "http://localhost:1/nrt_2026-07_drainage.pmtiles"
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="nrt_drainage",
+        nrt_monthly_tiles_url=tiles_url,
+    )
+    html = m.get_root().render()
+
+    assert f"pmtiles://{tiles_url}" in html
+    assert "nrt-drained-fill" in html
+    assert "nrt-drained-points" in html
+    # No feature-state push. The tooltip prefers the overlay but falls back to
+    # the base lakes, so non-drained lakes still hover -- minus the month-
+    # specific properties some base tilesets bake from a single NRT run.
+    assert "setFeatureState" not in html
+    assert '["nrt-drained-fill", "lakes-fill"]' in html
+    assert '{"lakes-fill": ["date", "drainage_confidence"]}' in html
+    # Nothing per-lake reaches the page: no lake id, no state dict.
+    assert "b7uefy0bvcrc" not in html
+    assert "stateById" not in html
+
+    # The dict-based fallback is what inlines per-lake state; assert the
+    # contrast so a regression back to it is visible.
+    fallback = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="nrt_drainage",
+        nrt_confidence_by_id={"b7uefy0bvcrc": 3},
+        nrt_tooltip_overrides={"b7uefy0bvcrc": {"date": "2026-07"}},
+    )
+    fallback_html = fallback.get_root().render()
+    assert "setFeatureState" in fallback_html
+    assert "b7uefy0bvcrc" in fallback_html
+
+
+def test_nrt_drained_centroid_polygon_handoff_has_no_gap():
+    """Circles must stay visible right up to the zoom the polygons take over at.
+
+    MapLibre hides a layer at zoom >= maxzoom but shows it at zoom >= minzoom,
+    so the centroid maxzoom and the polygon minzoom have to be the same number
+    to cover every zoom exactly once. Splitting them (e.g. points maxzoom 8 with
+    fill minzoom 9) leaves z8 with no drained lakes drawn at all.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+    from water_timeseries.utils.pmtiles_build import NRT_POINT_POLY_SWITCH_ZOOM
+
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="nrt_drainage",
+        nrt_monthly_tiles_url="http://localhost:1/nrt_2026-07_drainage.pmtiles",
+    )
+    html = m.get_root().render()
+
+    # The page renders more than one style block; find the one holding the
+    # drained overlay rather than assuming it comes first.
+    layers = {}
+    marker = '"layers": '
+    offset = html.find(marker)
+    while offset != -1 and "nrt-drained-points" not in layers:
+        try:
+            layer_list, _ = json.JSONDecoder().raw_decode(html[offset + len(marker) :])
+        except json.JSONDecodeError:
+            layer_list = []
+        if isinstance(layer_list, list):
+            layers = {layer["id"]: layer for layer in layer_list if isinstance(layer, dict) and "id" in layer}
+        offset = html.find(marker, offset + 1)
+    assert "nrt-drained-points" in layers, "no style block contained the drained overlay layers"
+
+    points = layers["nrt-drained-points"]
+    fill = layers["nrt-drained-fill"]
+    line = layers["nrt-drained-line"]
+
+    assert points["maxzoom"] == NRT_POINT_POLY_SWITCH_ZOOM
+    assert fill["minzoom"] == NRT_POINT_POLY_SWITCH_ZOOM
+    assert line["minzoom"] == NRT_POINT_POLY_SWITCH_ZOOM
+
+    # Every zoom must draw the month's drained lakes exactly one way. Guards the
+    # gap directly rather than trusting the three numbers above to stay in sync.
+    for zoom in range(15):
+        as_circles = zoom < points["maxzoom"]
+        as_polygons = zoom >= fill["minzoom"]
+        assert as_circles != as_polygons, f"z{zoom} draws drained lakes {'twice' if as_circles else 'not at all'}"
+
+
+def test_build_pmtiles_map_hide_stable_lakes_hides_base_layers():
+    """Hiding stable lakes must switch the base layers off, not just zero their opacity.
+
+    A zero-opacity layer still answers queryRenderedFeatures, which would leave
+    hidden lakes producing hover popups.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    def base_layers(hide: bool) -> dict:
+        m = build_pmtiles_map(
+            "http://localhost:1/lakes.pmtiles",
+            viz_configuration_name="nrt_drainage",
+            nrt_monthly_tiles_url="http://localhost:1/nrt_2026-07_drainage.pmtiles",
+            hide_stable_lakes=hide,
+        )
+        style = next(child for child in m._children.values() if hasattr(child, "style")).style
+        return {layer["id"]: layer for layer in style["layers"]}
+
+    shown = base_layers(False)
+    hidden = base_layers(True)
+
+    for layer_id in ("lakes-fill", "lakes-line", "lakes-points"):
+        assert "layout" not in shown[layer_id], layer_id
+        assert hidden[layer_id]["layout"]["visibility"] == "none", layer_id
+
+    # The month's drained lakes stay visible either way.
+    for layer_id in ("nrt-drained-fill", "nrt-drained-line", "nrt-drained-points"):
+        assert hidden[layer_id].get("layout", {}).get("visibility") != "none", layer_id
 
 
 def test_pmtiles_server_range_requests(tmp_path):

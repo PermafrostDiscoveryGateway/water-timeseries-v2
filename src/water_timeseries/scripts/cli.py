@@ -20,6 +20,7 @@ from loguru import logger
 # Analysis modules (break_pipeline, plot_pipeline, precompute_nrt_monthly) are
 # imported lazily inside their subcommands: they pull in Rbeast's C extension,
 # which is unavailable on some platforms, and must not block e.g. `dashboard`.
+from water_timeseries.scripts.merge_nrt_confidence import merge_nrt_confidence as merge_nrt_confidence_file
 from water_timeseries.scripts.repartition_parquet import repartition_parquet as repartition_parquet_file
 from water_timeseries.utils.cli import (
     flatten_mode,
@@ -451,6 +452,86 @@ def build_nrt_pmtiles(
         poly_max_zoom=poly_max_zoom,
     )
     print(f"Wrote {len(outputs)} monthly drainage tilesets to {output_dir}")
+
+
+@app.command(group="Analysis")
+def merge_nrt_confidence(
+    month: str,
+    gcs_glob: str,
+    breaks_file: Path | None = None,
+    gcs_prefix: str | None = None,
+    drain_threshold: float | None = None,
+    config_file: Path | None = None,
+    logfile: str | None = None,
+    verbose: int = 0,
+):
+    """Extract a month's real drainage_confidence from a full GCS NRT run and merge it in.
+
+    A full NRT pipeline run on GCS already bakes a real per-lake
+    ``drainage_confidence`` column, but nothing downstream reads that file
+    directly -- ``build-nrt-pmtiles`` and the dashboard's runtime fallback
+    both only read ``nrt_monthly_drain_breaks.parquet``. This extracts the
+    month's drained-lake rows (filtered on ``water_residual`` like
+    ``precompute-nrt-monthly`` does) and merges them into that breaks table,
+    backing up the previous file to ``<breaks_file>.bak`` first. Cheaper than
+    computing confidence from scratch with the ~30h/month ARIMA batch
+    (``breakpoint-analysis-nrt``).
+
+    Re-run ``build-nrt-pmtiles`` afterwards to bake the merged confidence into
+    that month's overlay tileset.
+
+    Args:
+        month: Analysis month as ``YYYY-MM``, e.g. ``2026-06``.
+        gcs_glob: Filename glob for the GCS run, e.g.
+            ``DW_NRT_2026-06_run2025-06-25_allGeoms_v*.parquet``.
+        breaks_file: Path to ``nrt_monthly_drain_breaks.parquet``. Read from
+            ``precomputed_nrt_dir`` in ``--config-file`` when not given.
+        gcs_prefix: GCS bucket/path prefix the glob is resolved against.
+            Defaults to ``pdg-storage-default/workflows_optimization/dashboard_nrt``.
+        drain_threshold: ``water_residual`` cutoff for a drained lake
+            (default ``-0.25``, must match ``precompute-nrt-monthly``).
+        config_file: A dashboard config YAML; its ``precomputed_nrt_dir`` is
+            read as breaks_file when ``--breaks-file`` isn't set directly.
+            Top-level keys only -- a multi-mode config (``configs/dashboard_panarctic.yaml``)
+            keeps ``precomputed_nrt_dir`` under ``modes.nrt_drainage``, where this
+            does not look, so pass ``--breaks-file`` for those.
+
+    Example:
+        water-timeseries merge-nrt-confidence 2026-06 \\
+            "DW_NRT_2026-06_run2025-06-25_allGeoms_v*.parquet" \\
+            --breaks-file data/precomputed_nrt/nrt_monthly_drain_breaks.parquet
+    """
+    logfile = setup_logging(logfile=logfile, verbose=verbose)
+
+    config_dict = load_config(config_file, logger) if config_file else {}
+    if not config_dict.get("breaks_file") and config_dict.get("precomputed_nrt_dir"):
+        config_dict["breaks_file"] = str(Path(config_dict["precomputed_nrt_dir"]) / "nrt_monthly_drain_breaks.parquet")
+
+    config_dict = merge_config_with_args(
+        config_dict,
+        breaks_file=str(breaks_file) if breaks_file else None,
+        gcs_prefix=gcs_prefix,
+        drain_threshold=drain_threshold,
+    )
+
+    breaks_file = Path(config_dict["breaks_file"]) if config_dict.get("breaks_file") else None
+    if not breaks_file:
+        logger.error(
+            "breaks_file is required (via --breaks-file, or a --config-file with precomputed_nrt_dir)."
+        )
+        raise SystemExit(1)
+
+    gcs_prefix = config_dict.get("gcs_prefix") or "pdg-storage-default/workflows_optimization/dashboard_nrt"
+    drain_threshold = float(config_dict.get("drain_threshold", -0.25))
+
+    merge_nrt_confidence_file(
+        breaks_file,
+        month,
+        gcs_glob,
+        gcs_prefix=gcs_prefix,
+        drain_threshold=drain_threshold,
+    )
+    print(f"Merged {month} confidence into {breaks_file}")
 
 
 @app.command(group="Visualization")

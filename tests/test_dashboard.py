@@ -118,3 +118,25 @@ def test_build_pmtiles_map_highlight_survives_hide_stable_lakes():
 
     assert layers["lakes-fill"]["filter"][0] == "all"  # stable lakes filtered out
     assert layers["lakes-line-selected"]["filter"] == ["==", ["get", "id_geohash"], selected_id]
+
+
+def test_map_viewer_keeps_gs_uri_intact():
+    """A gs:// archive must not be normalized to a local path (issue #224)."""
+    from water_timeseries.dashboard.map_viewer import MapViewer
+
+    uri = "gs://bucket/dashboard_nrt/DW_NRT_2026-06_allGeoms_v3.pmtiles"
+    viewer = MapViewer(pmtiles_file=uri, map_backend="pmtiles")
+
+    assert str(viewer.pmtiles_file) == uri
+    from water_timeseries.map_utils import resolve_pmtiles_url
+
+    assert resolve_pmtiles_url(str(viewer.pmtiles_file)).startswith("https://storage.googleapis.com/bucket/")
+
+
+def test_default_nrt_tiles_dir_skips_remote_pmtiles(tmp_path, monkeypatch):
+    """Remote archives must not be probed as local sibling directories."""
+    from water_timeseries.dashboard import app
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(app, "_REPO_ROOT", tmp_path)
+    assert app._resolve_default_nrt_tiles_dir("gs://bucket/nrt/lakes.pmtiles") is None

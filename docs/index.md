@@ -372,6 +372,7 @@ dw_end_month: 10
 
 - [Getting Started](getting_started.md) - Installation and setup guide
 - [Examples](examples.md) - Usage examples and tutorials
+- [NRT Monthly Update](nrt_monthly_update.md) - What to refresh when a new month of near-real-time data lands
 - [API Reference](api/index.md) - Complete API documentation
 
 ## Contributing

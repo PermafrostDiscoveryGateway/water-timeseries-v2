@@ -46,6 +46,7 @@ _MODE_SETTING_KEYS = (
     "dw_dataset_file",
     "jrc_dataset_file",
     "precomputed_nrt_dir",
+    "nrt_pmtiles_dir",
     "viz_configuration",
     "dw_start_year",
     "dw_end_year",
@@ -64,6 +65,7 @@ _MODE_PATH_KEYS = (
     "dw_dataset_file",
     "jrc_dataset_file",
     "precomputed_nrt_dir",
+    "nrt_pmtiles_dir",
 )
 
 #: Paths a mode cannot work without: the tiles it paints and the polygons that
@@ -101,10 +103,24 @@ _MODE_SCOPED_SESSION_KEYS = (
     "show_drained_toggle",
     "_prev_show_drained",
     "toggle_hide_stable_lakes",
+    "nrt_show_high",
+    "nrt_show_medium",
+    "nrt_show_low",
+    "nrt_show_stable",
+    "nrt_show_nodata",
     "show_ts_popup",
 )
 
-_MODE_SCOPED_QUERY_PARAMS = ("selected_lake", "drained", "month", "hide_stable")
+_MODE_SCOPED_QUERY_PARAMS = (
+    "selected_lake",
+    "drained",
+    "month",
+    "hide_stable",
+    "hide_high",
+    "hide_medium",
+    "hide_low",
+    "hide_nodata",
+)
 
 
 @dataclass(frozen=True)
