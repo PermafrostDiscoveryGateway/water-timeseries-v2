@@ -9,6 +9,7 @@ import geemap
 import geopandas as gpd
 import google.auth
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import streamlit as st
 import xarray as xr
@@ -892,12 +893,6 @@ def visualize_s2_first_and_last(ds: xr.Dataset, style: str = "rgb") -> plt.Figur
     return fig
 
 
-import ee
-import geopandas as gpd
-import numpy as np
-import xarray as xr
-
-
 def get_rioxarray_ds_from_lake(
     lake_gdf: gpd.GeoDataFrame,
     id_geohash: str,
@@ -945,8 +940,12 @@ def get_rioxarray_ds_from_lake(
             dimensions (time, y, x), and proper georeferencing (CRS set via rioxarray).
     """
 
-    if bands is not None and cloud_filter == "pixel" and "MSK_CLDPRB" not in bands:
-        bands.append("MSK_CLDPRB")
+    extra_bands = ["SCL", "MSK_CLDPRB"]
+    for band in extra_bands:
+        if bands is not None and cloud_filter == "pixel" and band not in bands:
+            if isinstance(bands, tuple):
+                bands = list(bands)
+            bands.append(band)
 
     # 1. Filter the lake by its unique ID
     local_gdf = lake_gdf[lake_gdf["id_geohash"] == id_geohash]
@@ -985,13 +984,14 @@ def get_rioxarray_ds_from_lake(
 
     # pixel based filter
     if cloud_filter == "pixel" and max_cloud_cover is not None:
+        mask_cc = (ds_rio["SCL"] >= 8).mean(dim=["x", "y"]) * 100
+        # mask_nodata = (ds_rio["SCL"] <= 1).mean(dim=["x", "y"]) * 100
         mask_nodata = ds_rio["MSK_CLDPRB"].isnull().mean(dim=["x", "y"]) * 100
-        mask_cc = ds_rio["MSK_CLDPRB"].mean(dim=["x", "y"])
         mask = (mask_nodata + mask_cc) < max_cloud_cover
+        return ds_rio.sel(time=mask)
 
-        ds_rio = ds_rio.isel(time=mask)
-
-    return ds_rio
+    else:
+        return ds_rio
 
 
 @st.cache_resource(show_spinner="Loading Sentinel-2 satellite imagery for a specific lake ")
