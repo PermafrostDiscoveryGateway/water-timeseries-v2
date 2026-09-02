@@ -1918,7 +1918,7 @@ def create_app(
                                 id_geohash=current,
                                 start_date=min(w[0] for w in date_windows),
                                 end_date=max(w[1] for w in date_windows),
-                                bands=("B2", "B3", "B4"),  # only the rendered RGB bands
+                                bands=None,  # load all bands
                                 date_windows=date_windows,
                                 grid_scale=10,  # thumbnail resolution, 4x fewer pixels than native 10 m
                             )
@@ -1987,7 +1987,7 @@ def create_app(
                             id_geohash=current,
                             start_date=min(w[0] for w in date_windows),
                             end_date=max(w[1] for w in date_windows),
-                            bands=("B2", "B3", "B4"),
+                            bands=None,
                             date_windows=date_windows,
                             grid_scale=20,
                         )
