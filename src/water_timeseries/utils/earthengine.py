@@ -945,9 +945,8 @@ def get_rioxarray_ds_from_lake(
             dimensions (time, y, x), and proper georeferencing (CRS set via rioxarray).
     """
 
-    if bands is not None and cloud_filter == "pixel":
-        if not "MSK_CLDPRB" in bands:
-            bands.append("MSK_CLDPRB")
+    if bands is not None and cloud_filter == "pixel" and "MSK_CLDPRB" not in bands:
+        bands.append("MSK_CLDPRB")
 
     # 1. Filter the lake by its unique ID
     local_gdf = lake_gdf[lake_gdf["id_geohash"] == id_geohash]
