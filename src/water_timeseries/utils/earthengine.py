@@ -9,6 +9,7 @@ import geemap
 import geopandas as gpd
 import google.auth
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import streamlit as st
 import xarray as xr
@@ -892,12 +893,6 @@ def visualize_s2_first_and_last(ds: xr.Dataset, style: str = "rgb") -> plt.Figur
     return fig
 
 
-import ee
-import geopandas as gpd
-import numpy as np
-import xarray as xr
-
-
 def get_rioxarray_ds_from_lake(
     lake_gdf: gpd.GeoDataFrame,
     id_geohash: str,
@@ -908,9 +903,9 @@ def get_rioxarray_ds_from_lake(
     bands: Sequence[str] | None = None,
     date_windows: Sequence[tuple[str, str]] | None = None,
     grid_scale: float = 10,
+    cloud_filter: str = "pixel",
 ) -> xr.Dataset:
-    """
-    Load Sentinel-2 satellite imagery for a specific lake as an xarray Dataset.
+    """Load Sentinel-2 satellite imagery for a specific lake as an xarray Dataset.
 
     This function retrieves Sentinel-2 SR (Surface Reflectance) data from Google Earth Engine
     for a single lake, automatically determining the appropriate UTM coordinate reference
@@ -928,19 +923,29 @@ def get_rioxarray_ds_from_lake(
             images (0-100). Defaults to 20.
         buffer (float, optional): Buffer distance in meters to expand the lake's
             bounding box for image extraction. Defaults to 200.
-        bands (Sequence[str], optional): Subset of S2 bands to open (e.g.
+        bands (Sequence[str], optional): Subset of S2 bands to open (e.g.,
             ("B2", "B3", "B4")). Defaults to None, which opens all bands.
-        date_windows (Sequence[Tuple[str, str]], optional): List of
-            (start, end) date pairs; when given, the collection is restricted
-            to the union of these windows (within start_date/end_date), so only
-            imagery near the dates of interest is fetched.
+        date_windows (Sequence[tuple[str, str]], optional): List of (start, end)
+            date pairs; when given, the collection is restricted to the union of these
+            windows (within start_date/end_date), so only imagery near the dates of
+            interest is fetched. Defaults to None.
         grid_scale (float, optional): Pixel size in meters for the output grid.
             Defaults to 10 (native S2 resolution); use 20-30 for thumbnails.
+        cloud_filter (str, optional): The method used to filter clouds.
+            Options are "pixel" (filtering based on MSK_CLDPRB) or other
+            Earth Engine metadata filters. Defaults to "pixel".
 
     Returns:
         xr.Dataset: An xarray Dataset with Sentinel-2 bands as data variables,
             dimensions (time, y, x), and proper georeferencing (CRS set via rioxarray).
     """
+
+    extra_bands = ["SCL", "MSK_CLDPRB"]
+    for band in extra_bands:
+        if bands is not None and cloud_filter == "pixel" and band not in bands:
+            if isinstance(bands, tuple):
+                bands = list(bands)
+            bands.append(band)
 
     # 1. Filter the lake by its unique ID
     local_gdf = lake_gdf[lake_gdf["id_geohash"] == id_geohash]
@@ -962,9 +967,13 @@ def get_rioxarray_ds_from_lake(
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterDate(start_date, end_date)
         .filterBounds(fc)
-        .filter(ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", max_cloud_cover))
         .filter(ee.Filter.calendarRange(6, 9, "month"))
     )
+
+    # Image metadata based filter
+    if cloud_filter != "pixel":
+        cloud_filter_ee = ee.Filter.lte("CLOUDY_PIXEL_PERCENTAGE", max_cloud_cover)
+        ic = ic.filter(cloud_filter_ee)
 
     if date_windows:
         ic = ic.filter(ee.Filter.Or(*[ee.Filter.date(s, e) for s, e in date_windows]))
@@ -973,7 +982,16 @@ def get_rioxarray_ds_from_lake(
         ic = ic.select(list(bands))
     ds_rio = xr.open_dataset(ic, engine="ee", **grid).rio.write_crs(crs).sortby("time")
 
-    return ds_rio
+    # pixel based filter
+    if cloud_filter == "pixel" and max_cloud_cover is not None:
+        mask_cc = (ds_rio["SCL"] >= 8).mean(dim=["x", "y"]) * 100
+        # mask_nodata = (ds_rio["SCL"] <= 1).mean(dim=["x", "y"]) * 100
+        mask_nodata = ds_rio["MSK_CLDPRB"].isnull().mean(dim=["x", "y"]) * 100
+        mask = (mask_nodata + mask_cc) < max_cloud_cover
+        return ds_rio.sel(time=mask)
+
+    else:
+        return ds_rio
 
 
 @st.cache_resource(show_spinner="Loading Sentinel-2 satellite imagery for a specific lake ")
@@ -987,6 +1005,7 @@ def cached_get_rioxarray_ds_from_lake(
     bands: tuple[str, ...] | None = None,
     date_windows: tuple[tuple[str, str], ...] | None = None,
     grid_scale: float = 10,
+    cloud_filter: str = "pixel",
 ) -> xr.Dataset:
     """Cached wrapper around get_rioxarray_ds_from_lake.
 
@@ -1004,6 +1023,7 @@ def cached_get_rioxarray_ds_from_lake(
         bands=bands,
         date_windows=date_windows,
         grid_scale=grid_scale,
+        cloud_filter=cloud_filter,  # Added this line to ensure full parsing
     )
 
 
