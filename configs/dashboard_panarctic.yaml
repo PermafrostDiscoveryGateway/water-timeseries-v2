@@ -77,11 +77,12 @@ modes:
 
   nrt_drainage:
     label: Near Real-Time
-    # Full pan-arctic geoms for the completed 2026-06 NRT run. 2026-07 only has
-    # a small local subset (no full geoms/pmtiles built yet) so it isn't wired
-    # in as the active vector/tile source -- point this at the full 2026-07 run
-    # once it's downloaded.
-    vector_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3_repartitioned.parquet
+    # Full pan-arctic geoms for the newest completed NRT run, 2026-07
+    # (`run2026-07-31`, published as allGeoms_v2 -- the suffix is stamped
+    # upstream and does not track the month). This is what turns a map click
+    # into a lake id, so it wants to be the newest run; the per-month tilesets
+    # carry the month's values themselves and do not depend on it.
+    vector_file: data/DW_NRT/DW_NRT_2026-07_run2026-07-31/DW_NRT_2026-07_run2026-07-31_allGeoms_v2_repartitioned.parquet
     # Shared with drainage_year -- see the note at the top of this file. The NRT
     # run's own geometry is identical to the historical table's, so the base
     # archive it used to need is no longer built. Hover for a non-drained lake
