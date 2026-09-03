@@ -332,6 +332,54 @@ def test_centroids_are_drawn_more_opaque_than_the_polygons_they_replace(viz_conf
     assert points_paint["circle-stroke-width"]
 
 
+def test_drained_lakes_draw_over_stable_ones():
+    """A drained lake must never be painted over by a stable neighbour.
+
+    Both used to share one layer, coloured by a branch in the paint, so which
+    one ended up on top came down to the order features happened to sit in the
+    tile -- grey lakes covering the drained ones the map exists to show. They
+    are separate layers now, and the whole grey layer is drawn first.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+    from water_timeseries.utils.map_styles.pmtiles import DRAINED_LAKE_FILTER, STABLE_LAKE_FILTER
+
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="drainage_year",
+        base_has_centroids=True,
+    )
+    layers = _style_layers(m.get_root().render(), "lakes-fill")
+    order = list(layers)
+
+    for stable, drained in (("lakes-stable-points", "lakes-points"), ("lakes-stable-fill", "lakes-fill")):
+        assert order.index(stable) < order.index(drained), f"{stable} paints over {drained}"
+        assert layers[stable]["filter"] == STABLE_LAKE_FILTER
+        assert layers[drained]["filter"] == DRAINED_LAKE_FILTER
+
+    # Neutral grey, and the same geometry treatment either side of the switch, so
+    # a lake does not change size or gain an outline as the handoff happens.
+    assert layers["lakes-stable-fill"]["paint"]["fill-color"] == "#bdbdbd"
+    assert layers["lakes-stable-points"]["paint"]["circle-radius"] == layers["lakes-points"]["paint"]["circle-radius"]
+    assert layers["lakes-stable-points"]["maxzoom"] == layers["lakes-points"]["maxzoom"]
+    assert layers["lakes-stable-fill"].get("minzoom") == layers["lakes-fill"].get("minzoom")
+
+
+def test_modes_without_a_stable_split_keep_one_set_of_lake_layers():
+    """Only drainage_year separates stable from drained; the rest style every lake alike."""
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    for viz in ("colored_historical", "generic_water", "nrt_drainage"):
+        m = build_pmtiles_map(
+            "http://localhost:1/lakes.pmtiles",
+            viz_configuration_name=viz,
+            base_has_centroids=True,
+        )
+        layers = _style_layers(m.get_root().render(), "lakes-fill")
+        assert "lakes-stable-fill" not in layers, viz
+        # No filter either -- these layers carry every lake in the archive.
+        assert "filter" not in layers["lakes-fill"], viz
+
+
 def test_archive_bakes_low_zoom_centroids_reads_the_build_strategies():
     """The predicate answers from what tippecanoe recorded, not from a flag beside the file."""
     healthy = {
