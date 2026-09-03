@@ -628,8 +628,14 @@ def build_pmtiles_map(
         tile_layer_esriworld.add_to(m)
 
     else:
+        # The drained overlay is listed first (and at all: with "hide stable
+        # lakes" on, lakes-fill is switched off and the month's lakes are the
+        # only thing left to hover). Both layers read the same source layer, so
+        # a drained lake hovers the same table whichever one answers.
         tooltip = PMTilesMapLibreTooltipWithRounding(
-            filter_layers=["lakes-fill"], min_zoom=POINT_POLY_SWITCH_ZOOM, max_zoom=max_zoom
+            filter_layers=["lakes-fill-drained", "lakes-fill"] if drained_ids else ["lakes-fill"],
+            min_zoom=POINT_POLY_SWITCH_ZOOM,
+            max_zoom=max_zoom,
         )
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_generic_water()
         legend = None
@@ -887,6 +893,19 @@ def build_pmtiles_map(
     # base archive is paired with a freshly built overlay.
     lake_points_backed = drained_has_centroids if use_drained_tiles else base_has_centroids
     base_layers = ([base_points_layer] if lake_points_backed else []) + [lakes_fill_layer, lakes_line_layer]
+
+    # With a month's drained overlay on, the viz branches above are skipped (all
+    # of them require `not drained_ids`), so no separate stable layer is built
+    # and the base layers carry every other lake -- stable and drained-in-some-
+    # other-month alike, all in the legend's flat "Other lakes" blue. "Hide
+    # stable lakes" there means leaving the month's drained lakes alone on the
+    # map, so the whole base layer goes. Switched off rather than painted
+    # transparent, like the NRT overlay below: a zero-opacity layer still
+    # answers queryRenderedFeatures, so hidden lakes would keep producing hover
+    # popups. The drained overlay and the selection highlight are unaffected.
+    if hide_stable_lakes and drained_ids:
+        for layer in base_layers:
+            layer["layout"] = {"visibility": "none"}
 
     sources: dict[str, dict] = {}
     if use_drained_tiles:
