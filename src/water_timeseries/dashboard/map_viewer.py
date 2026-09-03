@@ -534,7 +534,10 @@ class MapViewer:
         else:
             center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
 
-        m = folium.Map(location=center, zoom_start=self.zoom)
+        # folium names its built-in base layer after the lowercased tile string,
+        # so the layer control reads "openstreetmap"; add it by hand to spell it out.
+        m = folium.Map(location=center, zoom_start=self.zoom, tiles=None)
+        folium.TileLayer("OpenStreetMap", name="OpenStreetMap").add_to(m)
 
         # # Add tile layers using utility function
 

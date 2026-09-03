@@ -487,12 +487,16 @@ def build_pmtiles_map(
     # drainage_year branch below); None means one set of layers covers both.
     stable_style: tuple | None = None
 
+    # folium names its built-in base layer after the lowercased tile string, so
+    # the layer control reads "openstreetmap"; add it by hand to spell it out.
     m = leafmap.Map(
         location=center,
         zoom_start=zoom_start,
         min_zoom=min_zoom,
         max_zoom=max_zoom,
+        tiles=None,
     )
+    folium.TileLayer("OpenStreetMap", name="OpenStreetMap", min_zoom=min_zoom, max_zoom=max_zoom).add_to(m)
 
     # Add background map types
     wms_url = "https://maps.awi.de/services/common/permafrost/ows"
