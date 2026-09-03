@@ -64,10 +64,33 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
     "--simplification=10",
     "--minimum-zoom=0",
     f"--maximum-zoom={TILE_MAX_ZOOM}",
+    # Four times tippecanoe's 500 KB default. `--drop-densest-as-needed` throws
+    # lakes away until a tile fits this, and at 500 KB it threw away most of
+    # them: a z7 region holding 3,052 lakes kept 60% of them at z6 and 26% at
+    # z5, so zooming out visibly emptied the map -- unlike the NRT overlay,
+    # which is small enough to run with no limit at all and stays complete at
+    # every zoom. At 2 MB the same region keeps 100% at z6 and 77% at z5.
+    #
+    # Measured, not guessed: 8 MB buys almost nothing over 2 MB (tiles stop
+    # growing at ~2 MB, where a different limit binds), and the cost here is a
+    # worst-case tile of 2.0 MB, a z5 p95 of 1.1 MB, and ~3% on the archive --
+    # the top two zooms dominate its size and are nowhere near this cap.
+    "--maximum-tile-bytes=2000000",
     f"--temporary-directory={TIPPECANOE_TEMP_DIR}",
     "-l",
     "lakes",
 )
+
+# Properties worth baking onto the centroids. They are drawn below
+# POINT_POLY_SWITCH_ZOOM, where hover is gated off, so the only ones that earn
+# their place are the id (identity, and `promoteId` for feature state) and
+# whatever the mode colours by -- and they earn it twice over, because every
+# byte of property spent on a centroid is a lake `--drop-densest-as-needed`
+# takes off the map at low zoom. Dropping the other five roughly doubled how
+# many lakes survive there (z6 32% -> 60%, z5 9% -> 26%) before the tile cap
+# above was touched at all.
+DRAINAGE_YEAR_POINT_PROPERTIES: tuple[str, ...] = ("id_geohash", "date_break_year")
+NRT_POINT_PROPERTIES: tuple[str, ...] = ("id_geohash", "drainage_confidence")
 
 # Properties baked into the per-month NRT drainage tilesets. These carry the
 # month's drainage signal *in the tiles*, so the dashboard styles and hovers
@@ -200,6 +223,7 @@ def parquet_to_geojsonseq(
     property_columns: Sequence[str] = DEFAULT_TILE_PROPERTIES,
     geometry_column: str = "geometry",
     generate_points: bool = True,
+    point_property_columns: Sequence[str] | None = None,
 ) -> tuple[Path, Path | None]:
     """Export a GeoParquet file to newline-delimited GeoJSON for tippecanoe.
 
@@ -250,7 +274,13 @@ def parquet_to_geojsonseq(
 
             gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
             gdf = _sanitize_properties(gdf, property_columns)
-            _write_features(gdf, property_columns, fh_poly, fh_points)
+            _write_features(
+                gdf,
+                property_columns,
+                fh_poly,
+                fh_points,
+                point_property_columns=point_property_columns,
+            )
     finally:
         fh_poly.close()
         if fh_points:
@@ -265,6 +295,7 @@ def _write_features(
     fh_poly,
     fh_points,
     *,
+    point_property_columns: Sequence[str] | None = None,
     poly_zoom: tuple[int, int] = DEFAULT_POLY_ZOOM,
     points_zoom: tuple[int, int] = DEFAULT_POINTS_ZOOM,
 ) -> None:
@@ -282,6 +313,8 @@ def _write_features(
     by decoding output tiles: with only the (ignored) ``-L`` keys set, the
     "drained" polygon layer showed up at z0 anyway. Per-feature is the fix.
     """
+    point_columns = property_columns if point_property_columns is None else point_property_columns
+
     for _, row in gdf.iterrows():
         props = {c: row[c] for c in property_columns if c in gdf.columns}
         for key, val in list(props.items()):
@@ -289,6 +322,7 @@ def _write_features(
                 props[key] = None
             elif hasattr(val, "item"):
                 props[key] = val.item()
+        point_props = props if point_property_columns is None else {c: props[c] for c in point_columns if c in props}
 
         # Write polygon feature
         geom_poly = row.geometry.__geo_interface__
@@ -306,7 +340,7 @@ def _write_features(
             feat_pt = {
                 "type": "Feature",
                 "tippecanoe": {"minzoom": points_zoom[0], "maxzoom": points_zoom[1]},
-                "properties": props,
+                "properties": point_props,
                 "geometry": geom_pt,
             }
             fh_points.write(json.dumps(feat_pt, separators=(",", ":")) + "\n")
@@ -347,6 +381,7 @@ def build_pmtiles(
     output_path: Path | str,
     *,
     property_columns: Sequence[str] = DEFAULT_TILE_PROPERTIES,
+    point_property_columns: Sequence[str] | None = None,
     tippecanoe_args: Sequence[str] | None = None,
     tippecanoe_bin: str | None = None,
     keep_geojsonl: bool = False,
@@ -361,6 +396,8 @@ def build_pmtiles(
         parquet_path: Input GeoParquet.
         output_path: Output ``.pmtiles`` path.
         property_columns: Columns embedded in tile features.
+        point_property_columns: Columns embedded in the centroid features, if the
+            centroids need fewer than the polygons. Defaults to the same set.
         tippecanoe_args: Extra CLI flags (merged with sensible defaults).
         tippecanoe_bin: Path to tippecanoe binary (auto-detected if None).
         keep_geojsonl: If True, keep intermediate GeoJSONL next to output.
@@ -379,7 +416,12 @@ def build_pmtiles(
 
     geojsonl_path = output_path.with_suffix(".geojsonl")
     print(f"Generating GeoJSON sequences for {parquet_path}...")
-    poly_path, point_path = parquet_to_geojsonseq(parquet_path, geojsonl_path, property_columns=property_columns)
+    poly_path, point_path = parquet_to_geojsonseq(
+        parquet_path,
+        geojsonl_path,
+        property_columns=property_columns,
+        point_property_columns=point_property_columns,
+    )
 
     if tippecanoe_args:
         base_flags = list(tippecanoe_args)
@@ -615,6 +657,7 @@ def build_pmtiles_drainage_year(
         parquet_path,
         output_path,
         property_columns=columns,
+        point_property_columns=DRAINAGE_YEAR_POINT_PROPERTIES,
         **kwargs,
     )
 
@@ -648,5 +691,6 @@ def build_pmtiles_nrt_drainage(
         parquet_path,
         output_path,
         property_columns=columns_absolute,
+        point_property_columns=NRT_POINT_PROPERTIES,
         **kwargs,
     )

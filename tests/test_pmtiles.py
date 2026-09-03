@@ -380,6 +380,45 @@ def test_modes_without_a_stable_split_keep_one_set_of_lake_layers():
         assert "filter" not in layers["lakes-fill"], viz
 
 
+def test_centroids_carry_only_the_properties_they_are_drawn_from():
+    """Property weight on a centroid costs lakes at low zoom, so it must be earned.
+
+    ``--drop-densest-as-needed`` discards features until a tile fits the byte
+    cap, so every property baked onto a centroid is lakes taken off the zoomed
+    out map. Hover is gated at the switch zoom and never reads these, so only
+    the id and the column the mode colours by belong here -- dropping the other
+    five roughly doubled how many lakes survive at z5-z6.
+    """
+    import tempfile
+
+    from water_timeseries.utils.pmtiles_build import DRAINAGE_YEAR_POINT_PROPERTIES, parquet_to_geojsonseq
+
+    with tempfile.TemporaryDirectory() as tmp:
+        poly_path, points_path = parquet_to_geojsonseq(
+            TEST_PARQUET,
+            Path(tmp) / "lakes.geojsonl",
+            property_columns=DEFAULT_TILE_PROPERTIES,
+            point_property_columns=("id_geohash",),
+        )
+        poly = json.loads(poly_path.read_text(encoding="utf-8").splitlines()[0])
+        point = json.loads(points_path.read_text(encoding="utf-8").splitlines()[0])
+
+    assert set(point["properties"]) == {"id_geohash"}
+    # The polygons keep the full set -- they are what hover reads.
+    assert set(poly["properties"]) > set(point["properties"])
+    # The id has to be there or the centroid loses its identity for promoteId.
+    assert "id_geohash" in DRAINAGE_YEAR_POINT_PROPERTIES
+
+
+def test_tile_byte_cap_is_raised_above_the_tippecanoe_default():
+    """The default 500 KB cap emptied the zoomed-out map; 2 MB keeps z6 complete."""
+    from water_timeseries.utils.pmtiles_build import DEFAULT_TIPPECANOE_ARGS
+
+    caps = [f for f in DEFAULT_TIPPECANOE_ARGS if f.startswith("--maximum-tile-bytes")]
+    assert len(caps) == 1, "exactly one tile byte cap, or tippecanoe takes the last one silently"
+    assert int(caps[0].split("=")[1]) > 500_000
+
+
 def test_archive_bakes_low_zoom_centroids_reads_the_build_strategies():
     """The predicate answers from what tippecanoe recorded, not from a flag beside the file."""
     healthy = {
