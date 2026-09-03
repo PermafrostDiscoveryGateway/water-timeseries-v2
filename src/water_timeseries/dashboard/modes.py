@@ -47,6 +47,7 @@ _MODE_SETTING_KEYS = (
     "jrc_dataset_file",
     "precomputed_nrt_dir",
     "nrt_pmtiles_dir",
+    "drained_pmtiles_file",
     "viz_configuration",
     "dw_start_year",
     "dw_end_year",
@@ -66,6 +67,7 @@ _MODE_PATH_KEYS = (
     "jrc_dataset_file",
     "precomputed_nrt_dir",
     "nrt_pmtiles_dir",
+    "drained_pmtiles_file",
 )
 
 #: Paths a mode cannot work without: the tiles it paints and the polygons that
