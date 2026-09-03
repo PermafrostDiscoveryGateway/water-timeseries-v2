@@ -340,7 +340,7 @@ def test_drained_lakes_draw_over_stable_ones():
     tile -- grey lakes covering the drained ones the map exists to show. They
     are separate layers now, and the whole grey layer is drawn first.
     """
-    from water_timeseries.map_utils import build_pmtiles_map
+    from water_timeseries.map_utils import BASE_POINT_RADIUS, build_pmtiles_map
     from water_timeseries.utils.map_styles.pmtiles import DRAINED_LAKE_FILTER, STABLE_LAKE_FILTER
 
     m = build_pmtiles_map(
@@ -356,12 +356,110 @@ def test_drained_lakes_draw_over_stable_ones():
         assert layers[stable]["filter"] == STABLE_LAKE_FILTER
         assert layers[drained]["filter"] == DRAINED_LAKE_FILTER
 
-    # Neutral grey, and the same geometry treatment either side of the switch, so
-    # a lake does not change size or gain an outline as the handoff happens.
+    # Neutral grey, and the same handoff zoom either side of the switch, so a
+    # lake does not change treatment as the handoff happens. The grey dots are
+    # the ground, so they stay on the smaller base ramp; the drained ones are
+    # the figure and take the larger drained size (see below).
     assert layers["lakes-stable-fill"]["paint"]["fill-color"] == "#bdbdbd"
-    assert layers["lakes-stable-points"]["paint"]["circle-radius"] == layers["lakes-points"]["paint"]["circle-radius"]
+    assert layers["lakes-stable-points"]["paint"]["circle-radius"] == BASE_POINT_RADIUS
     assert layers["lakes-stable-points"]["maxzoom"] == layers["lakes-points"]["maxzoom"]
     assert layers["lakes-stable-fill"].get("minzoom") == layers["lakes-fill"].get("minzoom")
+
+
+def test_drained_dots_are_the_same_size_in_historical_and_nrt():
+    """A drained lake is the figure of both maps, so it is the same dot in both.
+
+    Historical drained lakes used to inherit the base-lake ramp the NRT overlay
+    is deliberately bigger than, so the same lake came out a smaller dot in
+    historical than under an NRT month -- the two ramps were written out
+    separately and drifted.
+    """
+    from water_timeseries.map_utils import BASE_POINT_RADIUS, DRAINED_POINT_RADIUS, build_pmtiles_map
+
+    historical = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="drainage_year",
+        base_has_centroids=True,
+        historical_drained_tiles_url="http://localhost:1/drained.pmtiles",
+    )
+    nrt = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="nrt_drainage",
+        base_has_centroids=True,
+        nrt_monthly_tiles_url="http://localhost:1/nrt_2026-07_drainage.pmtiles",
+    )
+
+    historical_drained = _style_layers(historical.get_root().render(), "lakes-points")["lakes-points"]
+    nrt_layers = _style_layers(nrt.get_root().render(), "nrt-drained-points")
+
+    assert historical_drained["paint"]["circle-radius"] == DRAINED_POINT_RADIUS
+    assert nrt_layers["nrt-drained-points"]["paint"]["circle-radius"] == DRAINED_POINT_RADIUS
+    # The lakes underneath either overlay are the ground, and stay smaller.
+    assert nrt_layers["lakes-points"]["paint"]["circle-radius"] == BASE_POINT_RADIUS
+    assert DRAINED_POINT_RADIUS[-1] > BASE_POINT_RADIUS[-1], "drained dots must not be the smaller mark"
+
+
+def test_every_centroid_dot_carries_the_same_ring():
+    """One ring treatment across every dot, whichever mode drew it.
+
+    The polygon layers outline a lake one step darker than its own fill, which
+    keeps touching lakes apart at high zoom but reads as nothing on a dot a few
+    pixels across. Historical mode's dots overrode that with a near-black ring;
+    the NRT overlay's dots kept inheriting the polygon outline colour, so the
+    same lake was ringed two different ways either side of a mode switch.
+    """
+    from water_timeseries.map_utils import (
+        BASE_POINT_STROKE_WIDTH,
+        CENTROID_RING_COLOR,
+        DRAINED_POINT_STROKE_WIDTH,
+        build_pmtiles_map,
+    )
+
+    historical = _style_layers(
+        build_pmtiles_map(
+            "http://localhost:1/lakes.pmtiles",
+            viz_configuration_name="drainage_year",
+            base_has_centroids=True,
+            historical_drained_tiles_url="http://localhost:1/drained.pmtiles",
+        )
+        .get_root()
+        .render(),
+        "lakes-points",
+    )
+    nrt = _style_layers(
+        build_pmtiles_map(
+            "http://localhost:1/lakes.pmtiles",
+            viz_configuration_name="nrt_drainage",
+            base_has_centroids=True,
+            nrt_monthly_tiles_url="http://localhost:1/nrt_2026-07_drainage.pmtiles",
+        )
+        .get_root()
+        .render(),
+        "nrt-drained-points",
+    )
+
+    dots = (
+        historical["lakes-points"],
+        historical["lakes-stable-points"],
+        nrt["lakes-points"],
+        nrt["nrt-drained-points"],
+    )
+    for dot in dots:
+        paint = dot["paint"]
+        assert paint["circle-stroke-color"] == CENTROID_RING_COLOR, dot["id"]
+        # A muted dot must not come back as a hard outline, so the ring fades
+        # with whatever opacity its own layer paints the dot at.
+        assert paint["circle-stroke-opacity"] == paint["circle-opacity"], dot["id"]
+
+    # Ring weight follows the dot size, so a drained dot is a bigger dot rather
+    # than a differently-proportioned one.
+    for layer_id, width in (
+        ("lakes-points", DRAINED_POINT_STROKE_WIDTH),
+        ("lakes-stable-points", BASE_POINT_STROKE_WIDTH),
+    ):
+        assert historical[layer_id]["paint"]["circle-stroke-width"] == width, layer_id
+    assert nrt["nrt-drained-points"]["paint"]["circle-stroke-width"] == DRAINED_POINT_STROKE_WIDTH
+    assert nrt["lakes-points"]["paint"]["circle-stroke-width"] == BASE_POINT_STROKE_WIDTH
 
 
 def test_modes_without_a_stable_split_keep_one_set_of_lake_layers():
