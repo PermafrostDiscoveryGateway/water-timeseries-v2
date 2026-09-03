@@ -143,33 +143,54 @@ layers derive their `minzoom`/`maxzoom` from it. Both layers are baked
 that band is a one-line style change; moving it further needs every archive rebuilt
 (~7 minutes for all months) or the map draws nothing at the uncovered zooms.
 
-### Archives that predate the centroid bake
+### Rebuilding a base archive
 
-The switch only applies to archives that actually hold centroids below it, and the
-**base** archives do not. Both were built before `_write_features` stamped
-per-feature zoom ranges, so every centroid was baked at every zoom with the
-tileset's maxzoom of 14 and tippecanoe's default drop rate of 2.5 per level thinned
-them by ~2.5^14 — `data/DW_historicalbp_..._v4.pmtiles` records 4,026,306 centroids
-in `tilestats` and a `dropped_by_rate` of 4,026,295 at z0, leaving one or two dots
-per tile. They bake polygons down to z0 instead, which is what kept them looking
-right until the polygons were gated at the switch.
+Both base archives were rebuilt on 2026-08-27 and now bake real centroids below the
+switch. Before that they did not, and the map went blank when zoomed out: they were
+built before `_write_features` stamped per-feature zoom ranges, so every centroid
+was baked at every zoom with the tileset's maxzoom of 14, and tippecanoe's default
+drop rate of 2.5 per level thinned them by ~2.5^14 — 4,026,306 centroids in
+`tilestats` against a `dropped_by_rate` of 4,026,295 at z0, one or two dots per
+tile. The previous archives are kept alongside as `*.pre-centroids.pmtiles`.
 
-Nothing needs configuring for this: `archive_bakes_low_zoom_centroids` reads it out
-of each archive's own tippecanoe metadata, and `map_viewer` / `pmtiles_viewer` gate
-the polygons only when the answer is yes. An archive that says no gets its polygons
-drawn at every zoom, as it did before the handoff existed.
+Nothing needs configuring either way: `archive_bakes_low_zoom_centroids` reads the
+answer out of each archive's own tippecanoe metadata, and `map_viewer` /
+`pmtiles_viewer` gate the polygons only when it is yes. An archive that says no
+gets its polygons drawn at every zoom, as it did before the handoff existed, so an
+old archive still renders.
 
-To give the base archives real centroids — the pan-arctic dot view NRT mode has —
-rebuild them with the current builder; no code change is needed, and the style
-starts using them on the next run. Budget hours, not minutes: 4M lakes, a 2.8 GB
-parquet in and a ~2.7 GB archive out, and the shipped one was built on the isipd
-server rather than a laptop. To confirm a rebuild worked:
+To rebuild one, run the builder that matches its tile properties — mixing them up
+silently drops the columns the viz styles on:
+
+```bash
+# Historical (drainage_year): date_break, date_break_year, water_change_*, *_median
+uv run python -c "
+from water_timeseries.utils.pmtiles_build import build_pmtiles_drainage_year
+build_pmtiles_drainage_year(
+    'data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet',
+    'data/rebuild.pmtiles')"
+
+# NRT (nrt_drainage): date, drainage_confidence, water_*_absolute
+uv run python -c "
+from water_timeseries.utils.pmtiles_build import build_pmtiles_nrt_drainage
+build_pmtiles_nrt_drainage(
+    'data/DW_NRT/.../DW_NRT_2026-06_run2025-06-25_allGeoms_v3_repartitioned.parquet',
+    'data/rebuild.pmtiles')"
+```
+
+Each takes ~30 minutes on a laptop for 4M lakes (~6 min of that exporting GeoJSONL,
+the rest tippecanoe) and needs ~15 GB of scratch space on top of the ~3 GB result.
+Build to a new path, check it, then swap it in — the dashboard keeps serving the
+old one meanwhile:
 
 ```bash
 uv run python -c "
 from water_timeseries.utils.pmtiles_reader import read_pmtiles_metadata
 from water_timeseries.utils.pmtiles_build import archive_bakes_low_zoom_centroids
 print(archive_bakes_low_zoom_centroids(read_pmtiles_metadata('<archive>.pmtiles')))"
+
+# and that each zoom draws lakes exactly one way (z0-6 points, z7-9 both, z10+ polys)
+tippecanoe-decode <archive>.pmtiles <z> <x> <y> | grep -o '"layer": "[a-z_]*"' | sort | uniq -c
 ```
 
 ## 5. Verify

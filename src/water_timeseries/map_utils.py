@@ -32,6 +32,11 @@ from water_timeseries.utils.visualization import (
     get_legend_html_nrt_drainage,
 )
 
+# Exponent the base centroids' opacity is raised to, relative to the fill opacity
+# of the polygons they stand in for (see base_points_layer in build_pmtiles_map).
+# Below 1 it brightens; the smaller it is the harder the faint end is lifted.
+CENTROID_OPACITY_EXPONENT = 1 / 3
+
 
 class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
     """PMTilesMapLibreLayer with a fix for the GL layer drifting away from the basemap.
@@ -660,6 +665,23 @@ def build_pmtiles_map(
         },
     }
 
+    # A dot covers a few pixels where a polygon covers hundreds, so the fill
+    # opacity each viz mode picked -- tuned as a wash of colour over an area --
+    # does not survive the change of mark: drainage_year paints stable lakes at
+    # 0.05, a legible tint across a lake and nothing at all on a 2px circle.
+    #
+    # A root curve rather than a multiplier, because the modes start from very
+    # different places and a single factor big enough for 0.05 pins everything
+    # else at fully opaque -- which would cost the nrt_drainage base lakes their
+    # whole job of staying muted under the drained overlay. A root lifts the
+    # faint end hard, leaves the opaque end nearly alone, never exceeds 1, and is
+    # monotonic, so every mode keeps its own ordering:
+    #
+    #   drainage_year  stable 0.05 -> 0.37   drained 0.20 -> 0.58
+    #   nrt_drainage   base   0.35 -> 0.70   (overlay stays at 0.85, still the figure)
+    #   colored_historical /generic_water 0.70 -> 0.89
+    circle_opacity = ["^", fill_opacity, CENTROID_OPACITY_EXPONENT]
+
     # Centroids below the switch zoom, where the base tileset has no polygons
     # and a lake polygon would be sub-pixel anyway. maxzoom is exclusive and the
     # polygon layers' minzoom is inclusive, so the shared POINT_POLY_SWITCH_ZOOM
@@ -675,10 +697,18 @@ def build_pmtiles_map(
         "maxzoom": POINT_POLY_SWITCH_ZOOM,
         "paint": {
             "circle-color": fill_color,
-            "circle-opacity": fill_opacity,
+            "circle-opacity": circle_opacity,
             # Ramp up to the last zoom the circles are drawn at, so the dots are
             # at their largest just before the polygons take over.
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 0.6, POINT_POLY_SWITCH_ZOOM - 1, 2.5],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.2, POINT_POLY_SWITCH_ZOOM - 1, 3.0],
+            # A dark ring, the same trick the selection highlight uses: the dot's
+            # own colour carries it on Dark Matter, and the ring is what separates
+            # it from the mid-tone clutter of the satellite and TCVIS basemaps,
+            # where an unringed dot in lake colours disappears. Tracks the fill so
+            # a muted dot does not get a hard outline.
+            "circle-stroke-color": "#1a1a1a",
+            "circle-stroke-opacity": circle_opacity,
+            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 0, 0.4, POINT_POLY_SWITCH_ZOOM - 1, 0.9],
         },
     }
 

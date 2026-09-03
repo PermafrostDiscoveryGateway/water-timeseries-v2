@@ -140,6 +140,11 @@
     // Largest dots at the last zoom before the polygons take over.
     const dotTopZoom = hasCentroids ? switchZoom - 1 : 5;
 
+    // The lake layers actually in the style right now. Which one is drawing
+    // depends on the zoom and on whether the archive bakes centroids at all, so
+    // anything asking "are there lakes on screen" has to ask about both.
+    const drawnLakeLayers = () => ["lakes-fill", "lakes-points"].filter(id => map.getLayer(id));
+
     //  1. If NetChange_perc is a number  → historical colour ramp (red→blue)
     //  2. Else if date_break_year is present → drainage_year colour ramp
     //  3. Otherwise                           → neutral grey
@@ -402,7 +407,9 @@
 
     map.on("idle", () => {
       if (CONFIG.show_main_layer !== false) {
-        const features = map.queryRenderedFeatures({ layers: ["lakes-fill"] });
+        // Below the switch zoom the lakes are drawn as centroids, so asking only
+        // about the polygons reports "no tiles" over a screen full of dots.
+        const features = map.queryRenderedFeatures({ layers: drawnLakeLayers() });
         if (!features.length) {
           showError(
             "No lake tiles in view. Check that PMTiles is reachable at " + pmtilesHttpUrl
@@ -519,7 +526,7 @@
 
     // After tiles load, inspect actual rendered features and correct the legend.
     map.on("idle", function detectDataType() {
-      const features = map.queryRenderedFeatures({ layers: interactiveLayers.length ? interactiveLayers : ["lakes-fill"] });
+      const features = map.queryRenderedFeatures({ layers: drawnLakeLayers() });
       if (!features.length) return;
       const props = features[0].properties || {};
       const hasNetChange = typeof props["NetChange_perc"] === "number";

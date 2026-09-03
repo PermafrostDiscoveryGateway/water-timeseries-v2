@@ -290,6 +290,48 @@ def test_base_polygons_cover_every_zoom_when_the_archive_has_no_centroids(viz_co
         assert "minzoom" not in layers[layer_id], f"{layer_id} still gated at the switch zoom"
 
 
+@pytest.mark.parametrize(
+    "viz_configuration_name",
+    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+)
+def test_centroids_are_drawn_more_opaque_than_the_polygons_they_replace(viz_configuration_name):
+    """A dot painted at the polygon's fill opacity is invisible.
+
+    Opacity that reads as a tint across a whole lake is nothing on a 2px circle:
+    drainage_year paints stable lakes at 0.05, which left the zoomed-out map
+    looking empty on every basemap but Dark Matter. The circles scale that up
+    instead of picking their own number, so each mode keeps its own emphasis,
+    and they take a dark ring so they survive a bright or busy basemap too.
+
+    A root curve rather than a multiplier: see the comment in
+    ``build_pmtiles_map``. One factor large enough to rescue 0.05 pins every
+    other mode at fully opaque, which costs the nrt_drainage base lakes their job
+    of staying muted under the drained overlay.
+    """
+    from water_timeseries.map_utils import CENTROID_OPACITY_EXPONENT, build_pmtiles_map
+
+    assert 0 < CENTROID_OPACITY_EXPONENT < 1, "an exponent >= 1 would dim the dots, not lift them"
+
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name=viz_configuration_name,
+        base_has_centroids=True,
+    )
+    layers = _style_layers(m.get_root().render(), "lakes-points")
+    points_paint = layers["lakes-points"]["paint"]
+    fill_opacity = layers["lakes-fill"]["paint"]["fill-opacity"]
+
+    assert points_paint["circle-opacity"] == ["^", fill_opacity, CENTROID_OPACITY_EXPONENT]
+    # Modes with a constant opacity can be checked outright: brighter than the
+    # polygons, still in range, and never pinned to fully opaque.
+    if isinstance(fill_opacity, int | float):
+        assert fill_opacity < fill_opacity**CENTROID_OPACITY_EXPONENT < 1
+    # The ring fades with the dot, so a deliberately muted lake does not come
+    # back as a hard outline.
+    assert points_paint["circle-stroke-opacity"] == points_paint["circle-opacity"]
+    assert points_paint["circle-stroke-width"]
+
+
 def test_archive_bakes_low_zoom_centroids_reads_the_build_strategies():
     """The predicate answers from what tippecanoe recorded, not from a flag beside the file."""
     healthy = {
