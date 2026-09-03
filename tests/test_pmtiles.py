@@ -651,6 +651,46 @@ def test_build_pmtiles_map_hide_stable_lakes_hides_base_layers():
         assert hidden[layer_id].get("layout", {}).get("visibility") != "none", layer_id
 
 
+def test_build_pmtiles_map_hide_stable_lakes_with_drained_month():
+    """The toggle must hide every other lake while a month's drained overlay is on.
+
+    With ``drained_ids`` set, the drainage_year branch is skipped (it requires
+    ``not drained_ids``), so there is no separate stable layer to drop: the base
+    layers carry every other lake in one flat "Other lakes" blue. The toggle
+    leaves the month's drained lakes alone on the map. Switched off, not zeroed,
+    so the hidden lakes stop answering queryRenderedFeatures.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    def build(hide: bool):
+        m = build_pmtiles_map(
+            "http://localhost:1/lakes.pmtiles",
+            viz_configuration_name="drainage_year",
+            drained_ids=["c2b25p", "c2b25q"],
+            hide_stable_lakes=hide,
+        )
+        style = next(child for child in m._children.values() if hasattr(child, "style")).style
+        return m, {layer["id"]: layer for layer in style["layers"]}
+
+    _, shown = build(False)
+    hidden_map, hidden = build(True)
+
+    for layer_id in ("lakes-fill", "lakes-line"):
+        assert "layout" not in shown[layer_id], layer_id
+        assert hidden[layer_id]["layout"]["visibility"] == "none", layer_id
+
+    # The month's drained lakes stay visible either way, and stay hoverable:
+    # lakes-fill is the tooltip's usual layer and is switched off here.
+    for layer_id in ("lakes-fill-drained", "lakes-line-drained"):
+        assert hidden[layer_id].get("layout", {}).get("visibility") != "none", layer_id
+    tooltip = next(
+        child
+        for child in hidden_map.get_root().render().splitlines()
+        if "filterLayers_" in child and "lakes-fill" in child
+    )
+    assert "lakes-fill-drained" in tooltip
+
+
 def test_pmtiles_server_range_requests(tmp_path):
     pmtiles = tmp_path / "test.pmtiles"
     pmtiles.write_bytes(b"0" * 1000)
