@@ -1546,7 +1546,18 @@ def create_app(
     # Jump to the drainage overview zoom only when the toggle flips on,
     # not on every rerun (would fight a restored or user-panned view).
     drained_just_enabled = show_drained and not st.session_state.get("_prev_show_drained", False)
+    drained_just_disabled = not show_drained and st.session_state.get("_prev_show_drained", False)
     st.session_state["_prev_show_drained"] = show_drained
+    # The drainage overlay is about the drained lakes, so hide the stable ones
+    # with it, then put the toggle back where the user had it once the overlay
+    # goes away. Seeded here rather than in the fragment below so each fires
+    # once on the flip -- the user can still switch stable lakes back on while
+    # the overlay is up.
+    if drained_just_enabled:
+        st.session_state["_hide_stable_before_drained"] = bool(st.session_state.get("toggle_hide_stable_lakes", False))
+        st.session_state["toggle_hide_stable_lakes"] = True
+    elif drained_just_disabled:
+        st.session_state["toggle_hide_stable_lakes"] = bool(st.session_state.pop("_hide_stable_before_drained", False))
     drained_breaks = None
     drained_label = None
 
