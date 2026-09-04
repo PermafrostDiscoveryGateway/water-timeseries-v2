@@ -576,6 +576,13 @@ def build_pmtiles_map(
             "post_break_median": "Lake area after break [ha]",
             "water_change_ha": "Change of water area [ha]",
             "water_change_perc": "Change of water area [%]",
+            # Carried by the base tiles, so these are what a stable lake hovers --
+            # it is in no overlay and has no break columns to show. Same labels
+            # the nrt_drainage aliases give them, since it is the same archive.
+            "Area_start_ha": "Lake area year 2000 [ha]",
+            "Area_end_ha": "Lake area year 2020 [ha]",
+            "NetChange_ha": "Net change [ha]",
+            "NetChange_perc": "Net change [%]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(
             column_aliases=aliases,

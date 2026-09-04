@@ -211,6 +211,18 @@ def parse_args():
         ),
     )
     parser.add_argument(
+        "--drained-pmtiles-file",
+        type=str,
+        default=None,
+        help=(
+            "Historical drained-lakes overlay tileset built by "
+            "`build_pmtiles_historical_drained`. Defaults to `<pmtiles_file>_drained.pmtiles` "
+            "beside the base archive; pass it here when the two do not sit together, as with a "
+            "base archive shared between modes. Without it drainage_year has to filter the base "
+            "archive on `date_break_year`, which a shared base archive does not carry."
+        ),
+    )
+    parser.add_argument(
         "--logfile",
         type=str,
         default=None,
@@ -374,6 +386,18 @@ def main(
         candidate = historical_drained_tiles_path(pmtiles_file)
         if candidate.is_file():
             drained_pmtiles_file = candidate
+        elif viz_configuration == "drainage_year":
+            # Without the overlay, drainage_year falls back to filtering the base
+            # archive on `date_break_year` -- which a base archive shared between
+            # modes does not carry, so nothing matches and every lake renders as
+            # a stable grey dot under a "Drainage Year" legend. Say so: the map
+            # still draws, so nothing else here would report it.
+            logger.warning(
+                f"No historical drained-lakes tileset at {candidate}, and none named by "
+                "drained_pmtiles_file. Drained lakes can only be coloured from that overlay when "
+                "the base archive carries geometry alone -- set drained_pmtiles_file, or build the "
+                "overlay beside the base archive (build_pmtiles_historical_drained)."
+            )
     if drained_pmtiles_file:
         logger.info(f"Historical drained-lakes tileset: {drained_pmtiles_file}")
 
@@ -416,6 +440,7 @@ if __name__ == "__main__":
         pmtiles_url=args.pmtiles_url,
         config_file=args.config_file,
         nrt_pmtiles_dir=args.nrt_pmtiles_dir,
+        drained_pmtiles_file=args.drained_pmtiles_file,
         logfile=args.logfile,
         verbose=args.verbose,
     )

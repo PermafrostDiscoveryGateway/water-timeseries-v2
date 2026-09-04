@@ -81,6 +81,38 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
     "lakes",
 )
 
+# Properties baked onto the shared base archive's polygons. Historical and NRT
+# cover the same lake table with the same geometry, so a base archive per mode is
+# the same 4M polygons baked twice over; what the shared one keeps is the subset
+# that is true of a lake regardless of mode or month.
+#
+# Neither mode *styles* from these -- both paint the base lakes a flat grey
+# (``get_style_pmtiles_stable_lakes``) -- but they are the last thing a stable lake
+# can hover, and for many of them the only thing. Historical mode's overlay holds
+# drained lakes only, so a stable lake is in no overlay at all there; NRT's monthly
+# archive also carries every lake its run scored (``NRT_SCORED_TILE_PROPERTIES``),
+# but a run scores only part of the table (45.8% for 2026-06, 75.2% for 2026-07), so
+# the rest still land here. Stripping the base to the id alone left millions of lakes
+# with an empty popup. The four area/change columns are populated for 100% of stable
+# lakes and describe the lake itself, not a month, which is what makes them safe to
+# share; per-month values are not, and stay in the monthly archives (see
+# NRT_MONTHLY_TILE_PROPERTIES and NRT_SCORED_TILE_PROPERTIES).
+#
+# ``date_break_year`` rides along because ``STABLE_LAKE_FILTER`` tests it to tell
+# the two layers apart, and it is null for all 4,016,467 stable lakes -- nulls are
+# dropped when a tile is baked, so it costs bytes on the ~9,800 drained lakes and
+# nothing anywhere else. ``date_break`` is deliberately NOT here: it is a datetime,
+# so it stringifies to "NaT" rather than dropping, which is 4M features carrying a
+# placeholder the tooltip then has to filter back out.
+SHARED_GEOMETRY_TILE_PROPERTIES: tuple[str, ...] = (*DEFAULT_TILE_PROPERTIES, "date_break_year")
+
+# ...and onto its centroids: the id alone. Hover is gated to the switch zoom and
+# above (``build_pmtiles_map`` passes ``min_zoom=POINT_POLY_SWITCH_ZOOM``), so it
+# never reads a centroid, and every property byte spent down there is a lake
+# ``--drop-densest-as-needed`` takes off the zoomed-out map -- see
+# DRAINAGE_YEAR_POINT_PROPERTIES below.
+SHARED_GEOMETRY_POINT_PROPERTIES: tuple[str, ...] = ("id_geohash",)
+
 # Properties worth baking onto the centroids. They are drawn below
 # POINT_POLY_SWITCH_ZOOM, where hover is gated off, so the only ones that earn
 # their place are the id (identity, and `promoteId` for feature state) and
@@ -679,6 +711,36 @@ def build_pmtiles_drainage_year(
         output_path,
         property_columns=columns,
         point_property_columns=DRAINAGE_YEAR_POINT_PROPERTIES,
+        **kwargs,
+    )
+
+
+def build_pmtiles_shared_geometry(
+    parquet_path: Path | str,
+    output_path: Path | str,
+    **kwargs,
+) -> Path:
+    """Build the one base archive both viz modes render their grey lakes from.
+
+    Historical and NRT describe the same lake table -- same ids, same geometry --
+    so building a base archive per mode bakes those 4M polygons twice for no
+    gain: the only difference is mode-specific properties that nothing reads.
+    The base layers are flat grey in both modes, and a drained lake hovers its
+    overlay (``build_pmtiles_historical_drained`` for the years,
+    ``build_pmtiles_nrt_monthly`` for the months). What the base still has to
+    carry is what a *stable* lake hovers, since those are in no overlay: the
+    mode-agnostic area/change columns, per ``SHARED_GEOMETRY_TILE_PROPERTIES``.
+    Centroids keep the id alone (``SHARED_GEOMETRY_POINT_PROPERTIES``).
+
+    Layer names stay ``lakes``/``lakes_points``, the defaults the styles ask
+    for, so the centroid/polygon handoff at ``POINT_POLY_SWITCH_ZOOM`` is
+    unchanged: point both modes' ``pmtiles_file`` at the result.
+    """
+    return build_pmtiles(
+        parquet_path,
+        output_path,
+        property_columns=SHARED_GEOMETRY_TILE_PROPERTIES,
+        point_property_columns=SHARED_GEOMETRY_POINT_PROPERTIES,
         **kwargs,
     )
 

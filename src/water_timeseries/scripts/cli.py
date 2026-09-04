@@ -35,6 +35,7 @@ from water_timeseries.utils.pmtiles_build import (
     build_pmtiles_drainage_year,
     build_pmtiles_nrt_drainage,
     build_pmtiles_nrt_monthly,
+    build_pmtiles_shared_geometry,
     find_tippecanoe,
 )
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
@@ -100,6 +101,7 @@ def dashboard(
     pmtiles_file: str | None = None,
     pmtiles_url: str | None = None,
     nrt_pmtiles_dir: str | None = None,
+    drained_pmtiles_file: str | None = None,
     port: int | None = None,
     logfile: str | None = None,
     verbose: int = 0,
@@ -127,6 +129,9 @@ viz_configuration: The visualization configuration name for the map viewer.
             - "nrt_drainage": Near-real-time drainage data.
         pmtiles_file: Path to a .pmtiles archive for fast vector-tile rendering.
         pmtiles_url: HTTP(S) URL to a hosted .pmtiles file (e.g. on S3).
+        drained_pmtiles_file: Historical drained-lakes overlay tileset. Defaults to
+            ``<pmtiles_file>_drained.pmtiles`` beside the base archive; name it here
+            when the two do not sit together (as with a shared base archive).
         nrt_pmtiles_dir: Location of the per-month NRT drainage tilesets built by
             ``build-nrt-pmtiles`` (local directory, http(s):// or gs:// prefix).
             Auto-detected from an ``nrt_tiles`` directory next to the .pmtiles
@@ -177,6 +182,7 @@ viz_configuration: The visualization configuration name for the map viewer.
         pmtiles_file=pmtiles_file,
         pmtiles_url=pmtiles_url,
         nrt_pmtiles_dir=nrt_pmtiles_dir,
+        drained_pmtiles_file=drained_pmtiles_file,
         port=port,
         logfile=logfile,
         verbose=verbose,
@@ -204,6 +210,7 @@ viz_configuration: The visualization configuration name for the map viewer.
     pmtiles_file = config_dict.get("pmtiles_file")
     pmtiles_url = config_dict.get("pmtiles_url")
     nrt_pmtiles_dir = config_dict.get("nrt_pmtiles_dir")
+    drained_pmtiles_file = config_dict.get("drained_pmtiles_file")
     port = config_dict.get("port", 8501)
     logfile = config_dict.get("logfile")
     verbose = config_dict.get("verbose", 0)
@@ -255,6 +262,8 @@ viz_configuration: The visualization configuration name for the map viewer.
         script_args.extend(["--config-file", str(config_file)])
     if nrt_pmtiles_dir:
         script_args.extend(["--nrt-pmtiles-dir", str(nrt_pmtiles_dir)])
+    if drained_pmtiles_file:
+        script_args.extend(["--drained-pmtiles-file", str(drained_pmtiles_file)])
     if logfile:
         script_args.extend(["--logfile", logfile])
     if script_args:
@@ -279,6 +288,7 @@ def build_pmtiles(
     output_file: Path | None = None,
     pmtiles_file: Path | None = None,
     viz_configuration: str | None = None,
+    shared_geometry: bool = False,
     keep_geojsonl: bool | None = None,
     logfile: str | None = None,
     verbose: int = 0,
@@ -296,8 +306,14 @@ def build_pmtiles(
     works for both building and serving tiles. A multi-mode config builds one mode
     at a time -- ``--mode`` picks which, defaulting to the config's ``default_mode``.
 
+    ``--shared-geometry`` builds the mode-agnostic base archive instead: geometry
+    and ``id_geohash`` only, which both viz modes point ``pmtiles_file`` at. Use it
+    rather than one base archive per mode -- the modes cover the same lakes with
+    the same geometry, and their drained overlays carry everything hover reads.
+
     Example:
         water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
+        water-timeseries build-pmtiles lakes.parquet data/lake_geometry/lakes.pmtiles --shared-geometry
         water-timeseries build-pmtiles --config-file configs/dashboard_panarctic.yaml
         water-timeseries build-pmtiles --config-file configs/dashboard_panarctic.yaml --mode nrt_drainage
         water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
@@ -312,6 +328,9 @@ def build_pmtiles(
         output_file=str(output_file) if output_file else None,
         pmtiles_file=str(pmtiles_file) if pmtiles_file else None,
         viz_configuration=viz_configuration,
+        # False is the flag's default, not a choice, so it must not override a
+        # config that asked for the shared archive.
+        shared_geometry=shared_geometry or None,
         keep_geojsonl=keep_geojsonl,
         logfile=logfile,
         verbose=verbose,
@@ -343,7 +362,9 @@ def build_pmtiles(
         raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
 
     print(f"Building PMTiles from {vector_file_path} -> {output_file_path}")
-    if viz_config == "drainage_year":
+    if config_dict.get("shared_geometry"):
+        build_pmtiles_shared_geometry(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
+    elif viz_config == "drainage_year":
         build_pmtiles_drainage_year(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
     elif viz_config == "nrt_drainage":
         build_pmtiles_nrt_drainage(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
