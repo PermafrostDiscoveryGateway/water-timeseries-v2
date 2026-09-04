@@ -105,6 +105,7 @@ _MODE_SCOPED_SESSION_KEYS = (
     "show_drained_toggle",
     "_prev_show_drained",
     "toggle_hide_stable_lakes",
+    "_hide_stable_before_drained",
     "nrt_show_high",
     "nrt_show_medium",
     "nrt_show_low",

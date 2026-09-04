@@ -39,6 +39,39 @@ from water_timeseries.utils.visualization import (
 # Below 1 it brightens; the smaller it is the harder the faint end is lifted.
 CENTROID_OPACITY_EXPONENT = 1 / 3
 
+# How big the centroid dots are drawn below the switch zoom, and how heavy a
+# ring they carry. Every ramp runs up to the last zoom the circles are drawn at,
+# so the dots are at their largest just before the polygons take over.
+#
+# Drained lakes are the figure of the map and get the larger pair, the same one
+# either overlay uses: the NRT month's drained tileset and historical mode's
+# drained lakes are the same kind of mark and used to disagree, so the same lake
+# came out a visibly smaller dot in historical than under NRT. Everything else
+# -- the base lakes under the NRT overlay, the grey stable lakes, and the modes
+# that paint every lake alike -- is the ground, and stays on the smaller pair so
+# the drained dots read on top of it.
+#
+# The two stroke ramps hold the ring at about a third of the radius either way,
+# so a drained dot is a bigger dot rather than a differently-proportioned one.
+BASE_POINT_RADIUS = ["interpolate", ["linear"], ["zoom"], 0, 1.2, POINT_POLY_SWITCH_ZOOM - 1, 3.0]
+BASE_POINT_STROKE_WIDTH = ["interpolate", ["linear"], ["zoom"], 0, 0.4, POINT_POLY_SWITCH_ZOOM - 1, 0.9]
+DRAINED_POINT_RADIUS = ["interpolate", ["linear"], ["zoom"], 0, 1.5, POINT_POLY_SWITCH_ZOOM - 1, 4]
+DRAINED_POINT_STROKE_WIDTH = ["interpolate", ["linear"], ["zoom"], 0, 0.5, POINT_POLY_SWITCH_ZOOM - 1, 1.2]
+
+# Every centroid dot is ringed in the same near-black, the same trick the
+# selection highlight uses: the dot's own colour carries it on Dark Matter, and
+# the ring is what separates it from the mid-tone clutter of the satellite and
+# TCVIS basemaps, where an unringed dot in lake colours disappears.
+#
+# The polygon layers instead outline each lake one step darker than its own
+# fill, which is what keeps touching lakes apart at high zoom. That reads as
+# nothing on a dot a few pixels across -- so the dots override it, and did so on
+# the historical side only until the NRT overlay's dots were brought here too.
+# No signal is lost: the confidence a drained lake's outline encodes above the
+# switch (via line-width) is already dropped at dot size, and the ring colour
+# only restated the fill's.
+CENTROID_RING_COLOR = "#1a1a1a"
+
 
 class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
     """PMTilesMapLibreLayer with a fix for the GL layer drifting away from the basemap.
@@ -487,12 +520,16 @@ def build_pmtiles_map(
     # drainage_year branch below); None means one set of layers covers both.
     stable_style: tuple | None = None
 
+    # folium names its built-in base layer after the lowercased tile string, so
+    # the layer control reads "openstreetmap"; add it by hand to spell it out.
     m = leafmap.Map(
         location=center,
         zoom_start=zoom_start,
         min_zoom=min_zoom,
         max_zoom=max_zoom,
+        tiles=None,
     )
+    folium.TileLayer("OpenStreetMap", name="OpenStreetMap", min_zoom=min_zoom, max_zoom=max_zoom).add_to(m)
 
     # Add background map types
     wms_url = "https://maps.awi.de/services/common/permafrost/ows"
@@ -628,8 +665,14 @@ def build_pmtiles_map(
         tile_layer_esriworld.add_to(m)
 
     else:
+        # The drained overlay is listed first (and at all: with "hide stable
+        # lakes" on, lakes-fill is switched off and the month's lakes are the
+        # only thing left to hover). Both layers read the same source layer, so
+        # a drained lake hovers the same table whichever one answers.
         tooltip = PMTilesMapLibreTooltipWithRounding(
-            filter_layers=["lakes-fill"], min_zoom=POINT_POLY_SWITCH_ZOOM, max_zoom=max_zoom
+            filter_layers=["lakes-fill-drained", "lakes-fill"] if drained_ids else ["lakes-fill"],
+            min_zoom=POINT_POLY_SWITCH_ZOOM,
+            max_zoom=max_zoom,
         )
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_generic_water()
         legend = None
@@ -733,6 +776,11 @@ def build_pmtiles_map(
     # so any overlay stays on top of it. Only reaches the style when the archive
     # can back it (see poly_gate above); an unbacked circle layer would draw the
     # handful of dots that survived a rate-dropped build and nothing else.
+    #
+    # With a stable/drained split this layer carries only the drained lakes (see
+    # lake_filter above), so it takes the drained dot size the NRT overlay uses;
+    # the modes with no split paint every lake through it and stay on the base
+    # ramp.
     base_points_layer = {
         "id": "lakes-points",
         "source": drained_source,
@@ -743,17 +791,12 @@ def build_pmtiles_map(
         "paint": {
             "circle-color": fill_color,
             "circle-opacity": circle_opacity,
-            # Ramp up to the last zoom the circles are drawn at, so the dots are
-            # at their largest just before the polygons take over.
-            "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.2, POINT_POLY_SWITCH_ZOOM - 1, 3.0],
-            # A dark ring, the same trick the selection highlight uses: the dot's
-            # own colour carries it on Dark Matter, and the ring is what separates
-            # it from the mid-tone clutter of the satellite and TCVIS basemaps,
-            # where an unringed dot in lake colours disappears. Tracks the fill so
-            # a muted dot does not get a hard outline.
-            "circle-stroke-color": "#1a1a1a",
+            "circle-radius": DRAINED_POINT_RADIUS if stable_style else BASE_POINT_RADIUS,
+            # See CENTROID_RING_COLOR. The ring tracks the fill's opacity so a
+            # deliberately muted dot does not come back as a hard outline.
+            "circle-stroke-color": CENTROID_RING_COLOR,
             "circle-stroke-opacity": circle_opacity,
-            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 0, 0.4, POINT_POLY_SWITCH_ZOOM - 1, 0.9],
+            "circle-stroke-width": DRAINED_POINT_STROKE_WIDTH if stable_style else BASE_POINT_STROKE_WIDTH,
         },
     }
 
@@ -824,9 +867,11 @@ def build_pmtiles_map(
         ]
 
     # The neutral-grey lakes, under everything else. Same geometry, gates and
-    # centroid handling as the coloured layers above -- only the paint and the
-    # filter differ -- so a lake looks the same either side of the switch zoom
-    # whichever of the two layers is drawing it.
+    # centroid handling as the coloured layers above -- only the paint, the dot
+    # size and the filter differ -- so a lake looks the same either side of the
+    # switch zoom whichever of the two layers is drawing it. These are the
+    # ground, so their dots stay on BASE_POINT_RADIUS while the drained ones
+    # above take the larger drained size.
     #
     # "Hide stable lakes" drops them from the style outright rather than painting
     # them transparent: a zero-opacity layer still answers queryRenderedFeatures,
@@ -846,10 +891,10 @@ def build_pmtiles_map(
                     "paint": {
                         "circle-color": stable_fill,
                         "circle-opacity": ["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
-                        "circle-radius": base_points_layer["paint"]["circle-radius"],
-                        "circle-stroke-color": "#1a1a1a",
+                        "circle-radius": BASE_POINT_RADIUS,
+                        "circle-stroke-color": CENTROID_RING_COLOR,
                         "circle-stroke-opacity": ["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
-                        "circle-stroke-width": base_points_layer["paint"]["circle-stroke-width"],
+                        "circle-stroke-width": BASE_POINT_STROKE_WIDTH,
                     },
                 }
             )
@@ -887,6 +932,19 @@ def build_pmtiles_map(
     # base archive is paired with a freshly built overlay.
     lake_points_backed = drained_has_centroids if use_drained_tiles else base_has_centroids
     base_layers = ([base_points_layer] if lake_points_backed else []) + [lakes_fill_layer, lakes_line_layer]
+
+    # With a month's drained overlay on, the viz branches above are skipped (all
+    # of them require `not drained_ids`), so no separate stable layer is built
+    # and the base layers carry every other lake -- stable and drained-in-some-
+    # other-month alike, all in the legend's flat "Other lakes" blue. "Hide
+    # stable lakes" there means leaving the month's drained lakes alone on the
+    # map, so the whole base layer goes. Switched off rather than painted
+    # transparent, like the NRT overlay below: a zero-opacity layer still
+    # answers queryRenderedFeatures, so hidden lakes would keep producing hover
+    # popups. The drained overlay and the selection highlight are unaffected.
+    if hide_stable_lakes and drained_ids:
+        for layer in base_layers:
+            layer["layout"] = {"visibility": "none"}
 
     sources: dict[str, dict] = {}
     if use_drained_tiles:
@@ -934,9 +992,14 @@ def build_pmtiles_map(
             "paint": {
                 "circle-color": drained_fill,
                 "circle-opacity": drained_opacity,
-                "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.5, POINT_POLY_SWITCH_ZOOM - 1, 4],
-                "circle-stroke-color": drained_line,
-                "circle-stroke-width": 0.5,
+                "circle-radius": DRAINED_POINT_RADIUS,
+                # The same ring as historical mode's drained dots, rather than
+                # this overlay's own darker-fill polygon outline -- see
+                # CENTROID_RING_COLOR. `drained_line` still outlines the
+                # polygons above the switch zoom.
+                "circle-stroke-color": CENTROID_RING_COLOR,
+                "circle-stroke-opacity": drained_opacity,
+                "circle-stroke-width": DRAINED_POINT_STROKE_WIDTH,
             },
         }
         nrt_drained_fill_layer = {
