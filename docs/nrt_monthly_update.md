@@ -136,6 +136,42 @@ Order matters: build this *after* step 3. A tileset baked from a month with no
 confidence bakes that absence into its tile properties, and the overlay falls back to
 a flat water-loss gradient. The only fix is rebuilding it.
 
+The zoom where the map switches from centroids to polygons is
+`POINT_POLY_SWITCH_ZOOM` in `utils/pmtiles_build.py` (currently 8), and the style
+layers derive their `minzoom`/`maxzoom` from it. Both layers are baked
+`POINT_POLY_OVERLAP_ZOOMS` levels either side of it, so nudging the switch within
+that band is a one-line style change; moving it further needs every archive rebuilt
+(~7 minutes for all months) or the map draws nothing at the uncovered zooms.
+
+### Archives that predate the centroid bake
+
+The switch only applies to archives that actually hold centroids below it, and the
+**base** archives do not. Both were built before `_write_features` stamped
+per-feature zoom ranges, so every centroid was baked at every zoom with the
+tileset's maxzoom of 14 and tippecanoe's default drop rate of 2.5 per level thinned
+them by ~2.5^14 — `data/DW_historicalbp_..._v4.pmtiles` records 4,026,306 centroids
+in `tilestats` and a `dropped_by_rate` of 4,026,295 at z0, leaving one or two dots
+per tile. They bake polygons down to z0 instead, which is what kept them looking
+right until the polygons were gated at the switch.
+
+Nothing needs configuring for this: `archive_bakes_low_zoom_centroids` reads it out
+of each archive's own tippecanoe metadata, and `map_viewer` / `pmtiles_viewer` gate
+the polygons only when the answer is yes. An archive that says no gets its polygons
+drawn at every zoom, as it did before the handoff existed.
+
+To give the base archives real centroids — the pan-arctic dot view NRT mode has —
+rebuild them with the current builder; no code change is needed, and the style
+starts using them on the next run. Budget hours, not minutes: 4M lakes, a 2.8 GB
+parquet in and a ~2.7 GB archive out, and the shipped one was built on the isipd
+server rather than a laptop. To confirm a rebuild worked:
+
+```bash
+uv run python -c "
+from water_timeseries.utils.pmtiles_reader import read_pmtiles_metadata
+from water_timeseries.utils.pmtiles_build import archive_bakes_low_zoom_centroids
+print(archive_bakes_low_zoom_centroids(read_pmtiles_metadata('<archive>.pmtiles')))"
+```
+
 ## 5. Verify
 
 ```bash

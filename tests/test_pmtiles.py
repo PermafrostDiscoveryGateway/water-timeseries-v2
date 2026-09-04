@@ -203,6 +203,202 @@ def test_build_pmtiles_map_monthly_tiles_layers():
     assert "b7uefy0bvcrc" in fallback_html
 
 
+def _style_layers(html: str, required_layer_id: str) -> dict[str, dict]:
+    """Return the MapLibre style layers, keyed by id, from the block holding ``required_layer_id``.
+
+    The page renders more than one style block, so scan for the one that has the
+    layer under test rather than assuming it comes first.
+    """
+    layers: dict[str, dict] = {}
+    marker = '"layers": '
+    offset = html.find(marker)
+    while offset != -1 and required_layer_id not in layers:
+        try:
+            layer_list, _ = json.JSONDecoder().raw_decode(html[offset + len(marker) :])
+        except json.JSONDecodeError:
+            layer_list = []
+        if isinstance(layer_list, list):
+            layers = {layer["id"]: layer for layer in layer_list if isinstance(layer, dict) and "id" in layer}
+        offset = html.find(marker, offset + 1)
+    assert required_layer_id in layers, f"no style block contained {required_layer_id}"
+    return layers
+
+
+def _assert_single_cover(points: dict, fill: dict, line: dict) -> None:
+    """Every zoom must draw a lake exactly one way -- as a dot or as a polygon."""
+    assert points["maxzoom"] == POINT_POLY_SWITCH_ZOOM
+    assert fill["minzoom"] == POINT_POLY_SWITCH_ZOOM
+    assert line["minzoom"] == POINT_POLY_SWITCH_ZOOM
+
+    # Guards the gap directly rather than trusting the three numbers above to
+    # stay in sync with each other.
+    for zoom in range(TILE_MAX_ZOOM + 1):
+        as_circles = zoom < points["maxzoom"]
+        as_polygons = zoom >= fill["minzoom"]
+        assert as_circles != as_polygons, f"z{zoom} draws lakes {'twice' if as_circles else 'not at all'}"
+
+
+@pytest.mark.parametrize(
+    "viz_configuration_name",
+    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+)
+def test_base_lake_centroid_polygon_handoff_has_no_gap(viz_configuration_name):
+    """Every viz mode draws the base lakes at every zoom, dots below the switch, polygons above.
+
+    The centroid layer used to exist only on the NRT monthly path, so the other
+    modes had nothing to draw below the switch zoom -- invisible only for as
+    long as the shipped tilesets still (wrongly) baked polygons down to z0.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name=viz_configuration_name,
+        base_has_centroids=True,
+    )
+    layers = _style_layers(m.get_root().render(), "lakes-points")
+    _assert_single_cover(layers["lakes-points"], layers["lakes-fill"], layers["lakes-line"])
+
+
+@pytest.mark.parametrize(
+    "viz_configuration_name",
+    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+)
+def test_base_polygons_cover_every_zoom_when_the_archive_has_no_centroids(viz_configuration_name):
+    """An archive with no usable centroid layer must not have its polygons gated.
+
+    The handoff above assumes centroids exist below the switch. Archives built
+    before the per-feature zoom ranges rate-dropped theirs to a couple of dots
+    per tile while baking polygons down to z0, so gating the polygons at the
+    switch blanked those zooms outright -- which is what the shipped pan-arctic
+    base archive did to historical mode.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name=viz_configuration_name,
+        base_has_centroids=False,
+        selected_id="b7uefy0bvcrc",
+    )
+    layers = _style_layers(m.get_root().render(), "lakes-fill")
+
+    assert "lakes-points" not in layers, "circle layer added with no tiles behind it"
+    # Every layer reading the base archive's polygons, including the selection
+    # highlight, has to reach the zooms the polygons are actually baked at.
+    for layer_id in ("lakes-fill", "lakes-line", "lakes-line-selected", "lakes-line-selected-casing"):
+        assert "minzoom" not in layers[layer_id], f"{layer_id} still gated at the switch zoom"
+
+
+def test_archive_bakes_low_zoom_centroids_reads_the_build_strategies():
+    """The predicate answers from what tippecanoe recorded, not from a flag beside the file."""
+    healthy = {
+        "vector_layers": [{"id": "lakes"}, {"id": "lakes_points"}],
+        "strategies": [{} for _ in range(TILE_MAX_ZOOM + 1)],
+    }
+    assert archive_bakes_low_zoom_centroids(healthy)
+
+    # Thinning to fit the tile size limit is the limit doing its job and still
+    # leaves a stipple; thinning by the drop rate is the whole point layer gone.
+    as_needed = {**healthy, "strategies": [{"dropped_as_needed": 3_500_000} for _ in range(TILE_MAX_ZOOM + 1)]}
+    assert archive_bakes_low_zoom_centroids(as_needed)
+
+    by_rate = {**healthy, "strategies": [{"dropped_by_rate": 4_026_295} for _ in range(TILE_MAX_ZOOM + 1)]}
+    assert not archive_bakes_low_zoom_centroids(by_rate)
+
+    # Rate-dropping above the switch says nothing about what is drawn below it.
+    high_only = {
+        **healthy,
+        "strategies": [{} if z < POINT_POLY_SWITCH_ZOOM else {"dropped_by_rate": 10} for z in range(TILE_MAX_ZOOM + 1)],
+    }
+    assert archive_bakes_low_zoom_centroids(high_only)
+
+    assert not archive_bakes_low_zoom_centroids({**healthy, "vector_layers": [{"id": "lakes"}]})
+    assert not archive_bakes_low_zoom_centroids({**healthy, "strategies": None})
+    assert not archive_bakes_low_zoom_centroids({})
+
+    # The NRT monthly overlay names its layers differently.
+    nrt = {
+        "vector_layers": [{"id": "drained"}, {"id": "drained_points"}],
+        "strategies": [{} for _ in range(TILE_MAX_ZOOM + 1)],
+    }
+    assert not archive_bakes_low_zoom_centroids(nrt)
+    assert archive_bakes_low_zoom_centroids(nrt, points_layer="drained_points")
+
+
+def test_shipped_style_archives_are_classified_from_their_own_metadata():
+    """Read a real archive end to end: the checked-in fixtures predate the centroid bake."""
+    metadata = read_pmtiles_metadata(Path(__file__).parent / "data" / "lakes_test.pmtiles")
+
+    assert {layer["id"] for layer in metadata["vector_layers"]} >= {"lakes", "lakes_points"}
+    # A points layer in the metadata is not the same as points in the tiles.
+    assert not archive_bakes_low_zoom_centroids(metadata)
+
+
+def test_hover_gate_starts_where_the_polygons_do():
+    """Hover reads polygon properties, so it must open exactly where they are drawn.
+
+    Its ceiling is the map's, not the tileset's: MapLibre overzooms the
+    TILE_MAX_ZOOM tile instead of dropping its features, so hover stays useful
+    above it.
+    """
+    import re
+
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    m = build_pmtiles_map("http://localhost:1/lakes.pmtiles", viz_configuration_name="drainage_year")
+    html = m.get_root().render()
+
+    gate_min = {int(v) for v in re.findall(r"var minZoom_\w+ = (\d+);", html)}
+    gate_max = {int(v) for v in re.findall(r"var maxZoom_\w+ = (\d+);", html)}
+
+    assert gate_min == {POINT_POLY_SWITCH_ZOOM}, f"hover opens at {gate_min}, polygons at {POINT_POLY_SWITCH_ZOOM}"
+    assert gate_max == {TILE_MAX_ZOOM + 1}, f"hover stops at {gate_max}, map ceiling is {TILE_MAX_ZOOM + 1}"
+
+
+def test_build_stamps_the_same_switch_zoom_it_is_styled_with():
+    """The per-feature zoom ranges baked into the tiles must match the style's gates.
+
+    tippecanoe's ``-L`` layer JSON has no minzoom/maxzoom keys, so this split
+    only exists because ``_write_features`` stamps it onto each feature. If it
+    silently stops being written, the tiles carry both layers at every zoom
+    again and the style's gates are all that stand between the user and dots
+    drawn on top of polygons.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        poly_path, points_path = parquet_to_geojsonseq(TEST_PARQUET, Path(tmp) / "lakes.geojsonl")
+
+        poly = json.loads(poly_path.read_text(encoding="utf-8").splitlines()[0])
+        point = json.loads(points_path.read_text(encoding="utf-8").splitlines()[0])
+
+    poly_zoom, points_zoom = point_poly_zoom_ranges()
+    assert poly["tippecanoe"] == {"minzoom": poly_zoom[0], "maxzoom": poly_zoom[1]}
+    assert point["tippecanoe"] == {"minzoom": points_zoom[0], "maxzoom": points_zoom[1]}
+
+
+def test_baked_zoom_band_lets_the_switch_move_without_a_rebuild():
+    """Both layers exist for a few zooms around the switch, so retuning it is a style change.
+
+    The style draws each zoom exactly one way (see the handoff tests); this band
+    is only about having the data on hand if we decide the dots should give way
+    to polygons a level earlier or later.
+    """
+    poly_zoom, points_zoom = point_poly_zoom_ranges()
+
+    baked_both = set(range(poly_zoom[0], poly_zoom[1] + 1)) & set(range(points_zoom[0], points_zoom[1] + 1))
+    movable = set(
+        range(POINT_POLY_SWITCH_ZOOM - POINT_POLY_OVERLAP_ZOOMS, POINT_POLY_SWITCH_ZOOM + POINT_POLY_OVERLAP_ZOOMS + 1)
+    )
+    assert movable <= baked_both, f"switch cannot move to {sorted(movable - baked_both)} without rebuilding"
+
+    # A switch anywhere in the band still has data on both sides of it.
+    for switch in sorted(movable):
+        assert switch - 1 in range(points_zoom[0], points_zoom[1] + 1), f"no centroids just below z{switch}"
+        assert switch in range(poly_zoom[0], poly_zoom[1] + 1), f"no polygons at z{switch}"
+
+
 def test_nrt_drained_centroid_polygon_handoff_has_no_gap():
     """Circles must stay visible right up to the zoom the polygons take over at.
 
@@ -212,44 +408,19 @@ def test_nrt_drained_centroid_polygon_handoff_has_no_gap():
     fill minzoom 9) leaves z8 with no drained lakes drawn at all.
     """
     from water_timeseries.map_utils import build_pmtiles_map
-    from water_timeseries.utils.pmtiles_build import POINT_POLY_SWITCH_ZOOM
 
     m = build_pmtiles_map(
         "http://localhost:1/lakes.pmtiles",
         viz_configuration_name="nrt_drainage",
         nrt_monthly_tiles_url="http://localhost:1/nrt_2026-07_drainage.pmtiles",
     )
-    html = m.get_root().render()
-
-    # The page renders more than one style block; find the one holding the
-    # drained overlay rather than assuming it comes first.
-    layers = {}
-    marker = '"layers": '
-    offset = html.find(marker)
-    while offset != -1 and "nrt-drained-points" not in layers:
-        try:
-            layer_list, _ = json.JSONDecoder().raw_decode(html[offset + len(marker) :])
-        except json.JSONDecodeError:
-            layer_list = []
-        if isinstance(layer_list, list):
-            layers = {layer["id"]: layer for layer in layer_list if isinstance(layer, dict) and "id" in layer}
-        offset = html.find(marker, offset + 1)
-    assert "nrt-drained-points" in layers, "no style block contained the drained overlay layers"
+    layers = _style_layers(m.get_root().render(), "nrt-drained-points")
 
     points = layers["nrt-drained-points"]
     fill = layers["nrt-drained-fill"]
     line = layers["nrt-drained-line"]
 
-    assert points["maxzoom"] == POINT_POLY_SWITCH_ZOOM
-    assert fill["minzoom"] == POINT_POLY_SWITCH_ZOOM
-    assert line["minzoom"] == POINT_POLY_SWITCH_ZOOM
-
-    # Every zoom must draw the month's drained lakes exactly one way. Guards the
-    # gap directly rather than trusting the three numbers above to stay in sync.
-    for zoom in range(15):
-        as_circles = zoom < points["maxzoom"]
-        as_polygons = zoom >= fill["minzoom"]
-        assert as_circles != as_polygons, f"z{zoom} draws drained lakes {'twice' if as_circles else 'not at all'}"
+    _assert_single_cover(points, fill, line)
 
 
 def test_build_pmtiles_map_hide_stable_lakes_hides_base_layers():
@@ -380,6 +551,12 @@ def test_pmtiles_server_map_page(tmp_path):
         assert resp.status == 200
         assert "maplibregl" in html
         assert server.url_for("lakes.pmtiles") in html
+        # The page gates its circle/polygon layers on the build-side constant,
+        # so the server has to hand it over even when the caller's config omits it.
+        assert f'"point_poly_switch_zoom": {POINT_POLY_SWITCH_ZOOM}' in html
+        # ...and the page only gates on it for archives that bake centroids down
+        # there, which a config that says nothing is not claiming.
+        assert '"base_has_centroids": false' in html
 
 
 def test_pmtiles_server_serves_mounted_archives(tmp_path):
@@ -429,91 +606,3 @@ def test_pmtiles_server_map_page_keeps_config_url(tmp_path):
             html = resp.read().decode("utf-8")
         assert tile_url in html
         assert server.url_for("default.pmtiles") not in html
-
-
-def test_build_stamps_the_same_switch_zoom_it_is_styled_with():
-    """The per-feature zoom ranges baked into the tiles must match the style's gates.
-
-    tippecanoe's ``-L`` layer JSON has no minzoom/maxzoom keys, so this split
-    only exists because ``_write_features`` stamps it onto each feature. If it
-    silently stops being written, the tiles carry both layers at every zoom
-    again and the style's gates are all that stand between the user and dots
-    drawn on top of polygons.
-    """
-    import tempfile
-
-    with tempfile.TemporaryDirectory() as tmp:
-        poly_path, points_path = parquet_to_geojsonseq(TEST_PARQUET, Path(tmp) / "lakes.geojsonl")
-
-        poly = json.loads(poly_path.read_text(encoding="utf-8").splitlines()[0])
-        point = json.loads(points_path.read_text(encoding="utf-8").splitlines()[0])
-
-    poly_zoom, points_zoom = point_poly_zoom_ranges()
-    assert poly["tippecanoe"] == {"minzoom": poly_zoom[0], "maxzoom": poly_zoom[1]}
-    assert point["tippecanoe"] == {"minzoom": points_zoom[0], "maxzoom": points_zoom[1]}
-
-
-def test_baked_zoom_band_lets_the_switch_move_without_a_rebuild():
-    """Both layers exist for a few zooms around the switch, so retuning it is a style change.
-
-    The style draws each zoom exactly one way (see the handoff tests); this band
-    is only about having the data on hand if we decide the dots should give way
-    to polygons a level earlier or later.
-    """
-    poly_zoom, points_zoom = point_poly_zoom_ranges()
-
-    baked_both = set(range(poly_zoom[0], poly_zoom[1] + 1)) & set(range(points_zoom[0], points_zoom[1] + 1))
-    movable = set(
-        range(POINT_POLY_SWITCH_ZOOM - POINT_POLY_OVERLAP_ZOOMS, POINT_POLY_SWITCH_ZOOM + POINT_POLY_OVERLAP_ZOOMS + 1)
-    )
-    assert movable <= baked_both, f"switch cannot move to {sorted(movable - baked_both)} without rebuilding"
-
-    # A switch anywhere in the band still has data on both sides of it.
-    for switch in sorted(movable):
-        assert switch - 1 in range(points_zoom[0], points_zoom[1] + 1), f"no centroids just below z{switch}"
-        assert switch in range(poly_zoom[0], poly_zoom[1] + 1), f"no polygons at z{switch}"
-
-
-def test_archive_bakes_low_zoom_centroids_reads_the_build_strategies():
-    """The predicate answers from what tippecanoe recorded, not from a flag beside the file."""
-    healthy = {
-        "vector_layers": [{"id": "lakes"}, {"id": "lakes_points"}],
-        "strategies": [{} for _ in range(TILE_MAX_ZOOM + 1)],
-    }
-    assert archive_bakes_low_zoom_centroids(healthy)
-
-    # Thinning to fit the tile size limit is the limit doing its job and still
-    # leaves a stipple; thinning by the drop rate is the whole point layer gone.
-    as_needed = {**healthy, "strategies": [{"dropped_as_needed": 3_500_000} for _ in range(TILE_MAX_ZOOM + 1)]}
-    assert archive_bakes_low_zoom_centroids(as_needed)
-
-    by_rate = {**healthy, "strategies": [{"dropped_by_rate": 4_026_295} for _ in range(TILE_MAX_ZOOM + 1)]}
-    assert not archive_bakes_low_zoom_centroids(by_rate)
-
-    # Rate-dropping above the switch says nothing about what is drawn below it.
-    high_only = {
-        **healthy,
-        "strategies": [{} if z < POINT_POLY_SWITCH_ZOOM else {"dropped_by_rate": 10} for z in range(TILE_MAX_ZOOM + 1)],
-    }
-    assert archive_bakes_low_zoom_centroids(high_only)
-
-    assert not archive_bakes_low_zoom_centroids({**healthy, "vector_layers": [{"id": "lakes"}]})
-    assert not archive_bakes_low_zoom_centroids({**healthy, "strategies": None})
-    assert not archive_bakes_low_zoom_centroids({})
-
-    # The NRT monthly overlay names its layers differently.
-    nrt = {
-        "vector_layers": [{"id": "drained"}, {"id": "drained_points"}],
-        "strategies": [{} for _ in range(TILE_MAX_ZOOM + 1)],
-    }
-    assert not archive_bakes_low_zoom_centroids(nrt)
-    assert archive_bakes_low_zoom_centroids(nrt, points_layer="drained_points")
-
-
-def test_shipped_style_archives_are_classified_from_their_own_metadata():
-    """Read a real archive end to end: the checked-in fixtures predate the centroid bake."""
-    metadata = read_pmtiles_metadata(Path(__file__).parent / "data" / "lakes_test.pmtiles")
-
-    assert {layer["id"] for layer in metadata["vector_layers"]} >= {"lakes", "lakes_points"}
-    # A points layer in the metadata is not the same as points in the tiles.
-    assert not archive_bakes_low_zoom_centroids(metadata)

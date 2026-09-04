@@ -122,6 +122,24 @@
     const viz = CONFIG.viz_configuration || "colored_historical";
     const sourceLayer = CONFIG.source_layer || "lakes";
 
+    // Zoom the tileset switches from baked centroids to baked polygons, injected
+    // from POINT_POLY_SWITCH_ZOOM (pmtiles_build.py) -- the same number the
+    // archive was built with. maxzoom is exclusive and minzoom inclusive, so the
+    // one value covers every zoom exactly once.
+    //
+    // Only gate on it when the server says this archive actually bakes centroids
+    // down there (archive_bakes_low_zoom_centroids); archives built before the
+    // per-feature zoom ranges rate-dropped their point layer to a couple of dots
+    // per tile, so gating their polygons would leave the low zooms empty. Those
+    // bake polygons all the way down, so ungated is exactly right for them --
+    // which is also the safe reading of a config too old to carry either key.
+    const switchZoom = CONFIG.point_poly_switch_zoom;
+    const hasCentroids = Number.isInteger(switchZoom) && CONFIG.base_has_centroids === true;
+    const pointsZoomRange = hasCentroids ? { maxzoom: switchZoom } : {};
+    const polygonZoomRange = hasCentroids ? { minzoom: switchZoom } : {};
+    // Largest dots at the last zoom before the polygons take over.
+    const dotTopZoom = hasCentroids ? switchZoom - 1 : 5;
+
     //  1. If NetChange_perc is a number  → historical colour ramp (red→blue)
     //  2. Else if date_break_year is present → drainage_year colour ramp
     //  3. Otherwise                           → neutral grey
@@ -220,16 +238,19 @@
       { id: "basemap-darkmatter", type: "raster", source: "darkmatter", layout: { visibility: defaultBasemap === "darkmatter" ? "visible" : "none" } },
       { id: "basemap-esriworld", type: "raster", source: "esriworld", layout: { visibility: defaultBasemap === "esriworld" ? "visible" : "none" } },
       { id: "basemap-tcvis", type: "raster", source: "tcvis", layout: { visibility: defaultBasemap === "tcvis" ? "visible" : "none" } },
-      {
+      // Spread in only when backed by tiles, so an unbacked archive draws its
+      // polygons at every zoom rather than a handful of surviving dots.
+      ...(hasCentroids ? [{
         id: "lakes-points",
         type: "circle",
         source: "lakes",
         "source-layer": "lakes_points",
+        ...pointsZoomRange,
         paint: {
           "circle-radius": [
             "interpolate", ["linear"], ["zoom"],
             0, 1.5,
-            5, 3
+            dotTopZoom, 3
           ],
           "circle-color": lakePaint["fill-color"],
           "circle-opacity": lakePaint["fill-opacity"],
@@ -239,12 +260,13 @@
         layout: {
           visibility: CONFIG.show_main_layer !== false ? "visible" : "none"
         }
-      },
+      }] : []),
       {
         id: "lakes-fill",
         type: "fill",
         source: "lakes",
         "source-layer": sourceLayer,
+        ...polygonZoomRange,
         paint: lakePaint,
         layout: {
           visibility: CONFIG.show_main_layer !== false ? "visible" : "none"
@@ -255,6 +277,7 @@
         type: "line",
         source: "lakes",
         "source-layer": sourceLayer,
+        ...polygonZoomRange,
         paint: {
           "line-color": lakeOutlineColor,
           "line-width": 1.5,
@@ -441,7 +464,10 @@
 
     const interactiveLayers = [];
     if (CONFIG.show_main_layer !== false) {
-      interactiveLayers.push("lakes-fill", "lakes-points");
+      interactiveLayers.push("lakes-fill");
+      // Only when the circle layer was added (see hasCentroids); MapLibre throws
+      // on a handler bound to a layer id its style does not have.
+      if (hasCentroids) interactiveLayers.push("lakes-points");
     }
 
     interactiveLayers.forEach(layer => {
@@ -493,7 +519,7 @@
 
     // After tiles load, inspect actual rendered features and correct the legend.
     map.on("idle", function detectDataType() {
-      const features = map.queryRenderedFeatures({ layers: ["lakes-fill", "lakes-points"] });
+      const features = map.queryRenderedFeatures({ layers: interactiveLayers.length ? interactiveLayers : ["lakes-fill"] });
       if (!features.length) return;
       const props = features[0].properties || {};
       const hasNetChange = typeof props["NetChange_perc"] === "number";
