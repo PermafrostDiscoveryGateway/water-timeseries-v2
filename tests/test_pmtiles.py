@@ -11,9 +11,12 @@ from water_timeseries.utils.pmtiles_build import (
     DEFAULT_TILE_PROPERTIES,
     POINT_POLY_OVERLAP_ZOOMS,
     POINT_POLY_SWITCH_ZOOM,
+    SHARED_GEOMETRY_POINT_PROPERTIES,
+    SHARED_GEOMETRY_TILE_PROPERTIES,
     TILE_MAX_ZOOM,
     archive_bakes_low_zoom_centroids,
     build_pmtiles_nrt_monthly,
+    build_pmtiles_shared_geometry,
     find_tippecanoe,
     nrt_monthly_tiles_filename,
     parquet_to_geojsonseq,
@@ -575,6 +578,74 @@ def test_centroids_carry_only_the_properties_they_are_drawn_from():
     assert set(poly["properties"]) > set(point["properties"])
     # The id has to be there or the centroid loses its identity for promoteId.
     assert "id_geohash" in DRAINAGE_YEAR_POINT_PROPERTIES
+
+
+def test_shared_base_polygons_keep_what_a_stable_lake_hovers():
+    """A stable lake is in no overlay, so the base tile is all it has to hover.
+
+    The overlays hold drained lakes only. Stripping the shared base to the id
+    left 4M stable lakes hovering an empty popup -- the tooltip drops null/"NaT"/
+    "nan" values, so a tile with nothing else on it renders no rows at all. The
+    area/change columns are the fix: populated for every stable lake, and true of
+    the lake rather than of a month, which is what lets one archive serve both
+    modes.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        poly_path, points_path = parquet_to_geojsonseq(
+            TEST_PARQUET,
+            Path(tmp) / "lakes.geojsonl",
+            property_columns=SHARED_GEOMETRY_TILE_PROPERTIES,
+            point_property_columns=SHARED_GEOMETRY_POINT_PROPERTIES,
+        )
+        poly = json.loads(poly_path.read_text(encoding="utf-8").splitlines()[0])
+        point = json.loads(points_path.read_text(encoding="utf-8").splitlines()[0])
+
+    # What the tooltip JS would actually render: it skips null and the placeholder
+    # strings a tileset bakes for missing values.
+    def rendered(props):
+        return {
+            k: v
+            for k, v in props.items()
+            if v is not None and str(v).strip().lower() not in ("", "nat", "nan", "none", "null")
+        }
+
+    shown = rendered(poly["properties"])
+    assert len(shown) > 1, f"a stable lake would hover only {shown}"
+    assert {"Area_start_ha", "Area_end_ha", "NetChange_ha", "NetChange_perc"} <= set(shown)
+
+    # A datetime column would stringify to "NaT" on all 4M features instead of
+    # dropping, so the base deliberately carries the year, not the date.
+    assert "date_break" not in SHARED_GEOMETRY_TILE_PROPERTIES
+    # date_break_year is what STABLE_LAKE_FILTER tests, and it is null (so
+    # dropped) for a stable lake like this one.
+    assert "date_break_year" in SHARED_GEOMETRY_TILE_PROPERTIES
+    assert "date_break_year" not in shown
+
+    # Centroids stay id-only: hover is gated above the switch zoom and never
+    # reads them, while property weight there costs lakes at low zoom.
+    assert set(point["properties"]) == {"id_geohash"}
+
+    # None of this may cost the zoom split the styles rely on.
+    poly_zoom, points_zoom = point_poly_zoom_ranges()
+    assert poly["tippecanoe"] == {"minzoom": poly_zoom[0], "maxzoom": poly_zoom[1]}
+    assert point["tippecanoe"] == {"minzoom": points_zoom[0], "maxzoom": points_zoom[1]}
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_shared_geometry_archive_backs_the_centroid_handoff(tmp_path):
+    """It must name the layers the styles ask for and bake usable centroids.
+
+    Both modes point ``pmtiles_file`` at this one archive, so if it named its
+    layers anything else or lost its centroids to the drop rate, every mode
+    would go blank below the switch zoom at once.
+    """
+    out = build_pmtiles_shared_geometry(TEST_PARQUET, tmp_path / "lakes.pmtiles")
+
+    metadata = read_pmtiles_metadata(out)
+    assert {layer["id"] for layer in metadata["vector_layers"]} == {"lakes", "lakes_points"}
+    assert archive_bakes_low_zoom_centroids(metadata), "the dot/polygon handoff has nothing to hand off to"
 
 
 def test_tile_byte_cap_is_raised_above_the_tippecanoe_default():
