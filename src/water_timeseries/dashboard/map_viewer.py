@@ -87,29 +87,6 @@ def _init_ee() -> None:
 _init_ee()
 
 
-def setup_darkmatter(min_zoom: int = None, max_zoom: int = None):
-    """Set up CartoDB Dark Matter tile layer using API key from environment variable."""
-    cartodb_key = os.environ.get("CARTODB_KEY")
-    if not cartodb_key:
-        logger.warning("CARTODB_KEY not found in environment variables. Dark Matter tiles may not load.")
-        return None
-
-    attr = (
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
-        'contributors, &copy; <a href="https://cartodb.com/attributions">CartoDB</a>'
-    )
-    tiles = f"https://basemaps.cartocdn.com/rastertiles/dark_all/{{z}}/{{x}}/{{y}}.png?key={cartodb_key}"
-
-    tile_layer_darkmatter = folium.TileLayer(
-        tiles=tiles,
-        attr=attr,
-        name="Dark Matter (CartoDB)",
-        min_zoom=min_zoom,
-        max_zoom=max_zoom,
-    )
-    return tile_layer_darkmatter
-
-
 class MapViewer:
     """Interactive map viewer for GeoDataFrames using Streamlit.
 

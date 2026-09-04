@@ -210,7 +210,7 @@ def load_and_merge_parquets(file_list: list[Path], logger=None) -> pd.DataFrame:
                 if logger:
                     logger.warning(f"Skipping {f.name}: File is empty.")
 
-        except Exception as e: #noqa:BLE001
+        except Exception as e:  # noqa:BLE001
             if logger:
                 logger.error(f"Failed to read {f.name} (possibly corrupt/inaccessible): {e}")
 
