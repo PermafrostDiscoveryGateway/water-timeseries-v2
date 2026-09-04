@@ -20,7 +20,7 @@ from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_nrt_drainage,
     get_style_pmtiles_nrt_monthly_tiles,
 )
-from water_timeseries.utils.pmtiles_build import NRT_POINT_POLY_SWITCH_ZOOM
+from water_timeseries.utils.pmtiles_build import POINT_POLY_SWITCH_ZOOM
 from water_timeseries.utils.visualization import (
     get_legend_html_date_drainage_year,
     get_legend_html_drained_month,
@@ -758,7 +758,7 @@ def build_pmtiles_map(
             "source": "nrt_pmtiles",
             "source-layer": "drained_points",
             "type": "circle",
-            "maxzoom": NRT_POINT_POLY_SWITCH_ZOOM,
+            "maxzoom": POINT_POLY_SWITCH_ZOOM,
             "paint": {
                 "circle-color": drained_fill,
                 "circle-opacity": drained_opacity,
@@ -772,7 +772,7 @@ def build_pmtiles_map(
             "source": "nrt_pmtiles",
             "source-layer": "drained",
             "type": "fill",
-            "minzoom": NRT_POINT_POLY_SWITCH_ZOOM,
+            "minzoom": POINT_POLY_SWITCH_ZOOM,
             "paint": {"fill-color": drained_fill, "fill-opacity": drained_opacity},
         }
         nrt_drained_line_layer = {
@@ -780,7 +780,7 @@ def build_pmtiles_map(
             "source": "nrt_pmtiles",
             "source-layer": "drained",
             "type": "line",
-            "minzoom": NRT_POINT_POLY_SWITCH_ZOOM,
+            "minzoom": POINT_POLY_SWITCH_ZOOM,
             "paint": {
                 "line-color": drained_line,
                 "line-width": drained_width,

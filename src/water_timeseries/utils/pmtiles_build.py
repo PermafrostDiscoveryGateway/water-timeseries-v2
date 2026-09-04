@@ -24,6 +24,37 @@ DEFAULT_TILE_PROPERTIES: tuple[str, ...] = (
 
 TIPPECANOE_TEMP_DIR = Path("downloads/tippecanoe_tmp").absolute()
 TIPPECANOE_TEMP_DIR.mkdir(exist_ok=True, parents=True)
+
+# Zoom at which every lake tileset switches from centroids to polygons: below it
+# a tileset carries only its point layer (`lakes_points` / `drained_points`), at
+# it and above only its polygon layer (`lakes` / `drained`). One value for the
+# base tiles and the NRT monthly overlay, so a lake hands off from dot to
+# polygon at the same zoom whichever layer it is drawn by.
+#
+# Four things derive from it and have to agree: the baked per-feature zoom
+# ranges (`_write_features` here), the style's circle `maxzoom` and polygon
+# `minzoom`, and the hover gate (all three in `map_utils.build_pmtiles_map`).
+# MapLibre hides a layer at zoom >= maxzoom but shows it at zoom >= minzoom, so
+# the same number in both places covers every zoom exactly once -- and a style
+# that paints circles above the zoom where point features stop being baked
+# paints nothing at all.
+POINT_POLY_SWITCH_ZOOM: int = 8
+
+# Highest zoom baked into a tileset. Above it MapLibre overzooms the top tile
+# rather than dropping the features, which is why the hover gate deliberately
+# does not stop here (see `build_pmtiles_map`).
+TILE_MAX_ZOOM: int = 14
+
+# Zoom levels either side of the switch where BOTH layers are baked. Only the
+# style decides what is actually drawn; the overlap just means the data is there
+# if we move the switch later, so retuning it anywhere in
+# [POINT_POLY_SWITCH_ZOOM - N, POINT_POLY_SWITCH_ZOOM + N] is a style change
+# rather than a multi-hour rebuild of every archive. Cheap insurance: it adds N
+# zooms of polygons below the switch and N of centroids above it, and an
+# archive's size is dominated by its top two zooms (z13+z14 were 43% of the
+# 2026-07 monthly file), not by these.
+POINT_POLY_OVERLAP_ZOOMS: int = 1
+
 # Tippecanoe defaults tuned for global lake polygons (millions of features).
 DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
     "--force",
@@ -32,7 +63,7 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
     "--coalesce-densest-as-needed",
     "--simplification=10",
     "--minimum-zoom=0",
-    "--maximum-zoom=14",
+    f"--maximum-zoom={TILE_MAX_ZOOM}",
     f"--temporary-directory={TIPPECANOE_TEMP_DIR}",
     "-l",
     "lakes",
@@ -57,14 +88,6 @@ NRT_MONTHLY_TILE_PROPERTIES: tuple[str, ...] = (
     "water_predicted_upper_90",
 )
 
-# Zoom at which the NRT drained overlay switches from centroids to polygons:
-# below it the tileset carries only `drained_points`, at it and above only
-# `drained`. Both the baked per-feature zoom ranges (see `_write_features`) and
-# the style's layer minzoom/maxzoom are derived from this single value -- they
-# have to agree, since a style that paints circles above the zoom where point
-# features stop being baked paints nothing at all.
-NRT_POINT_POLY_SWITCH_ZOOM: int = 8
-
 # The monthly overlay holds tens of thousands of features, not millions, and
 # every one of them must survive: a dropped feature is a drained lake missing
 # from the map. So no density dropping/coalescing and no tile size limits,
@@ -77,6 +100,25 @@ NRT_MONTHLY_TIPPECANOE_ARGS: tuple[str, ...] = (
     "-r1",
     f"--temporary-directory={TIPPECANOE_TEMP_DIR}",
 )
+
+
+def point_poly_zoom_ranges(
+    switch_zoom: int = POINT_POLY_SWITCH_ZOOM,
+    max_zoom: int = TILE_MAX_ZOOM,
+    overlap: int = POINT_POLY_OVERLAP_ZOOMS,
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    """Return the ``(poly_zoom, points_zoom)`` ranges to bake for a style switching at ``switch_zoom``.
+
+    The ranges overlap by ``overlap`` levels on each side of the switch (see
+    POINT_POLY_OVERLAP_ZOOMS), so the style can move the switch within the band
+    without the tiles having to be rebuilt.
+    """
+    poly_zoom = (max(0, switch_zoom - overlap), max_zoom)
+    points_zoom = (0, min(max_zoom, switch_zoom + overlap))
+    return poly_zoom, points_zoom
+
+
+DEFAULT_POLY_ZOOM, DEFAULT_POINTS_ZOOM = point_poly_zoom_ranges()
 
 
 def find_tippecanoe() -> str | None:
@@ -180,12 +222,14 @@ def _write_features(
     fh_poly,
     fh_points,
     *,
-    poly_zoom: tuple[int, int] = (6, 14),
-    points_zoom: tuple[int, int] = (0, 5),
+    poly_zoom: tuple[int, int] = DEFAULT_POLY_ZOOM,
+    points_zoom: tuple[int, int] = DEFAULT_POINTS_ZOOM,
 ) -> None:
     """Append ``gdf`` to open GeoJSONL handles as polygon (and centroid) features.
 
-    ``poly_zoom``/``points_zoom`` are stamped onto each feature as its
+    ``poly_zoom``/``points_zoom`` come from ``point_poly_zoom_ranges`` and
+    overlap around the switch zoom on purpose; the style, not the data, decides
+    where the handoff happens. They are stamped onto each feature as its
     ``tippecanoe.minzoom``/``maxzoom`` (the documented per-feature zoom-range
     keys, see ``man tippecanoe``). This is NOT the same as the ``minzoom``/
     ``maxzoom`` keys in an ``-L`` layer spec passed to ``_run_tippecanoe`` —
@@ -303,8 +347,9 @@ def build_pmtiles(
             if not f.startswith(("--minimum-zoom", "--maximum-zoom")) and f not in ("-l", "lakes")
         ]
 
-    # Zoom split (polygons z6-14, centroids z0-5) is enforced by the per-feature
-    # "tippecanoe" property that parquet_to_geojsonseq -> _write_features stamps
+    # The zoom split (see point_poly_zoom_ranges) is enforced by the
+    # per-feature "tippecanoe" property that parquet_to_geojsonseq ->
+    # _write_features stamps
     # onto each feature, not by minzoom/maxzoom keys here — tippecanoe's -L JSON
     # doesn't have those (see _write_features).
     layers = [{"file": str(poly_path), "layer": "lakes"}]
@@ -381,7 +426,7 @@ def build_pmtiles_nrt_monthly(
     keep_geojsonl: bool = False,
     month_column: str = "analysis_month",
     id_column: str = "id_geohash",
-    poly_max_zoom: int = 14,
+    poly_max_zoom: int = TILE_MAX_ZOOM,
 ) -> dict[str, Path]:
     """Build one small drained-lakes-only PMTiles archive per NRT analysis month.
 
@@ -446,6 +491,8 @@ def build_pmtiles_nrt_monthly(
     if not geom_by_id:
         raise ValueError(f"No geometries in {geometry_parquet} matched ids from {breaks_parquet}")
 
+    poly_zoom, points_zoom = point_poly_zoom_ranges(max_zoom=poly_max_zoom)
+
     keep_columns = [c for c in property_columns if c in breaks.columns]
     outputs: dict[str, Path] = {}
 
@@ -473,16 +520,16 @@ def build_pmtiles_nrt_monthly(
                 keep_columns,
                 fh_poly,
                 fh_points,
-                poly_zoom=(NRT_POINT_POLY_SWITCH_ZOOM, poly_max_zoom),
-                points_zoom=(0, NRT_POINT_POLY_SWITCH_ZOOM - 1),
+                poly_zoom=poly_zoom,
+                points_zoom=points_zoom,
             )
 
-        # Polygons at NRT_POINT_POLY_SWITCH_ZOOM and above, centroids below it,
-        # so drained lakes stay visible when zoomed out (where the polygons are
-        # sub-pixel) without needing per-lake browser markers. The zoom split
-        # is enforced by the per-feature "tippecanoe" property written above,
-        # not by these dict keys (tippecanoe's -L JSON has no minzoom/maxzoom
-        # of its own; see _write_features).
+        # Polygons from around POINT_POLY_SWITCH_ZOOM up, centroids from
+        # around it down, so drained lakes stay visible when zoomed out (where
+        # the polygons are sub-pixel) without needing per-lake browser markers.
+        # The split is enforced by the per-feature "tippecanoe" property written
+        # above, not by these dict keys (tippecanoe's -L JSON has no
+        # minzoom/maxzoom of its own; see _write_features).
         layers = [
             {"file": str(poly_path), "layer": "drained"},
             {"file": str(points_path), "layer": "drained_points"},

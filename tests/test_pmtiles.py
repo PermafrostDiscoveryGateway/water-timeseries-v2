@@ -9,10 +9,13 @@ import pytest
 
 from water_timeseries.utils.pmtiles_build import (
     DEFAULT_TILE_PROPERTIES,
+    POINT_POLY_OVERLAP_ZOOMS,
+    POINT_POLY_SWITCH_ZOOM,
     build_pmtiles_nrt_monthly,
     find_tippecanoe,
     nrt_monthly_tiles_filename,
     parquet_to_geojsonseq,
+    point_poly_zoom_ranges,
 )
 from water_timeseries.utils.pmtiles_reader import read_pmtiles_header
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
@@ -207,7 +210,7 @@ def test_nrt_drained_centroid_polygon_handoff_has_no_gap():
     fill minzoom 9) leaves z8 with no drained lakes drawn at all.
     """
     from water_timeseries.map_utils import build_pmtiles_map
-    from water_timeseries.utils.pmtiles_build import NRT_POINT_POLY_SWITCH_ZOOM
+    from water_timeseries.utils.pmtiles_build import POINT_POLY_SWITCH_ZOOM
 
     m = build_pmtiles_map(
         "http://localhost:1/lakes.pmtiles",
@@ -235,9 +238,9 @@ def test_nrt_drained_centroid_polygon_handoff_has_no_gap():
     fill = layers["nrt-drained-fill"]
     line = layers["nrt-drained-line"]
 
-    assert points["maxzoom"] == NRT_POINT_POLY_SWITCH_ZOOM
-    assert fill["minzoom"] == NRT_POINT_POLY_SWITCH_ZOOM
-    assert line["minzoom"] == NRT_POINT_POLY_SWITCH_ZOOM
+    assert points["maxzoom"] == POINT_POLY_SWITCH_ZOOM
+    assert fill["minzoom"] == POINT_POLY_SWITCH_ZOOM
+    assert line["minzoom"] == POINT_POLY_SWITCH_ZOOM
 
     # Every zoom must draw the month's drained lakes exactly one way. Guards the
     # gap directly rather than trusting the three numbers above to stay in sync.
@@ -424,3 +427,46 @@ def test_pmtiles_server_map_page_keeps_config_url(tmp_path):
             html = resp.read().decode("utf-8")
         assert tile_url in html
         assert server.url_for("default.pmtiles") not in html
+
+
+def test_build_stamps_the_same_switch_zoom_it_is_styled_with():
+    """The per-feature zoom ranges baked into the tiles must match the style's gates.
+
+    tippecanoe's ``-L`` layer JSON has no minzoom/maxzoom keys, so this split
+    only exists because ``_write_features`` stamps it onto each feature. If it
+    silently stops being written, the tiles carry both layers at every zoom
+    again and the style's gates are all that stand between the user and dots
+    drawn on top of polygons.
+    """
+    import tempfile
+
+    with tempfile.TemporaryDirectory() as tmp:
+        poly_path, points_path = parquet_to_geojsonseq(TEST_PARQUET, Path(tmp) / "lakes.geojsonl")
+
+        poly = json.loads(poly_path.read_text(encoding="utf-8").splitlines()[0])
+        point = json.loads(points_path.read_text(encoding="utf-8").splitlines()[0])
+
+    poly_zoom, points_zoom = point_poly_zoom_ranges()
+    assert poly["tippecanoe"] == {"minzoom": poly_zoom[0], "maxzoom": poly_zoom[1]}
+    assert point["tippecanoe"] == {"minzoom": points_zoom[0], "maxzoom": points_zoom[1]}
+
+
+def test_baked_zoom_band_lets_the_switch_move_without_a_rebuild():
+    """Both layers exist for a few zooms around the switch, so retuning it is a style change.
+
+    The style draws each zoom exactly one way (see the handoff tests); this band
+    is only about having the data on hand if we decide the dots should give way
+    to polygons a level earlier or later.
+    """
+    poly_zoom, points_zoom = point_poly_zoom_ranges()
+
+    baked_both = set(range(poly_zoom[0], poly_zoom[1] + 1)) & set(range(points_zoom[0], points_zoom[1] + 1))
+    movable = set(
+        range(POINT_POLY_SWITCH_ZOOM - POINT_POLY_OVERLAP_ZOOMS, POINT_POLY_SWITCH_ZOOM + POINT_POLY_OVERLAP_ZOOMS + 1)
+    )
+    assert movable <= baked_both, f"switch cannot move to {sorted(movable - baked_both)} without rebuilding"
+
+    # A switch anywhere in the band still has data on both sides of it.
+    for switch in sorted(movable):
+        assert switch - 1 in range(points_zoom[0], points_zoom[1] + 1), f"no centroids just below z{switch}"
+        assert switch in range(poly_zoom[0], poly_zoom[1] + 1), f"no polygons at z{switch}"
