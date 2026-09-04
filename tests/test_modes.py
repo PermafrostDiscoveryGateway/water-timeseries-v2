@@ -379,3 +379,24 @@ def test_missing_config_file_is_fatal(tmp_path):
     # No config at all stays valid -- that's "use the defaults".
     assert load_required_config(None, modes_mod.logger) == {}
     assert load_required_config(tmp_path / "real.yaml", modes_mod.logger)["vector_file"] == "a.parquet"
+
+
+def test_shipped_config_shares_one_base_archive_between_modes():
+    """Both modes render from the same base tiles; only their overlays differ.
+
+    NRT mode could not share it until the per-month tilesets grew their
+    ``scored`` layer: the shared archive answers with the historical area
+    columns, so before that a non-drained lake in NRT mode hovered numbers from
+    the wrong mode. With the layer in place the month answers for every lake it
+    scored, and the base archive is just geometry underneath.
+    """
+    config = modes_mod.load_config(modes_mod._resolve(modes_mod._DEFAULT_CONFIG), modes_mod.logger)
+    settings = {key: flatten_mode(config, key) for key in mode_configs(config)}
+
+    base_archives = {key: values["pmtiles_file"] for key, values in settings.items()}
+    assert len(set(base_archives.values())) == 1, f"one shared base archive, got {base_archives}"
+
+    # Sharing the base is only safe while the drained overlays stay per-mode --
+    # they are what carry the per-year and per-month values.
+    assert settings["nrt_drainage"]["nrt_pmtiles_dir"]
+    assert settings["drainage_year"]["drained_pmtiles_file"]

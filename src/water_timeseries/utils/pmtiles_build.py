@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import geopandas as gpd
@@ -164,6 +165,58 @@ NRT_MONTHLY_TIPPECANOE_ARGS: tuple[str, ...] = (
 HISTORICAL_DRAINED_TIPPECANOE_ARGS: tuple[str, ...] = NRT_MONTHLY_TIPPECANOE_ARGS
 
 
+def dense_layer_tippecanoe_flags() -> list[str]:
+    """``DEFAULT_TIPPECANOE_ARGS`` as a ``-L`` build can use them.
+
+    Two groups come out. ``-l lakes`` names one layer for a single input file,
+    which contradicts the ``-L`` specs every builder here passes. The zoom flags
+    go because the range is stamped per feature instead (see ``_write_features``);
+    leaving ``--maximum-zoom`` in would also fight ``poly_max_zoom``.
+
+    What is left is the part that matters for a layer holding millions of
+    features: ``--drop-densest-as-needed`` plus the 2 MB tile cap, the opposite
+    of ``NRT_MONTHLY_TIPPECANOE_ARGS``, which keeps every feature because a
+    dropped drained lake is a lake missing from the map.
+    """
+    return [
+        f
+        for f in DEFAULT_TIPPECANOE_ARGS
+        if not f.startswith(("--minimum-zoom", "--maximum-zoom")) and f not in ("-l", "lakes")
+    ]
+
+
+# The per-lake NRT prediction a full monthly run produces, as baked into the
+# month's tileset. Every lake the run scored gets these -- not just the ones it
+# called drained -- because a lake that did not drain still has an observed area,
+# a prediction, a confidence interval and a confidence of 0, and that is what the
+# dashboard shows when you hover it. Before this, the month's tileset held the
+# drained lakes only and a non-drained lake had nothing month-specific to show.
+#
+# The "_absolute" variants are the hectare values (the bare ones are normalized),
+# and they are what the nrt_drainage tooltip aliases label; ``date`` is the run's
+# analysis date, which is honest here because this archive IS one month.
+NRT_SCORED_TILE_PROPERTIES: tuple[str, ...] = (
+    "id_geohash",
+    "date",
+    "water_observed_absolute",
+    "water_predicted_absolute",
+    "water_predicted_ci_absolute",
+    "water_residual_absolute",
+    "drainage_confidence",
+)
+
+# Layer name for those lakes inside the month's archive. Deliberately not
+# "lakes": it covers only what the run scored (1,842,467 of 4,026,306 lakes for
+# 2026-06), so it cannot stand in for the base archive's full coverage -- it
+# layers over it.
+NRT_SCORED_LAYER: str = "scored"
+
+# No centroid layer for the scored lakes. Hover is gated to POINT_POLY_SWITCH_ZOOM
+# and above (``build_pmtiles_map``), the layer is invisible, and the grey dots
+# below the switch already come from the base archive, so centroids here would be
+# ~1.8M features per month that nothing ever reads.
+
+
 def point_poly_zoom_ranges(
     switch_zoom: int = POINT_POLY_SWITCH_ZOOM,
     max_zoom: int = TILE_MAX_ZOOM,
@@ -264,6 +317,8 @@ def parquet_to_geojsonseq(
     generate_points: bool = True,
     point_property_columns: Sequence[str] | None = None,
     row_filter: Callable[[pd.DataFrame], pd.Series[bool]] | None = None,
+    poly_zoom: tuple[int, int] = DEFAULT_POLY_ZOOM,
+    points_zoom: tuple[int, int] = DEFAULT_POINTS_ZOOM,
 ) -> tuple[Path, Path | None]:
     """Export a GeoParquet file to newline-delimited GeoJSON for tippecanoe.
 
@@ -276,6 +331,10 @@ def parquet_to_geojsonseq(
         property_columns: Feature properties to include in tiles.
         geometry_column: Geometry column name.
         generate_points: Whether to also create a points geojsonl file.
+        poly_zoom: Zoom range to stamp on the polygon features, from
+            ``point_poly_zoom_ranges``. Lowering its top end is the biggest
+            size lever there is (see ``build_pmtiles_nrt_monthly``).
+        points_zoom: Zoom range to stamp on the centroid features.
 
     Returns:
         Tuple of (polygon_geojsonl_path, point_geojsonl_path or None)
@@ -327,6 +386,8 @@ def parquet_to_geojsonseq(
                 fh_poly,
                 fh_points,
                 point_property_columns=point_property_columns,
+                poly_zoom=poly_zoom,
+                points_zoom=points_zoom,
             )
     finally:
         fh_poly.close()
@@ -476,14 +537,7 @@ def build_pmtiles(
         row_filter=row_filter,
     )
 
-    if tippecanoe_args:
-        base_flags = list(tippecanoe_args)
-    else:
-        base_flags = [
-            f
-            for f in DEFAULT_TIPPECANOE_ARGS
-            if not f.startswith(("--minimum-zoom", "--maximum-zoom")) and f not in ("-l", "lakes")
-        ]
+    base_flags = list(tippecanoe_args) if tippecanoe_args else dense_layer_tippecanoe_flags()
 
     # The zoom split (see point_poly_zoom_ranges) is enforced by the
     # per-feature "tippecanoe" property that parquet_to_geojsonseq ->
@@ -552,6 +606,100 @@ def _collect_geometries(
     return found
 
 
+def nrt_scored_rows(df: pd.DataFrame, date_column: str = "date") -> pd.Series[bool]:
+    """Mask of the rows a full NRT run actually scored.
+
+    A run's parquet has a row for every lake in the table but only predicts for
+    the ones it had enough of a time series for: 1,842,467 of 4,026,306 (45.8%)
+    in the 2026-06 run. The rest carry nulls, or the string ``"nan : nan"`` in
+    the confidence-interval column, and baking them would put ~2.2M features
+    into the month's tileset whose popup reads ``NaT`` -- exactly what the
+    old per-mode NRT base archive did.
+
+    ``date`` is the marker: measured across all 4,026,306 rows of the 2026-06
+    run, ``date`` and ``water_observed_absolute`` are non-null on exactly the
+    same rows (1,842,467 both, 0 either-only), so one column answers it and the
+    filter can run before any WKB is parsed.
+    """
+    if date_column not in df.columns:
+        return pd.Series(False, index=df.index)
+    return df[date_column].notna()
+
+
+def find_nrt_run_parquets(
+    run_dir: Path | str,
+    months: Sequence[str] | None = None,
+) -> dict[str, Path]:
+    """Map ``YYYY-MM`` to the full NRT run parquet for that month under ``run_dir``.
+
+    Follows the layout the download step writes (see docs/nrt_monthly_update.md):
+    ``DW_NRT_<month>_run<date>/DW_NRT_<month>_run<date>_allGeoms_v*_repartitioned.parquet``.
+    The repartitioned copy is preferred because it is what the dashboard reads
+    and what row-group streaming here wants; a plain ``_allGeoms_v*.parquet`` is
+    accepted as a fallback. ``_subset`` files are skipped -- those are the small
+    local test extracts (the 2026-07 one has 124 rows), and silently baking a
+    month's tileset from one would look like a successful build of an almost
+    empty month.
+
+    Months with no run directory are simply absent from the result: their
+    tileset gets the drained lakes only, which is all the data that exists for
+    them (only a full run scores every lake).
+    """
+    run_dir = Path(run_dir)
+    wanted = set(months) if months else None
+    found: dict[str, Path] = {}
+
+    for child in sorted(run_dir.iterdir() if run_dir.is_dir() else []):
+        if not child.is_dir():
+            continue
+        match = re.match(r"^DW_NRT_(\d{4}-\d{2})_run", child.name)
+        if not match:
+            continue
+        month = match.group(1)
+        if wanted is not None and month not in wanted:
+            continue
+        candidates = [c for c in sorted(child.glob("*_allGeoms_v*.parquet")) if "_subset" not in c.name]
+        if not candidates:
+            continue
+        repartitioned = [c for c in candidates if c.name.endswith("_repartitioned.parquet")]
+        # sorted() puts a later run<date> last, so the newest run for a month wins.
+        found[month] = (repartitioned or candidates)[-1]
+
+    return found
+
+
+def _run_tile_join(
+    output_path: Path,
+    inputs: Sequence[Path],
+    tippecanoe_bin: str | None = None,
+) -> Path:
+    """Merge PMTiles archives into one, keeping every layer and feature.
+
+    Used to put layers with opposite tile budgets in one archive: tippecanoe's
+    density and size flags are per invocation, not per ``-L`` layer, so the
+    drained lakes (keep every feature) and the scored lakes (millions, so drop
+    to fit) have to be tiled separately and joined. ``-pk`` is what makes the
+    join lossless -- without it tile-join re-applies the 500 KB default cap and
+    would drop from the drained layer, which the separate build exists to
+    protect. Dropping already happened per input, and tile-join copies tiles by
+    z/x/y, so the per-feature zoom ranges survive untouched.
+    """
+    tippecanoe_bin = tippecanoe_bin or find_tippecanoe()
+    tile_join_bin = None
+    if tippecanoe_bin:
+        sibling = Path(tippecanoe_bin).with_name("tile-join")
+        if sibling.exists():
+            tile_join_bin = str(sibling)
+    tile_join_bin = tile_join_bin or shutil.which("tile-join")
+    if not tile_join_bin:
+        raise RuntimeError("tile-join (ships with tippecanoe) is not installed or not on PATH.")
+
+    args = [tile_join_bin, "-f", "-pk", "-o", str(output_path), *[str(i) for i in inputs]]
+    print("Executing command: " + " ".join(args))
+    subprocess.run(args, check=True)
+    return output_path
+
+
 def build_pmtiles_nrt_monthly(
     breaks_parquet: Path | str,
     geometry_parquet: Path | str,
@@ -565,14 +713,33 @@ def build_pmtiles_nrt_monthly(
     month_column: str = "analysis_month",
     id_column: str = "id_geohash",
     poly_max_zoom: int = TILE_MAX_ZOOM,
+    run_parquet_by_month: Mapping[str, Path | str] | None = None,
+    scored_property_columns: Sequence[str] = NRT_SCORED_TILE_PROPERTIES,
 ) -> dict[str, Path]:
-    """Build one small drained-lakes-only PMTiles archive per NRT analysis month.
+    """Build one PMTiles archive of a month's NRT results per analysis month.
 
-    Each archive holds only the lakes that drained in that month (~1-2% of the
-    full lake table) with the month's drainage signal baked in as tile
-    properties. The dashboard layers the month's archive over the static base
-    tiles, so switching months is a source-URL swap: no per-lake data is
-    inlined into the page and no ``setFeatureState`` push is needed.
+    Each archive holds the month's data and nothing else, so switching months in
+    the dashboard is a source-URL swap: no per-lake data is inlined into the page
+    and no ``setFeatureState`` push is needed. Two layers, because two different
+    sets of lakes have two different kinds of value:
+
+    * ``drained``/``drained_points`` -- the lakes that drained that month (~1-2%
+      of the table), carrying the drainage signal (``NRT_MONTHLY_TILE_PROPERTIES``).
+      Every one of them is kept, at every zoom.
+    * ``scored`` -- every lake the month's full NRT run predicted for, carrying
+      that prediction (``NRT_SCORED_TILE_PROPERTIES``: observed vs predicted
+      area, the confidence interval, the residual, the confidence). Built only
+      for months passed in ``run_parquet_by_month``, since only a full run
+      produces per-lake predictions. This is what a *non-drained* lake hovers;
+      without it the month's tileset spoke only for the drained lakes and every
+      other lake fell through to the base archive, which is mode-agnostic and
+      has no month-specific values at all.
+
+    The two layers cannot be tiled in one tippecanoe run: its density and
+    size-cap flags are per invocation, and the two layers need opposite ones
+    (``NRT_MONTHLY_TIPPECANOE_ARGS`` vs ``dense_layer_tippecanoe_flags``, ~60k
+    features that must all survive vs ~1.8M that must fit). So they are tiled
+    separately and merged with ``_run_tile_join``.
 
     Args:
         breaks_parquet: Aggregated NRT breaks table (``nrt_monthly_drain_breaks.parquet``);
@@ -593,6 +760,12 @@ def build_pmtiles_nrt_monthly(
             full-resolution geometry (a sample tile held 919 vertices at
             ``poly_max_zoom=12`` vs 920 at 14). Kept at 14 by default so
             rebuilds are byte-comparable with existing archives.
+        run_parquet_by_month: ``{month: full NRT run parquet}`` -- the run's own
+            output, carrying a row per lake with its prediction and its geometry
+            (``find_nrt_run_parquets`` discovers these). A month listed here gets
+            the ``scored`` layer; a month left out gets the drained layers only,
+            which is all the data that exists for it.
+        scored_property_columns: Columns to bake onto the scored lakes.
 
     Returns:
         ``{month: pmtiles_path}`` for the months actually built.
@@ -606,6 +779,11 @@ def build_pmtiles_nrt_monthly(
     tippecanoe_bin = tippecanoe_bin or find_tippecanoe()
     if not tippecanoe_bin:
         raise RuntimeError("tippecanoe is not installed or not on PATH. Install it with: brew install tippecanoe")
+
+    run_parquets = {str(m): Path(p) for m, p in (run_parquet_by_month or {}).items()}
+    missing_runs = [str(p) for p in run_parquets.values() if not p.exists()]
+    if missing_runs:
+        raise FileNotFoundError(f"NRT run parquet(s) not found: {', '.join(missing_runs)}")
 
     breaks = pd.read_parquet(breaks_parquet)
     if month_column not in breaks.columns:
@@ -649,6 +827,11 @@ def build_pmtiles_nrt_monthly(
         gdf = _sanitize_properties(gdf, keep_columns)
 
         output_path = output_dir / nrt_monthly_tiles_filename(str(month))
+        run_parquet = run_parquets.get(str(month))
+        # With a scored layer to join in, the drained layers are tiled to a
+        # sidecar and tile-join writes the archive the dashboard reads; without
+        # one, tippecanoe writes it directly, as it always did.
+        drained_archive = output_path.with_suffix(".drained.pmtiles") if run_parquet else output_path
         poly_path = output_path.with_suffix(".geojsonl")
         points_path = poly_path.with_name(f"{poly_path.stem}_points.geojsonl")
         print(f"[{month}] writing {len(gdf)} features to {poly_path.name}...")
@@ -673,7 +856,7 @@ def build_pmtiles_nrt_monthly(
             {"file": str(points_path), "layer": "drained_points"},
         ]
         _run_tippecanoe(
-            output_path,
+            drained_archive,
             layers,
             list(tippecanoe_args) if tippecanoe_args else list(NRT_MONTHLY_TIPPECANOE_ARGS),
             tippecanoe_bin=tippecanoe_bin,
@@ -683,6 +866,35 @@ def build_pmtiles_nrt_monthly(
         if not keep_geojsonl:
             poly_path.unlink(missing_ok=True)
             points_path.unlink(missing_ok=True)
+
+        if run_parquet:
+            # Streamed row group by row group and filtered before any WKB is
+            # parsed (see nrt_scored_rows), so the 2.9 GB run parquet never
+            # lands in memory and the ~2.2M unscored lakes cost only the filter.
+            scored_archive = output_path.with_suffix(".scored.pmtiles")
+            scored_geojsonl = output_path.with_suffix(".scored.geojsonl")
+            print(f"[{month}] baking '{NRT_SCORED_LAYER}' layer from {run_parquet.name}...")
+            scored_poly, _ = parquet_to_geojsonseq(
+                run_parquet,
+                scored_geojsonl,
+                property_columns=scored_property_columns,
+                generate_points=False,
+                row_filter=nrt_scored_rows,
+                poly_zoom=poly_zoom,
+            )
+            _run_tippecanoe(
+                scored_archive,
+                [{"file": str(scored_poly), "layer": NRT_SCORED_LAYER}],
+                dense_layer_tippecanoe_flags(),
+                tippecanoe_bin=tippecanoe_bin,
+                delete_tempdir=False,
+            )
+            _run_tile_join(output_path, [drained_archive, scored_archive], tippecanoe_bin=tippecanoe_bin)
+
+            if not keep_geojsonl:
+                scored_poly.unlink(missing_ok=True)
+            drained_archive.unlink(missing_ok=True)
+            scored_archive.unlink(missing_ok=True)
 
         size_mb = output_path.stat().st_size / 1e6
         print(f"[{month}] wrote {output_path.name} ({size_mb:.1f} MB)")
@@ -810,20 +1022,10 @@ def build_pmtiles_nrt_drainage(
     #     "drainage_confidence",
     # )
 
-    columns_absolute = (
-        "id_geohash",
-        "date",
-        "water_observed_absolute",
-        "water_predicted_absolute",
-        "water_predicted_ci_absolute",
-        "water_residual_absolute",
-        "drainage_confidence",
-    )
-
     return build_pmtiles(
         parquet_path,
         output_path,
-        property_columns=columns_absolute,
+        property_columns=NRT_SCORED_TILE_PROPERTIES,
         point_property_columns=NRT_POINT_PROPERTIES,
         **kwargs,
     )
