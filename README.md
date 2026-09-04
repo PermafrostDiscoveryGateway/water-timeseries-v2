@@ -53,19 +53,30 @@ Features:
 
 ![Dashboard](figures/dashboard.png)
 
-### Near Real Time (NRT) Drainage Status overlay
+### Near Real Time (NRT) monthly tilesets
 
-In NRT mode (`viz_configuration: nrt_drainage`), the "Drainage Status" overlay reads
-each month's drained lakes from its own small PMTiles archive instead of pushing
-per-lake values into the browser on every rerun. Build one archive per month after
-each new NRT month lands (see [docs/nrt_monthly_update.md](docs/nrt_monthly_update.md)),
-then point the dashboard config at the output directory with `nrt_pmtiles_dir`:
+In NRT mode (`viz_configuration: nrt_drainage`), each month's results come from that
+month's own PMTiles archive instead of per-lake values pushed into the browser on
+every rerun. Two layers:
+
+- `drained` — the lakes that drained that month, with the drainage signal. This is the
+  "Drainage Status" overlay.
+- `scored` — every lake the month's full NRT run predicted for, with that prediction
+  (observed vs predicted area, confidence interval, residual, confidence). This is
+  what a **non-drained** lake hovers; without it such a lake has nothing
+  month-specific to show, since it is in no overlay and the base archive is shared
+  between modes. Built for the months `nrt_run_dir` has a full run parquet for — only
+  a full run predicts per lake, so other months carry `drained` alone.
+
+Build one archive per month after each new NRT month lands (see
+[docs/nrt_monthly_update.md](docs/nrt_monthly_update.md)), then point the dashboard
+config at the output directory with `nrt_pmtiles_dir`:
 
 ```bash
 uv run water-timeseries build-nrt-pmtiles \
     --breaks-file precomputed/nrt/nrt_monthly_drain_breaks.parquet \
     --geometry-file data/lakes_with_allgeoms.parquet \
-    --output-dir data/nrt_tiles
+    --output-dir data/nrt_tiles --nrt-run-dir data/DW_NRT
 ```
 
 You can also point it at the dashboard config YAML directly, so there's nothing to
@@ -76,10 +87,10 @@ uv run water-timeseries build-nrt-pmtiles --config-file configs/dashboard_panarc
 ```
 
 This reads the config's `nrt_drainage` mode -- `precomputed_nrt_dir`
-(+ `nrt_monthly_drain_breaks.parquet`), `vector_file`,
-and `nrt_pmtiles_dir` from the config for breaks_file, geometry_file, and output_dir
-respectively; any `--breaks-file`/`--geometry-file`/`--output-dir`/`--months` flag
-passed on the CLI takes priority over the config file. `nrt_pmtiles_dir` may also be
+(+ `nrt_monthly_drain_breaks.parquet`), `vector_file`, `nrt_pmtiles_dir` and
+`nrt_run_dir` from the config for breaks_file, geometry_file, output_dir and the full
+runs to score from respectively; any `--breaks-file`/`--geometry-file`/`--output-dir`/
+`--nrt-run-dir`/`--months` flag passed on the CLI takes priority over the config file. `nrt_pmtiles_dir` may also be
 an `http(s)://` or `gs://` prefix if the tilesets are hosted rather than local; months
 with no tileset there fall back to the slower runtime feature-state path.
 
@@ -90,6 +101,9 @@ Add the resulting directory to the dashboard config:
 modes:
   nrt_drainage:
     nrt_pmtiles_dir: data/nrt_tiles
+    # Where the full NRT runs live, for the `scored` layer. Read by
+    # build-nrt-pmtiles, not by the dashboard.
+    nrt_run_dir: data/DW_NRT
 ```
 
 #### Adding a new NRT month
