@@ -231,6 +231,7 @@ def get_legend_html_nrt_drainage() -> str:
             <div style="width: 20px; height: 20px; background-color: rgba(215, 48, 39, 0.2); border: 3px solid #8b0000; border-radius: 3px; margin-right: 8px;"></div>
             <span>3 - High confidence</span>
         </div>
+        </div>
     """
     return LEGEND_HTML_NRT_DRAINAGE
 

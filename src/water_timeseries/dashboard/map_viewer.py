@@ -346,7 +346,11 @@ class MapViewer:
         viz_configuration_name: str | None = "colored_historical",
     ) -> str | None:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
-        from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
+        from water_timeseries.map_utils import (
+            build_pmtiles_map,
+            pmtiles_has_low_zoom_centroids,
+            resolve_pmtiles_url,
+        )
 
         st.caption("Click a lake to show interactive water area timeseries plots below. \n")
         logger.info("PMTiles map view rendered")
@@ -363,6 +367,16 @@ class MapViewer:
 
         pmtiles_url = resolve_pmtiles_url(pmtiles_source)
         logger.info(f"PMTiles url: {pmtiles_url}")
+
+        # Whether this archive holds centroids below the switch zoom decides
+        # whether the style hands off to them there or keeps drawing polygons;
+        # read it off the archive so a rebuild needs no config change.
+        base_has_centroids = pmtiles_has_low_zoom_centroids(pmtiles_source)
+        if not base_has_centroids:
+            logger.info(
+                "PMTiles archive bakes no usable centroids below the switch zoom; "
+                "drawing base lake polygons at every zoom instead"
+            )
 
         # # Determine center of map (lat, lon)
         # if self.map_center is None:
@@ -394,6 +408,7 @@ class MapViewer:
             nrt_monthly_tiles_url=self.nrt_monthly_tiles_url,
             selected_id=st.session_state.get("selected_geohash"),
             id_column=self.id_column,
+            base_has_centroids=base_has_centroids,
         )
 
         # Render the map and get click data. This is the streamlit-folium
