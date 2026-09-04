@@ -121,6 +121,49 @@ def point_poly_zoom_ranges(
 DEFAULT_POLY_ZOOM, DEFAULT_POINTS_ZOOM = point_poly_zoom_ranges()
 
 
+def archive_bakes_low_zoom_centroids(
+    metadata: dict,
+    *,
+    switch_zoom: int = POINT_POLY_SWITCH_ZOOM,
+    points_layer: str = "lakes_points",
+) -> bool:
+    """Whether an archive's centroid layer actually survives below ``switch_zoom``.
+
+    The style hands off from centroids to polygons at ``POINT_POLY_SWITCH_ZOOM``,
+    which only works if the tiles hold centroids below it. Archives built before
+    the per-feature zoom ranges (`_write_features`) do not: they baked every
+    point at every zoom with the tileset's maxzoom of ``TILE_MAX_ZOOM``, so
+    tippecanoe's default drop rate of 2.5 per level thinned them by ~2.5^14 and
+    left one or two dots per tile. The shipped pan-arctic base archive is one of
+    these -- 4,026,306 centroids in ``tilestats``, ``dropped_by_rate`` of
+    4,026,295 at z0 -- which is why the map goes blank below the switch when the
+    polygons are gated above it.
+
+    Tippecanoe records that in the metadata it writes, so the answer is readable
+    from the archive rather than configured next to it: an archive whose points
+    were rate-dropped at any zoom below the switch cannot back the handoff.
+    Archives built by the current builder record no ``dropped_by_rate`` at all
+    (the per-feature ranges cap the point features at ``switch_zoom + overlap``,
+    so the drop schedule has almost nothing to thin); their points thin only by
+    ``dropped_as_needed``, which is the tile size limit doing its job and still
+    leaves a dense stipple.
+
+    Returns False when the metadata cannot answer -- no points layer, or no
+    ``strategies`` (tippecanoe too old to record them). Every archive that
+    predates the fix is in that camp, and drawing polygons at every zoom is what
+    those archives support.
+    """
+    layer_ids = {layer.get("id") for layer in metadata.get("vector_layers") or []}
+    if points_layer not in layer_ids:
+        return False
+
+    strategies = metadata.get("strategies")
+    if not isinstance(strategies, list) or len(strategies) < switch_zoom:
+        return False
+
+    return not any((strategies[zoom] or {}).get("dropped_by_rate") for zoom in range(switch_zoom))
+
+
 def find_tippecanoe() -> str | None:
     """Return path to tippecanoe executable, or None if not installed."""
     return shutil.which("tippecanoe")

@@ -11,13 +11,15 @@ from water_timeseries.utils.pmtiles_build import (
     DEFAULT_TILE_PROPERTIES,
     POINT_POLY_OVERLAP_ZOOMS,
     POINT_POLY_SWITCH_ZOOM,
+    TILE_MAX_ZOOM,
+    archive_bakes_low_zoom_centroids,
     build_pmtiles_nrt_monthly,
     find_tippecanoe,
     nrt_monthly_tiles_filename,
     parquet_to_geojsonseq,
     point_poly_zoom_ranges,
 )
-from water_timeseries.utils.pmtiles_reader import read_pmtiles_header
+from water_timeseries.utils.pmtiles_reader import read_pmtiles_header, read_pmtiles_metadata
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
 TEST_PARQUET = Path(__file__).parent / "data" / "lake_polygons.parquet"
@@ -470,3 +472,48 @@ def test_baked_zoom_band_lets_the_switch_move_without_a_rebuild():
     for switch in sorted(movable):
         assert switch - 1 in range(points_zoom[0], points_zoom[1] + 1), f"no centroids just below z{switch}"
         assert switch in range(poly_zoom[0], poly_zoom[1] + 1), f"no polygons at z{switch}"
+
+
+def test_archive_bakes_low_zoom_centroids_reads_the_build_strategies():
+    """The predicate answers from what tippecanoe recorded, not from a flag beside the file."""
+    healthy = {
+        "vector_layers": [{"id": "lakes"}, {"id": "lakes_points"}],
+        "strategies": [{} for _ in range(TILE_MAX_ZOOM + 1)],
+    }
+    assert archive_bakes_low_zoom_centroids(healthy)
+
+    # Thinning to fit the tile size limit is the limit doing its job and still
+    # leaves a stipple; thinning by the drop rate is the whole point layer gone.
+    as_needed = {**healthy, "strategies": [{"dropped_as_needed": 3_500_000} for _ in range(TILE_MAX_ZOOM + 1)]}
+    assert archive_bakes_low_zoom_centroids(as_needed)
+
+    by_rate = {**healthy, "strategies": [{"dropped_by_rate": 4_026_295} for _ in range(TILE_MAX_ZOOM + 1)]}
+    assert not archive_bakes_low_zoom_centroids(by_rate)
+
+    # Rate-dropping above the switch says nothing about what is drawn below it.
+    high_only = {
+        **healthy,
+        "strategies": [{} if z < POINT_POLY_SWITCH_ZOOM else {"dropped_by_rate": 10} for z in range(TILE_MAX_ZOOM + 1)],
+    }
+    assert archive_bakes_low_zoom_centroids(high_only)
+
+    assert not archive_bakes_low_zoom_centroids({**healthy, "vector_layers": [{"id": "lakes"}]})
+    assert not archive_bakes_low_zoom_centroids({**healthy, "strategies": None})
+    assert not archive_bakes_low_zoom_centroids({})
+
+    # The NRT monthly overlay names its layers differently.
+    nrt = {
+        "vector_layers": [{"id": "drained"}, {"id": "drained_points"}],
+        "strategies": [{} for _ in range(TILE_MAX_ZOOM + 1)],
+    }
+    assert not archive_bakes_low_zoom_centroids(nrt)
+    assert archive_bakes_low_zoom_centroids(nrt, points_layer="drained_points")
+
+
+def test_shipped_style_archives_are_classified_from_their_own_metadata():
+    """Read a real archive end to end: the checked-in fixtures predate the centroid bake."""
+    metadata = read_pmtiles_metadata(Path(__file__).parent / "data" / "lakes_test.pmtiles")
+
+    assert {layer["id"] for layer in metadata["vector_layers"]} >= {"lakes", "lakes_points"}
+    # A points layer in the metadata is not the same as points in the tiles.
+    assert not archive_bakes_low_zoom_centroids(metadata)
