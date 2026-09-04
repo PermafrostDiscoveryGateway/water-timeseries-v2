@@ -36,6 +36,7 @@ from water_timeseries.utils.pmtiles_build import (
     build_pmtiles_nrt_drainage,
     build_pmtiles_nrt_monthly,
     build_pmtiles_shared_geometry,
+    find_nrt_run_parquets,
     find_tippecanoe,
 )
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
@@ -378,6 +379,7 @@ def build_nrt_pmtiles(
     breaks_file: Path | None = None,
     geometry_file: Path | None = None,
     output_dir: Path | None = None,
+    nrt_run_dir: Path | None = None,
     months: str | None = None,
     keep_geojsonl: bool | None = None,
     poly_max_zoom: int | None = None,
@@ -385,13 +387,18 @@ def build_nrt_pmtiles(
     logfile: str | None = None,
     verbose: int = 0,
 ):
-    """Build one small drained-lakes PMTiles archive per NRT analysis month.
+    """Build one PMTiles archive of a month's NRT results per analysis month.
 
-    Each archive holds only that month's drained lakes, with the month's
-    drainage signal baked into the tile properties. The dashboard layers the
-    selected month's archive over the base tiles, so switching months costs a
-    source-URL swap instead of shipping per-lake values into the browser on
-    every rerun.
+    Each archive holds that month's data and nothing else, so the dashboard
+    switches months with a source-URL swap instead of shipping per-lake values
+    into the browser on every rerun. Two layers:
+
+    * ``drained`` -- the lakes that drained that month, with the drainage signal.
+    * ``scored`` -- every lake the month's full NRT run predicted for, with that
+      prediction (observed vs predicted area, confidence interval, residual,
+      confidence). This is what a non-drained lake hovers. Built for the months
+      ``--nrt-run-dir`` has a run parquet for; only a full run scores every
+      lake, so other months get the drained layers alone.
 
     Re-run this after each new NRT month lands (``aggregate-nrt``), then point
     the dashboard at the output with ``--nrt-pmtiles-dir``.
@@ -401,6 +408,10 @@ def build_nrt_pmtiles(
         geometry_file: Lake table with ``id_geohash`` + geometry (the ``*_with_allgeoms_*``
             parquet). Scanned once for all months.
         output_dir: Directory to write ``nrt_<month>_drainage.pmtiles`` into.
+        nrt_run_dir: Root holding the full NRT runs
+            (``DW_NRT_<month>_run<date>/DW_NRT_<month>_run<date>_allGeoms_v*_repartitioned.parquet``,
+            i.e. ``data/DW_NRT``). Each month found there gets the ``scored``
+            layer. Omit it to build the drained layers only, as before.
         months: Comma-separated ``YYYY-MM`` list. Defaults to every month in the breaks table.
         keep_geojsonl: Keep the intermediate GeoJSONL files next to the output.
         poly_max_zoom: Highest zoom to bake polygon geometry at (default 14). The
@@ -411,15 +422,16 @@ def build_nrt_pmtiles(
         config_file: A dashboard config YAML (e.g. the one deployed as
             ``dashboard-config.yaml``) or a config using these flags' own names.
             Its ``precomputed_nrt_dir`` (+ ``nrt_monthly_drain_breaks.parquet``),
-            ``vector_file`` and ``nrt_pmtiles_dir`` are read as breaks_file,
-            geometry_file and output_dir respectively when those keys aren't
-            set directly. CLI flags always take priority over the config file.
+            ``vector_file``, ``nrt_pmtiles_dir`` and ``nrt_run_dir`` are read as
+            breaks_file, geometry_file, output_dir and nrt_run_dir respectively
+            when those keys aren't set directly. CLI flags always take priority
+            over the config file.
 
     Example:
         water-timeseries build-nrt-pmtiles \\
             --breaks-file precomputed/nrt/nrt_monthly_drain_breaks.parquet \\
             --geometry-file data/lakes_with_allgeoms.parquet \\
-            --output-dir data/nrt_tiles
+            --output-dir data/nrt_tiles --nrt-run-dir data/DW_NRT
         water-timeseries build-nrt-pmtiles --config-file configs/dashboard_panarctic.yaml --months 2026-08
         water-timeseries dashboard --pmtiles-file data/lakes.pmtiles \\
             --nrt-pmtiles-dir data/nrt_tiles --viz-configuration nrt_drainage
@@ -441,6 +453,7 @@ def build_nrt_pmtiles(
         breaks_file=str(breaks_file) if breaks_file else None,
         geometry_file=str(geometry_file) if geometry_file else None,
         output_dir=str(output_dir) if output_dir else None,
+        nrt_run_dir=str(nrt_run_dir) if nrt_run_dir else None,
         months=months,
         keep_geojsonl=keep_geojsonl,
         poly_max_zoom=poly_max_zoom,
@@ -449,6 +462,7 @@ def build_nrt_pmtiles(
     breaks_file = Path(config_dict["breaks_file"]) if config_dict.get("breaks_file") else None
     geometry_file = Path(config_dict["geometry_file"]) if config_dict.get("geometry_file") else None
     output_dir = Path(config_dict["output_dir"]) if config_dict.get("output_dir") else None
+    nrt_run_dir = Path(config_dict["nrt_run_dir"]) if config_dict.get("nrt_run_dir") else None
     months = config_dict.get("months")
     if isinstance(months, list):
         months = ",".join(months)
@@ -465,6 +479,17 @@ def build_nrt_pmtiles(
         raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
 
     month_list = [m.strip() for m in months.split(",") if m.strip()] if months else None
+
+    # Months with no full run keep the drained layers alone, so say which got
+    # the scored layer rather than leaving it to the build log.
+    run_parquets = find_nrt_run_parquets(nrt_run_dir, months=month_list) if nrt_run_dir else {}
+    if nrt_run_dir and not run_parquets:
+        logger.warning(
+            f"No full NRT run parquets found under {nrt_run_dir}; building the drained layers only (no 'scored' layer)."
+        )
+    elif run_parquets:
+        logger.info(f"Scored layer from full runs: {', '.join(sorted(run_parquets))}")
+
     outputs = build_pmtiles_nrt_monthly(
         breaks_file,
         geometry_file,
@@ -472,6 +497,7 @@ def build_nrt_pmtiles(
         months=month_list,
         keep_geojsonl=keep_geojsonl,
         poly_max_zoom=poly_max_zoom,
+        run_parquet_by_month=run_parquets,
     )
     print(f"Wrote {len(outputs)} monthly drainage tilesets to {output_dir}")
 
