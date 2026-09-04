@@ -31,6 +31,20 @@ modes:
     # NRT mode, which had mixed 2026-06/07 NRT confidence rows into this file.
     precomputed_nrt_dir: data/precomputed_historical
     viz_configuration: drainage_year
+    # The ~10k lakes with a break date are served from their own tileset, found
+    # next to pmtiles_file as <base>_drained.pmtiles (historical_drained_tiles_path)
+    # -- no key needed. pmtiles_file holds all 4M lakes and tippecanoe samples
+    # them to fit its tile budget, so zooming out dropped drained lakes along
+    # with the stable ones; the overlay is small enough to build with no budget
+    # at all and stays complete at every zoom, drawn over the sampled grey.
+    # Rebuild it whenever pmtiles_file is rebuilt (it takes seconds):
+    #   uv run python -c "
+    #   from water_timeseries.utils.pmtiles_build import (
+    #       build_pmtiles_historical_drained, historical_drained_tiles_path)
+    #   build_pmtiles_historical_drained('<vector_file above>',
+    #       historical_drained_tiles_path('<pmtiles_file above>'))"
+    # Set drained_pmtiles_file: here to point somewhere else (e.g. a gs:// copy),
+    # or to a missing path to fall back to filtering the base archive.
 
   nrt_drainage:
     label: Near Real-Time

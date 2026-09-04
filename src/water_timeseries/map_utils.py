@@ -12,13 +12,15 @@ from branca.element import Element  # <--- Added this import
 from folium_pmtiles.vector import PMTilesMapLibreLayer
 
 from water_timeseries.utils.map_styles.pmtiles import (
+    DRAINED_LAKE_FILTER,
+    STABLE_LAKE_FILTER,
     get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
     get_style_pmtiles_generic_water,
-    get_style_pmtiles_nrt_base_lakes,
     get_style_pmtiles_nrt_confidence_featurestate,
     get_style_pmtiles_nrt_drainage,
     get_style_pmtiles_nrt_monthly_tiles,
+    get_style_pmtiles_stable_lakes,
 )
 from water_timeseries.utils.pmtiles_build import (
     POINT_POLY_SWITCH_ZOOM,
@@ -435,6 +437,7 @@ def build_pmtiles_map(
     nrt_confidence_by_id: dict[str, int | None] | None = None,
     nrt_tooltip_overrides: dict[str, dict] | None = None,
     nrt_monthly_tiles_url: str | None = None,
+    historical_drained_tiles_url: str | None = None,
     nrt_month_has_confidence: bool = True,
     selected_id: str | None = None,
     id_column: str = "id_geohash",
@@ -463,6 +466,13 @@ def build_pmtiles_map(
             re-centers on it.
         id_column: Tile property holding the lake id (matched against
             ``selected_id``).
+        historical_drained_tiles_url: Optional drained-lakes tileset for
+            ``drainage_year`` (built by ``build_pmtiles_historical_drained``).
+            The base archive samples its 4M lakes to fit the tile budget, which
+            takes drained lakes off the map when zoomed out; served from their
+            own unlimited tileset instead they are all present at every zoom,
+            over the base archive's sampled grey. Without it the drained lakes
+            are filtered out of the base archive as before.
         base_has_centroids: Whether the base archive bakes usable centroids
             below ``POINT_POLY_SWITCH_ZOOM``, from
             ``archive_bakes_low_zoom_centroids``. When it does not -- every
@@ -473,6 +483,10 @@ def build_pmtiles_map(
             Callers that know the archive should pass the detected value;
             ``map_viewer`` does.
     """
+    # Set only by viz modes that separate stable lakes from drained ones (see the
+    # drainage_year branch below); None means one set of layers covers both.
+    stable_style: tuple | None = None
+
     m = leafmap.Map(
         location=center,
         zoom_start=zoom_start,
@@ -527,11 +541,16 @@ def build_pmtiles_map(
             "water_change_perc": "Change of water area [%]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(
-            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=POINT_POLY_SWITCH_ZOOM, max_zoom=max_zoom
+            column_aliases=aliases,
+            filter_layers=["lakes-fill", "lakes-stable-fill"],
+            min_zoom=POINT_POLY_SWITCH_ZOOM,
+            max_zoom=max_zoom,
         )
-        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year(
-            hide_stable_lakes=hide_stable_lakes
-        )
+        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year()
+        # Stable lakes are a separate, neutral-grey layer underneath rather than
+        # a branch inside the paint above, so every drained lake draws over every
+        # stable one instead of losing to whichever came later in the tile.
+        stable_style = get_style_pmtiles_stable_lakes()
         legend = get_legend_html_date_drainage_year()
 
         tile_layer_darkmatter.add_to(m)
@@ -582,7 +601,7 @@ def build_pmtiles_map(
             )
             # The month's drained lakes come from their own tileset (added
             # below); the base tiles are the backdrop of all other lakes.
-            fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_nrt_base_lakes()
+            fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_stable_lakes()
         else:
             tooltip = PMTilesMapLibreTooltipWithRounding(
                 column_aliases=aliases,
@@ -641,12 +660,36 @@ def build_pmtiles_map(
     # handoff existed. Every base-source polygon layer takes the same gate.
     poly_gate = {"minzoom": POINT_POLY_SWITCH_ZOOM} if base_has_centroids else {}
 
+    # Where the coloured layers read their drained lakes from. Their own tileset
+    # when there is one -- every feature in it is drained, so it needs no filter
+    # and, being small enough to build with no tile budget, it never has lakes
+    # sampled out from under it. Otherwise they come out of the base archive
+    # behind a filter, which is correct but shares the base archive's sampling.
+    use_drained_tiles = bool(historical_drained_tiles_url) and stable_style is not None
+    if use_drained_tiles:
+        drained_source = "drained_pmtiles"
+        drained_poly_layer = "drained"
+        drained_point_layer = "drained_points"
+        lake_filter: dict = {}
+        # That tileset only exists as built by the current builder, so its
+        # centroids are always there to hand off to (unlike base_has_centroids).
+        drained_poly_gate = {"minzoom": POINT_POLY_SWITCH_ZOOM}
+        drained_has_centroids = True
+    else:
+        drained_source = "lakes_pmtiles"
+        drained_poly_layer = source_layer
+        drained_point_layer = "lakes_points"
+        lake_filter = {"filter": DRAINED_LAKE_FILTER} if stable_style else {}
+        drained_poly_gate = poly_gate
+        drained_has_centroids = base_has_centroids
+
     lakes_fill_layer = {
         "id": "lakes-fill",
-        "source": "lakes_pmtiles",
-        "source-layer": source_layer,
+        "source": drained_source,
+        "source-layer": drained_poly_layer,
         "type": "fill",
-        **poly_gate,
+        **drained_poly_gate,
+        **lake_filter,
         "paint": {
             "fill-color": fill_color,
             "fill-opacity": fill_opacity,
@@ -654,10 +697,11 @@ def build_pmtiles_map(
     }
     lakes_line_layer = {
         "id": "lakes-line",
-        "source": "lakes_pmtiles",
-        "source-layer": source_layer,
+        "source": drained_source,
+        "source-layer": drained_poly_layer,
         "type": "line",
-        **poly_gate,
+        **drained_poly_gate,
+        **lake_filter,
         "paint": {
             "line-color": line_color,
             "line-width": line_width,
@@ -691,10 +735,11 @@ def build_pmtiles_map(
     # handful of dots that survived a rate-dropped build and nothing else.
     base_points_layer = {
         "id": "lakes-points",
-        "source": "lakes_pmtiles",
-        "source-layer": "lakes_points",
+        "source": drained_source,
+        "source-layer": drained_point_layer,
         "type": "circle",
         "maxzoom": POINT_POLY_SWITCH_ZOOM,
+        **lake_filter,
         "paint": {
             "circle-color": fill_color,
             "circle-opacity": circle_opacity,
@@ -778,21 +823,79 @@ def build_pmtiles_map(
             },
         ]
 
+    # The neutral-grey lakes, under everything else. Same geometry, gates and
+    # centroid handling as the coloured layers above -- only the paint and the
+    # filter differ -- so a lake looks the same either side of the switch zoom
+    # whichever of the two layers is drawing it.
+    #
+    # "Hide stable lakes" drops them from the style outright rather than painting
+    # them transparent: a zero-opacity layer still answers queryRenderedFeatures,
+    # so hidden lakes would keep producing hover popups.
+    stable_layers: list[dict] = []
+    if stable_style and not hide_stable_lakes:
+        stable_fill, stable_opacity, stable_line, stable_line_width, stable_line_opacity = stable_style
+        if base_has_centroids:
+            stable_layers.append(
+                {
+                    "id": "lakes-stable-points",
+                    "source": "lakes_pmtiles",
+                    "source-layer": "lakes_points",
+                    "type": "circle",
+                    "maxzoom": POINT_POLY_SWITCH_ZOOM,
+                    "filter": STABLE_LAKE_FILTER,
+                    "paint": {
+                        "circle-color": stable_fill,
+                        "circle-opacity": ["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
+                        "circle-radius": base_points_layer["paint"]["circle-radius"],
+                        "circle-stroke-color": "#1a1a1a",
+                        "circle-stroke-opacity": ["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
+                        "circle-stroke-width": base_points_layer["paint"]["circle-stroke-width"],
+                    },
+                }
+            )
+        stable_layers += [
+            {
+                "id": "lakes-stable-fill",
+                "source": "lakes_pmtiles",
+                "source-layer": source_layer,
+                "type": "fill",
+                **poly_gate,
+                "filter": STABLE_LAKE_FILTER,
+                "paint": {"fill-color": stable_fill, "fill-opacity": stable_opacity},
+            },
+            {
+                "id": "lakes-stable-line",
+                "source": "lakes_pmtiles",
+                "source-layer": source_layer,
+                "type": "line",
+                **poly_gate,
+                "filter": STABLE_LAKE_FILTER,
+                "paint": {
+                    "line-color": stable_line,
+                    "line-width": stable_line_width,
+                    "line-opacity": stable_line_opacity,
+                },
+            },
+        ]
+
     # The centroid layer is listed first so any overlay stays on top of it, and
     # is left out entirely when the archive cannot back it (see poly_gate).
-    base_layers = ([base_points_layer] if base_has_centroids else []) + [lakes_fill_layer, lakes_line_layer]
+    # Which archive that is depends on where the coloured lakes come from: with
+    # a drained tileset these circles read from it, not from the base, and it
+    # always bakes centroids -- gating them on the base archive's centroids
+    # instead would blank the drained lakes below the switch whenever an older
+    # base archive is paired with a freshly built overlay.
+    lake_points_backed = drained_has_centroids if use_drained_tiles else base_has_centroids
+    base_layers = ([base_points_layer] if lake_points_backed else []) + [lakes_fill_layer, lakes_line_layer]
 
-    if viz_configuration_name == "drainage_year" and hide_stable_lakes:
-        nan_filter = [
-            "all",
-            ["!=", ["get", "date_break_year"], None],
-            ["!=", ["to-string", ["get", "date_break_year"]], "NaN"],
-            ["!=", ["to-string", ["get", "date_break_year"]], ""],
-        ]
-        for layer in base_layers:
-            layer["filter"] = nan_filter
-
-    sources = {
+    sources: dict[str, dict] = {}
+    if use_drained_tiles:
+        sources["drained_pmtiles"] = {
+            "type": "vector",
+            "url": "pmtiles://" + str(historical_drained_tiles_url),
+            "promoteId": "id_geohash",
+        }
+    sources |= {
         "lakes_pmtiles": {
             "type": "vector",
             "url": "pmtiles://" + pmtiles_url,
@@ -801,7 +904,7 @@ def build_pmtiles_map(
             "promoteId": "id_geohash",
         }
     }
-    layers = [*base_layers, *drained_overlay_layers]
+    layers = [*stable_layers, *base_layers, *drained_overlay_layers]
 
     if nrt_monthly_tiles_url:
         drained_fill, drained_opacity, drained_line, drained_width, drained_line_opacity = (

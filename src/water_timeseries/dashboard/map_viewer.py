@@ -168,6 +168,7 @@ class MapViewer:
         # they travel to the browser inline on every rerun, so they are much
         # more expensive (see build_pmtiles_map).
         self.nrt_monthly_tiles_url: str | None = None
+        self.historical_drained_tiles_url: str | None = None
         self.nrt_confidence_by_id: dict[str, int | None] | None = None
         self.nrt_tooltip_overrides: dict[str, dict] | None = None
 
@@ -406,6 +407,7 @@ class MapViewer:
             nrt_confidence_by_id=self.nrt_confidence_by_id,
             nrt_tooltip_overrides=self.nrt_tooltip_overrides,
             nrt_monthly_tiles_url=self.nrt_monthly_tiles_url,
+            historical_drained_tiles_url=self.historical_drained_tiles_url,
             selected_id=st.session_state.get("selected_geohash"),
             id_column=self.id_column,
             base_has_centroids=base_has_centroids,
@@ -1208,6 +1210,7 @@ def create_app(
     pmtiles_file: str | Path | None = None,
     pmtiles_url: str | None = None,
     nrt_pmtiles_dir: str | Path | None = None,
+    drained_pmtiles_file: str | Path | None = None,
     logfile: str | None = None,
     modes: list | None = None,
     active_mode: str | None = None,
@@ -1413,6 +1416,22 @@ def create_app(
     nrt_monthly_tiles_url: str | None = None
     nrt_confidence_by_id: dict[str, int | None] | None = None
     nrt_tooltip_overrides: dict[str, dict] | None = None
+
+    # Historical mode's equivalent: the ~10k lakes that have a break date, in a
+    # tileset small enough to be built with no tile budget. The base archive
+    # under it has 4M lakes and is sampled to fit one, which used to take
+    # drained lakes off the map along with the rest when zoomed out.
+    historical_drained_tiles_url: str | None = None
+    if viz_configuration_name == "drainage_year" and drained_pmtiles_file:
+        from water_timeseries.map_utils import resolve_pmtiles_url
+
+        try:
+            historical_drained_tiles_url = resolve_pmtiles_url(str(drained_pmtiles_file))
+            logger.info(f"Historical drained-lakes tiles: {historical_drained_tiles_url}")
+        except (FileNotFoundError, OSError) as exc:
+            # Not fatal: without it the drained lakes come out of the base
+            # archive behind a filter, exactly as they did before.
+            logger.warning(f"Historical drained-lakes tileset unavailable ({exc}); using the base archive")
     if (
         viz_configuration_name == "nrt_drainage"
         and precomputed_breaks is not None
@@ -1650,6 +1669,7 @@ def create_app(
                     hidden_nrt_categories=hidden_nrt_categories,
                 )
                 viewer.nrt_monthly_tiles_url = nrt_monthly_tiles_url
+                viewer.historical_drained_tiles_url = historical_drained_tiles_url
                 viewer.nrt_confidence_by_id = nrt_confidence_by_id
                 viewer.nrt_tooltip_overrides = nrt_tooltip_overrides
 

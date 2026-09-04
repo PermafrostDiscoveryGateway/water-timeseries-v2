@@ -171,6 +171,12 @@ def get_legend_html_date_drainage_year() -> str:
                 </div>
             </div>
         </div>
+
+        <!-- Lakes with no break year, drawn grey underneath the coloured ones -->
+        <div style="display: flex; align-items: center; margin-top: 6px; padding-top: 6px; border-top: 1px solid #ddd;">
+            <div style="width: 20px; height: 20px; background-color: #bdbdbd; border: 1px solid #555; border-radius: 3px; margin-right: 8px;"></div>
+            <span>Stable lake</span>
+        </div>
         </div>
     """
     return LEGEND_HTML_DATE_DRAINAGE

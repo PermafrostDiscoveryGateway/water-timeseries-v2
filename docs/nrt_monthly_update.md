@@ -146,7 +146,8 @@ that band is a one-line style change; moving it further needs every archive rebu
 ### Rebuilding a base archive
 
 Both base archives were rebuilt on 2026-08-27 and now bake real centroids below the
-switch. Before that they did not, and the map went blank when zoomed out: they were
+switch, with slim centroid properties and a 2 MB per-tile cap (see below). Before
+that they did not, and the map went blank when zoomed out: they were
 built before `_write_features` stamped per-feature zoom ranges, so every centroid
 was baked at every zoom with the tileset's maxzoom of 14, and tippecanoe's default
 drop rate of 2.5 per level thinned them by ~2.5^14 — 4,026,306 centroids in
@@ -180,6 +181,26 @@ build_pmtiles_nrt_drainage(
 
 Each takes ~30 minutes on a laptop for 4M lakes (~6 min of that exporting GeoJSONL,
 the rest tippecanoe) and needs ~15 GB of scratch space on top of the ~3 GB result.
+
+Two settings decide how much of the map survives being zoomed out, because
+`--drop-densest-as-needed` discards lakes until each tile fits the byte cap:
+`--maximum-tile-bytes` in `DEFAULT_TIPPECANOE_ARGS` (2 MB, four times the
+tippecanoe default) and the per-builder `*_POINT_PROPERTIES`, which keep the
+centroids down to the id plus the column the mode colours by. Measured in one z7
+region holding 3,052 lakes:
+
+| zoom | 7 props, 500 KB | slim, 500 KB | slim, 2 MB (shipped) |
+|-----:|----------------:|-------------:|---------------------:|
+| 6    | 32%             | 60%          | 100%                 |
+| 5    | 9%              | 26%          | 42%                  |
+| 4    | 6%              | 11%          | 19%                  |
+
+Going past 2 MB is not worth it — at 8 MB the tiles stop growing (~2 MB) because a
+different limit binds, and coverage barely moves. Below z6 the map is still a
+sample: 4M centroids cannot fit in one z4 tile at any cap. The NRT *monthly*
+overlay escapes this entirely by being small enough (tens of thousands of
+features) to build with `--no-tile-size-limit --no-feature-limit`, which is why
+its drained lakes are all present at every zoom.
 Build to a new path, check it, then swap it in — the dashboard keeps serving the
 old one meanwhile:
 

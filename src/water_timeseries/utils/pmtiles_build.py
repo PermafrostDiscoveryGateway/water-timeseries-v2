@@ -6,7 +6,7 @@ import json
 import shutil
 import subprocess
 import warnings
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import geopandas as gpd
@@ -64,10 +64,33 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
     "--simplification=10",
     "--minimum-zoom=0",
     f"--maximum-zoom={TILE_MAX_ZOOM}",
+    # Four times tippecanoe's 500 KB default. `--drop-densest-as-needed` throws
+    # lakes away until a tile fits this, and at 500 KB it threw away most of
+    # them: a z7 region holding 3,052 lakes kept 60% of them at z6 and 26% at
+    # z5, so zooming out visibly emptied the map -- unlike the NRT overlay,
+    # which is small enough to run with no limit at all and stays complete at
+    # every zoom. At 2 MB the same region keeps 100% at z6 and 77% at z5.
+    #
+    # Measured, not guessed: 8 MB buys almost nothing over 2 MB (tiles stop
+    # growing at ~2 MB, where a different limit binds), and the cost here is a
+    # worst-case tile of 2.0 MB, a z5 p95 of 1.1 MB, and ~3% on the archive --
+    # the top two zooms dominate its size and are nowhere near this cap.
+    "--maximum-tile-bytes=2000000",
     f"--temporary-directory={TIPPECANOE_TEMP_DIR}",
     "-l",
     "lakes",
 )
+
+# Properties worth baking onto the centroids. They are drawn below
+# POINT_POLY_SWITCH_ZOOM, where hover is gated off, so the only ones that earn
+# their place are the id (identity, and `promoteId` for feature state) and
+# whatever the mode colours by -- and they earn it twice over, because every
+# byte of property spent on a centroid is a lake `--drop-densest-as-needed`
+# takes off the map at low zoom. Dropping the other five roughly doubled how
+# many lakes survive there (z6 32% -> 60%, z5 9% -> 26%) before the tile cap
+# above was touched at all.
+DRAINAGE_YEAR_POINT_PROPERTIES: tuple[str, ...] = ("id_geohash", "date_break_year")
+NRT_POINT_PROPERTIES: tuple[str, ...] = ("id_geohash", "drainage_confidence")
 
 # Properties baked into the per-month NRT drainage tilesets. These carry the
 # month's drainage signal *in the tiles*, so the dashboard styles and hovers
@@ -100,6 +123,13 @@ NRT_MONTHLY_TIPPECANOE_ARGS: tuple[str, ...] = (
     "-r1",
     f"--temporary-directory={TIPPECANOE_TEMP_DIR}",
 )
+
+
+# The historical drained-lakes overlay, like the NRT monthly one, holds
+# thousands of features rather than millions, so it can keep every one of them:
+# no density dropping and no tile size limits. That is the whole point of
+# splitting it out of the base archive -- see build_pmtiles_historical_drained.
+HISTORICAL_DRAINED_TIPPECANOE_ARGS: tuple[str, ...] = NRT_MONTHLY_TIPPECANOE_ARGS
 
 
 def point_poly_zoom_ranges(
@@ -200,6 +230,8 @@ def parquet_to_geojsonseq(
     property_columns: Sequence[str] = DEFAULT_TILE_PROPERTIES,
     geometry_column: str = "geometry",
     generate_points: bool = True,
+    point_property_columns: Sequence[str] | None = None,
+    row_filter: Callable[[pd.DataFrame], pd.Series[bool]] | None = None,
 ) -> tuple[Path, Path | None]:
     """Export a GeoParquet file to newline-delimited GeoJSON for tippecanoe.
 
@@ -237,6 +269,13 @@ def parquet_to_geojsonseq(
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore")
                 df = table.to_pandas()
+                # Filter before decoding WKB: parsing 4M geometries to keep the
+                # 9,839 that have a break is most of the runtime of a subset
+                # build, and none of it is needed.
+                if row_filter is not None:
+                    df = df[row_filter(df)]
+                    if df.empty:
+                        continue
                 if geometry_column in df.columns and len(df) > 0 and isinstance(df[geometry_column].iloc[0], bytes):
                     df[geometry_column] = gpd.GeoSeries.from_wkb(df[geometry_column])
                 gdf = gpd.GeoDataFrame(df)
@@ -250,7 +289,13 @@ def parquet_to_geojsonseq(
 
             gdf = gdf[gdf.geometry.notna() & ~gdf.geometry.is_empty].copy()
             gdf = _sanitize_properties(gdf, property_columns)
-            _write_features(gdf, property_columns, fh_poly, fh_points)
+            _write_features(
+                gdf,
+                property_columns,
+                fh_poly,
+                fh_points,
+                point_property_columns=point_property_columns,
+            )
     finally:
         fh_poly.close()
         if fh_points:
@@ -265,6 +310,7 @@ def _write_features(
     fh_poly,
     fh_points,
     *,
+    point_property_columns: Sequence[str] | None = None,
     poly_zoom: tuple[int, int] = DEFAULT_POLY_ZOOM,
     points_zoom: tuple[int, int] = DEFAULT_POINTS_ZOOM,
 ) -> None:
@@ -282,6 +328,8 @@ def _write_features(
     by decoding output tiles: with only the (ignored) ``-L`` keys set, the
     "drained" polygon layer showed up at z0 anyway. Per-feature is the fix.
     """
+    point_columns = property_columns if point_property_columns is None else point_property_columns
+
     for _, row in gdf.iterrows():
         props = {c: row[c] for c in property_columns if c in gdf.columns}
         for key, val in list(props.items()):
@@ -289,6 +337,7 @@ def _write_features(
                 props[key] = None
             elif hasattr(val, "item"):
                 props[key] = val.item()
+        point_props = props if point_property_columns is None else {c: props[c] for c in point_columns if c in props}
 
         # Write polygon feature
         geom_poly = row.geometry.__geo_interface__
@@ -306,7 +355,7 @@ def _write_features(
             feat_pt = {
                 "type": "Feature",
                 "tippecanoe": {"minzoom": points_zoom[0], "maxzoom": points_zoom[1]},
-                "properties": props,
+                "properties": point_props,
                 "geometry": geom_pt,
             }
             fh_points.write(json.dumps(feat_pt, separators=(",", ":")) + "\n")
@@ -347,6 +396,9 @@ def build_pmtiles(
     output_path: Path | str,
     *,
     property_columns: Sequence[str] = DEFAULT_TILE_PROPERTIES,
+    point_property_columns: Sequence[str] | None = None,
+    layer_names: tuple[str, str] = ("lakes", "lakes_points"),
+    row_filter: Callable[[pd.DataFrame], pd.Series[bool]] | None = None,
     tippecanoe_args: Sequence[str] | None = None,
     tippecanoe_bin: str | None = None,
     keep_geojsonl: bool = False,
@@ -361,6 +413,11 @@ def build_pmtiles(
         parquet_path: Input GeoParquet.
         output_path: Output ``.pmtiles`` path.
         property_columns: Columns embedded in tile features.
+        point_property_columns: Columns embedded in the centroid features, if the
+            centroids need fewer than the polygons. Defaults to the same set.
+        layer_names: ``(polygon_layer, point_layer)`` names inside the archive.
+        row_filter: Optional mask over each row group, to build a tileset from a
+            subset of the parquet without materializing it first.
         tippecanoe_args: Extra CLI flags (merged with sensible defaults).
         tippecanoe_bin: Path to tippecanoe binary (auto-detected if None).
         keep_geojsonl: If True, keep intermediate GeoJSONL next to output.
@@ -379,7 +436,13 @@ def build_pmtiles(
 
     geojsonl_path = output_path.with_suffix(".geojsonl")
     print(f"Generating GeoJSON sequences for {parquet_path}...")
-    poly_path, point_path = parquet_to_geojsonseq(parquet_path, geojsonl_path, property_columns=property_columns)
+    poly_path, point_path = parquet_to_geojsonseq(
+        parquet_path,
+        geojsonl_path,
+        property_columns=property_columns,
+        point_property_columns=point_property_columns,
+        row_filter=row_filter,
+    )
 
     if tippecanoe_args:
         base_flags = list(tippecanoe_args)
@@ -395,9 +458,9 @@ def build_pmtiles(
     # _write_features stamps
     # onto each feature, not by minzoom/maxzoom keys here — tippecanoe's -L JSON
     # doesn't have those (see _write_features).
-    layers = [{"file": str(poly_path), "layer": "lakes"}]
+    layers = [{"file": str(poly_path), "layer": layer_names[0]}]
     if point_path:
-        layers.append({"file": str(point_path), "layer": "lakes_points"})
+        layers.append({"file": str(point_path), "layer": layer_names[1]})
 
     _run_tippecanoe(
         output_path,
@@ -615,6 +678,57 @@ def build_pmtiles_drainage_year(
         parquet_path,
         output_path,
         property_columns=columns,
+        point_property_columns=DRAINAGE_YEAR_POINT_PROPERTIES,
+        **kwargs,
+    )
+
+
+def historical_drained_tiles_path(pmtiles_path: Path | str) -> Path:
+    """Return the drained-overlay path that goes with a base archive.
+
+    ``<base>.pmtiles`` -> ``<base>_drained.pmtiles``, so the two travel together
+    and the dashboard can find one from the other.
+    """
+    pmtiles_path = Path(pmtiles_path)
+    return pmtiles_path.with_name(f"{pmtiles_path.stem}_drained{pmtiles_path.suffix}")
+
+
+def build_pmtiles_historical_drained(
+    parquet_path: Path | str,
+    output_path: Path | str,
+    break_year_column: str = "date_break_year",
+    **kwargs,
+) -> Path:
+    """Build the drained-lakes overlay for historical mode: every lake with a break.
+
+    The base archive has to drop most of its lakes at low zoom to keep tiles
+    under the byte cap -- 4M centroids do not fit in a z4 tile at any cap -- and
+    the lakes with a break go with them, even though they are the ones the map
+    exists to show. There are only ~9,800 of them in the whole record, a quarter
+    of a single NRT month, so they get the same treatment the NRT monthly
+    overlay gets: their own small tileset with no dropping and no size limits,
+    drawn over the thinned grey base. Complete at every zoom, as a result.
+
+    Layer names match the NRT overlay (``drained`` / ``drained_points``) because
+    the style treats the two the same way.
+    """
+    columns = (
+        "id_geohash",
+        "date_break",
+        "date_break_year",
+        "pre_break_median",
+        "post_break_median",
+        "water_change_ha",
+        "water_change_perc",
+    )
+    return build_pmtiles(
+        parquet_path,
+        output_path,
+        property_columns=columns,
+        point_property_columns=DRAINAGE_YEAR_POINT_PROPERTIES,
+        layer_names=("drained", "drained_points"),
+        row_filter=lambda df: df[break_year_column].notna(),
+        tippecanoe_args=HISTORICAL_DRAINED_TIPPECANOE_ARGS,
         **kwargs,
     )
 
@@ -648,5 +762,6 @@ def build_pmtiles_nrt_drainage(
         parquet_path,
         output_path,
         property_columns=columns_absolute,
+        point_property_columns=NRT_POINT_PROPERTIES,
         **kwargs,
     )
