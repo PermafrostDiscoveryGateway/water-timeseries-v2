@@ -5,6 +5,24 @@
 # on `default_mode` and the sidebar "View mode" switch reads the other entry
 # out of this same file -- so a deployment that mounts this one config (as helm
 # does at /data/dashboard-config.yaml) gets a working switcher.
+#
+# data/lake_geometry/lakes.pmtiles is the mode-agnostic base archive: geometry, the
+# id, and the area/change columns that describe the lake rather than a month or a
+# mode. Both modes cover the same lake table with the same geometry (same 4,026,306
+# ids, same polygons) and neither styles from a baked property -- the base lakes are
+# flat grey in both -- so one archive can serve both. It carries the area/change
+# columns because a stable lake is in no overlay and the base tile is the only thing
+# it can hover.
+#
+# drainage_year reads it below. nrt_drainage still points at its own run's archive:
+# this one answers with historical columns, and NRT mode needs the month's own
+# prediction for a non-drained lake, which arrives with the `scored` layer in the
+# per-month tilesets. Build it with:
+#   uv run water-timeseries build-pmtiles \
+#     data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet \
+#     data/lake_geometry/lakes.pmtiles --shared-geometry
+# Rebuild it only when the lake geometry itself changes; the per-year and
+# per-month drainage data lives in the overlays and rebuilds independently.
 
 ee_project: pdg-project-406720
 
@@ -24,16 +42,27 @@ default_mode: drainage_year
 modes:
   drainage_year:
     label: Historical
+    # Read server-side only (click -> lake id, and the geometry source when the
+    # drained overlay is rebuilt), so it stays per-mode; the browser only ever
+    # sees pmtiles_file.
     vector_file: data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet
-    pmtiles_file: data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.pmtiles
+    # Shared with nrt_drainage -- see the note at the top of this file.
+    pmtiles_file: data/lake_geometry/lakes.pmtiles
     # Historical breaks only (break_method=simple). Kept in its own directory --
     # it previously shared DW_historicalbp_simple_merged_breaks_nogeoms_v4 with
     # NRT mode, which had mixed 2026-06/07 NRT confidence rows into this file.
     precomputed_nrt_dir: data/precomputed_historical
     viz_configuration: drainage_year
-    # The ~10k lakes with a break date are served from their own tileset, found
-    # next to pmtiles_file as <base>_drained.pmtiles (historical_drained_tiles_path)
-    # -- no key needed. pmtiles_file holds all 4M lakes and tippecanoe samples
+    # The ~10k lakes with a break date, every year in the one archive: a lake
+    # breaks at most once in the record (id_geohash is unique in vector_file), so
+    # unlike the NRT months there is nothing to stratify by year. Kept beside the
+    # shared base archive so the <base>_drained.pmtiles convention
+    # (historical_drained_tiles_path) finds it too, and named here as well --
+    # without one of the two, drainage_year has to filter the base archive on
+    # date_break_year, which the shared archive does not carry, and every lake
+    # comes out grey.
+    drained_pmtiles_file: data/lake_geometry/lakes_drained.pmtiles
+    # The base archive holds all 4M lakes and tippecanoe samples
     # them to fit its tile budget, so zooming out dropped drained lakes along
     # with the stable ones; the overlay is small enough to build with no budget
     # at all and stays complete at every zoom, drawn over the sampled grey.
@@ -53,6 +82,10 @@ modes:
     # in as the active vector/tile source -- point this at the full 2026-07 run
     # once it's downloaded.
     vector_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3_repartitioned.parquet
+    # Not yet the shared archive at data/lake_geometry/lakes.pmtiles -- see the
+    # note at the top of this file. The geometry is identical, but the shared
+    # archive answers hover with the historical area columns, and a non-drained
+    # lake in NRT mode wants the month's own prediction instead.
     pmtiles_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3.pmtiles
     # NRT confidence breaks only, currently 2026-06 (see the 2026-07 note above).
     # Kept out of the historical precomputed dir for the same reason.

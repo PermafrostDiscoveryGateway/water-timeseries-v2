@@ -1,5 +1,7 @@
 """Tests for switching between the Historical and Near Real-Time dashboards."""
 
+from pathlib import Path
+
 import yaml
 
 from water_timeseries.dashboard import modes as modes_mod
@@ -11,6 +13,7 @@ from water_timeseries.dashboard.modes import (
     resolve_mode,
 )
 from water_timeseries.utils.cli import flatten_mode, mode_configs
+from water_timeseries.utils.pmtiles_build import historical_drained_tiles_path
 
 
 def _write_config(path, **values):
@@ -220,6 +223,56 @@ def test_shipped_config_defines_both_modes():
         # Shared top-level keys reach every mode.
         assert settings["ee_project"] == config["ee_project"]
         assert "modes" not in settings and "label" not in settings
+
+
+def test_shipped_config_pairs_the_shared_archive_with_a_drained_overlay():
+    """drainage_year renders from the shared base archive, plus its own drained overlay.
+
+    The base archive is mode-agnostic and carries no per-year values, so the
+    overlay is what makes the drainage years visible. Sharing the base is only
+    safe while that overlay stays per-mode, so this pins both halves.
+
+    nrt_drainage joins the shared archive once the per-month tilesets can answer
+    for a non-drained lake -- see
+    ``test_shipped_config_shares_one_base_archive_between_modes``.
+    """
+    config = modes_mod.load_config(modes_mod._resolve(modes_mod._DEFAULT_CONFIG), modes_mod.logger)
+    settings = {key: flatten_mode(config, key) for key in mode_configs(config)}
+
+    base_archives = {key: values["pmtiles_file"] for key, values in settings.items()}
+    assert base_archives["drainage_year"] == "data/lake_geometry/lakes.pmtiles"
+
+    # The drained overlay is not optional once the base archive is shared: the
+    # fallback filters the base on date_break_year, which the shared archive
+    # carries only for drained lakes, and a geometry-only one not at all.
+    drained = settings["drainage_year"]["drained_pmtiles_file"]
+    assert drained, "drainage_year must name its drained overlay, not fall back to the base archive"
+    # Both resolution paths have to agree: the explicit key (which only reaches a
+    # fresh page load because cli.py forwards it) and the <base>_drained.pmtiles
+    # convention app.py falls back on when no key is passed.
+    assert Path(drained) == historical_drained_tiles_path(base_archives["drainage_year"])
+
+    assert settings["nrt_drainage"]["nrt_pmtiles_dir"]
+    assert "nrt_pmtiles_dir" not in mode_configs(config)["drainage_year"]
+
+
+def test_dashboard_entrypoints_carry_the_drained_overlay_through(monkeypatch):
+    """The config key is useless unless both hops forward it.
+
+    ``cli.py dashboard`` spawns the streamlit script, so a key it does not pass
+    on only takes effect once the user switches modes (which re-reads the YAML).
+    That gap is what left historical mode grey on first load.
+    """
+    import inspect
+    import sys
+
+    from water_timeseries.dashboard.app import parse_args
+    from water_timeseries.scripts.cli import dashboard
+
+    assert "drained_pmtiles_file" in inspect.signature(dashboard).parameters
+
+    monkeypatch.setattr(sys, "argv", ["app.py", "--drained-pmtiles-file", "x.pmtiles"])
+    assert parse_args().drained_pmtiles_file == "x.pmtiles"
 
 
 def test_apply_mode_override_fills_in_dataless_launch(tmp_path, monkeypatch):
