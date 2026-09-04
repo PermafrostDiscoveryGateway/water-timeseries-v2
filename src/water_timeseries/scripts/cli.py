@@ -9,6 +9,7 @@ Usage:
 
 import subprocess
 import sys
+from collections.abc import Sequence
 from datetime import datetime
 from pathlib import Path
 
@@ -516,9 +517,7 @@ def merge_nrt_confidence(
 
     breaks_file = Path(config_dict["breaks_file"]) if config_dict.get("breaks_file") else None
     if not breaks_file:
-        logger.error(
-            "breaks_file is required (via --breaks-file, or a --config-file with precomputed_nrt_dir)."
-        )
+        logger.error("breaks_file is required (via --breaks-file, or a --config-file with precomputed_nrt_dir).")
         raise SystemExit(1)
 
     gcs_prefix = config_dict.get("gcs_prefix") or "pdg-storage-default/workflows_optimization/dashboard_nrt"
@@ -1129,30 +1128,75 @@ def breakpoint_analysis_nrt(
         aggregate_nrt_directory(resolved_output_dir)
 
 
-def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> None:
-    """Aggregate individual monthly NRT files in a directory into consolidated parquet files."""
+# Aggregation reads whatever a run happened to name its monthly files: the
+# `nrt_*` outputs this CLI writes, and the `DW_*` ones that come back from a
+# full GCS run.
+NRT_MONTHLY_PATTERNS = ["nrt_*_drain_breaks.parquet", "DW_*breaks.parquet*"]
+
+
+def find_nrt_monthly_files(nrt_dirs: Path | Sequence[Path], recursive: bool = False) -> list[Path]:
+    """Collect the per-month NRT parquet files under one or more directories.
+
+    A month is not always one file in one place: a full run tiles the Arctic and
+    drops each tile's parquet (next to its .nc) into that month's own subdir, so
+    a single consolidated parquet has to be built from many directories. Hence
+    both a sequence of *nrt_dirs* and *recursive*, which walks subdirectories of
+    each -- point it at the parent and it finds every month.
+
+    Files are returned deduplicated by resolved path, so overlapping arguments
+    (a parent passed with ``recursive`` alongside one of its children) cannot
+    double-count a month's rows.
+    """
+    if isinstance(nrt_dirs, str | Path):
+        nrt_dirs = [Path(nrt_dirs)]
+
+    seen: dict[Path, Path] = {}
+    for nrt_dir in nrt_dirs:
+        nrt_dir = Path(nrt_dir)
+        if not nrt_dir.is_dir():
+            logger.warning(f"Skipping {nrt_dir}: not a directory")
+            continue
+        for pattern in NRT_MONTHLY_PATTERNS:
+            glob_pattern = f"**/{pattern}" if recursive else pattern
+            for f in nrt_dir.glob(glob_pattern):
+                if f.name == "nrt_monthly_drain_breaks.parquet":
+                    continue
+                seen.setdefault(f.resolve(), f)
+
+    # Sort by name, not by path: the same month tiled across subdirs should land
+    # together regardless of which directory each tile came from.
+    return sorted(seen.values(), key=lambda f: (f.name, str(f)))
+
+
+def aggregate_nrt_directory(
+    nrt_dirs: Path | Sequence[Path],
+    output_dir: Path | None = None,
+    recursive: bool = False,
+) -> None:
+    """Aggregate individual monthly NRT files from one or more directories.
+
+    *nrt_dirs* is a single directory or a sequence of them; *output_dir*
+    defaults to the first. Set *recursive* to search subdirectories too.
+    """
+    if isinstance(nrt_dirs, str | Path):
+        nrt_dirs = [Path(nrt_dirs)]
+    nrt_dirs = [Path(d) for d in nrt_dirs]
+    if not nrt_dirs:
+        raise ValueError("aggregate_nrt_directory needs at least one input directory")
+
     if output_dir is None:
-        output_dir = nrt_dir
+        output_dir = nrt_dirs[0]
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # scan over multiple patterns
-    include_patterns = ["nrt_*_drain_breaks.parquet", "DW_*breaks.parquet*"]
-    nrt_dir = Path(nrt_dir)
+    monthly_files = find_nrt_monthly_files(nrt_dirs, recursive=recursive)
 
-    monthly_files = []
-    for pattern in include_patterns:
-        monthly_files_result = sorted(
-            [f for f in nrt_dir.glob(pattern) if f.name != "nrt_monthly_drain_breaks.parquet"]
-        )
-        if monthly_files_result:
-            monthly_files = monthly_files + monthly_files_result
-
+    searched = ", ".join(str(d) for d in nrt_dirs)
     if not monthly_files:
-        logger.info(f"No individual monthly NRT files found in {nrt_dir} to aggregate.")
+        logger.info(f"No individual monthly NRT files found in {searched} to aggregate.")
         return
 
-    logger.info(f"Found {len(monthly_files)} individual NRT monthly files in {nrt_dir}, aggregating...")
+    logger.info(f"Found {len(monthly_files)} individual NRT monthly files in {searched}, aggregating...")
     dfs = []
     for file_path in monthly_files:
         try:
@@ -1189,13 +1233,16 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
     if "analysis_month" in breaks_df.columns:
         counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
 
-        # Ensure all processed months are included in the counts, even if they have 0 drained lakes
-        months_from_files = []
+        # Ensure all processed months are included in the counts, even if they have 0 drained lakes.
+        # Deduplicated: a month tiled across several files (or matched by both
+        # include patterns) contributes one row, not one row per file -- without
+        # this the left-merge below repeats each month's count once per tile.
+        months_from_files = set()
         for f in monthly_files:
             parts = f.stem.split("_")
             if len(parts) >= 2:
-                months_from_files.append(parts[1])
-        all_months_df = pd.DataFrame({"analysis_month": months_from_files})
+                months_from_files.add(parts[1])
+        all_months_df = pd.DataFrame({"analysis_month": sorted(months_from_files)})
 
         counts_df = pd.merge(all_months_df, counts_df, on="analysis_month", how="left").fillna(
             {"drained_lake_count": 0}
@@ -1209,18 +1256,27 @@ def aggregate_nrt_directory(nrt_dir: Path, output_dir: Path | None = None) -> No
 
 @app.command(group="Analysis")
 def aggregate_nrt(
-    nrt_dir: Path,
+    nrt_dir: list[Path],
     output_dir: Path | None = None,
+    recursive: bool = False,
     logfile: str | None = None,
     verbose: int = 0,
 ):
-    """Aggregate individual monthly NRT files in a directory into consolidated parquet files.
+    """Aggregate individual monthly NRT files into consolidated parquet files.
+
+    Accepts one or more input directories, so a month whose tiles were written
+    into separate subdirectories still aggregates into a single parquet.
 
     Creates ``nrt_monthly_drain_breaks.parquet`` and ``nrt_monthly_drain_counts.parquet``
-    in ``output_dir`` (defaulting to ``nrt_dir``).
+    in ``output_dir`` (defaulting to the first input directory).
+
+    Example:
+        water-timeseries aggregate-nrt precomputed/nrt/2026-06 precomputed/nrt/2026-07 \
+            --output-dir precomputed/nrt
+        water-timeseries aggregate-nrt precomputed/nrt --recursive
     """
     logfile = setup_logging(logfile=logfile, verbose=verbose)
-    aggregate_nrt_directory(nrt_dir, output_dir)
+    aggregate_nrt_directory(nrt_dir, output_dir, recursive=recursive)
 
 
 @app.command(group="Analysis")

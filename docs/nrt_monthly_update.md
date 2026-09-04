@@ -288,5 +288,23 @@ uv run water-timeseries aggregate-nrt <nrt-dir>
 `nrt_monthly_drain_breaks.parquet` plus `nrt_monthly_drain_counts.parquet`, which is
 the same table step 3 would have written. Steps 4 onward are unchanged.
 
+A month is not always one file in one directory: a tiled run writes each tile's
+parquet next to its `.nc`, in that month's own subdirectory. `aggregate-nrt` takes
+any number of input directories, so pass them all, or point it at the parent with
+`--recursive`:
+
+```bash
+# one directory per tile
+uv run water-timeseries aggregate-nrt <dir-a> <dir-b> <dir-c> --output-dir <nrt-dir>
+
+# or let it walk the month subdirectories itself
+uv run water-timeseries aggregate-nrt <parent-dir> --recursive --output-dir <nrt-dir>
+```
+
+Files are deduplicated by resolved path, so overlapping arguments (a parent with
+`--recursive` plus one of its own children) cannot double-count a month's rows.
+Note that `--output-dir` defaults to the *first* input directory, which is rarely
+what you want with several inputs — pass it explicitly.
+
 Always check GCS for a newer full run before committing to this — the run may simply
 not have been published yet.
