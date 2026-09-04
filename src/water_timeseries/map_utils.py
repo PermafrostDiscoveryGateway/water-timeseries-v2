@@ -1,4 +1,5 @@
 import functools
+import os
 from pathlib import Path
 from typing import ClassVar
 
@@ -22,6 +23,39 @@ from water_timeseries.utils.visualization import (
     get_legend_html_net_change,
     get_legend_html_nrt_drainage,
 )
+
+
+def get_darkmatter_tilelayer(
+    min_zoom: int | None = None, max_zoom: int | None = None, logger=None
+) -> folium.TileLayer | None:
+    """Set up CartoDB Dark Matter tile layer using API key from environment variable."""
+    cartodb_key = os.environ.get("CARTODB_KEY")
+
+    if cartodb_key:
+        attr = (
+            '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> '
+            'contributors, &copy; <a href="https://cartodb.com/attributions">CartoDB</a>'
+        )
+        # NOTE: Ensure "dark_all" is the correct endpoint you want.
+        # If you meant Dark Matter, it should be "dark_matter".
+        tiles = f"https://basemaps.cartocdn.com/rastertiles/dark_all/{{z}}/{{x}}/{{y}}.png?key={cartodb_key}"
+
+        tile_layer_darkmatter = folium.TileLayer(
+            tiles=tiles,
+            attr=attr,
+            name="Dark Matter (CartoDB)",
+            min_zoom=min_zoom,
+            max_zoom=max_zoom,
+        )
+
+    else:
+        if logger:
+            logger.warning("CARTODB_KEY not found in environment variables. Dark Matter tiles may not load.")
+        tile_layer_darkmatter = folium.TileLayer(
+            "CartoDB.DarkMatter", name="Dark Matter (CartoDB)", min_zoom=min_zoom, max_zoom=max_zoom
+        )
+
+    return tile_layer_darkmatter
 
 
 class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
@@ -325,9 +359,11 @@ def build_pmtiles_map(
         min_zoom=min_zoom,
         max_zoom=max_zoom,
     )
-    tile_layer_darkmatter = folium.TileLayer(
-        "CartoDB.DarkMatter", name="Dark Matter (CartoDB)", min_zoom=min_zoom, max_zoom=max_zoom
-    )
+    # tile_layer_darkmatter = folium.TileLayer(
+    #     "CartoDB.DarkMatter", name="Dark Matter (CartoDB)", min_zoom=min_zoom, max_zoom=max_zoom
+    # )
+    tile_layer_darkmatter = get_darkmatter_tilelayer(min_zoom=min_zoom, max_zoom=max_zoom)
+
     tile_layer_esriworld = folium.TileLayer(
         "Esri.WorldImagery", name="ESRI World Imagery", min_zoom=min_zoom, max_zoom=max_zoom
     )
