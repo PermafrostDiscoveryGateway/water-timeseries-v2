@@ -138,7 +138,6 @@ ingress:
   ## If true, and ingress.tls is NOT empty, that takes precedence over the inferred TLS settings.
   tlsEnabled: true
   ## @param ingress.tlsSecretName Secret name used by inferred TLS when `ingress.tls` is empty.
-  tlsSecretName: ingress-tls-cert  # leave as-is until LetsEncrypt HTTP-01 working in traefik
 
   annotations:
     ## @param ingress.annotations.cert-manager.io/cluster-issuer cert-manager cluster issuer to use for provisioning certificates
