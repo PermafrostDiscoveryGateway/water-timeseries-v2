@@ -2,9 +2,15 @@
 
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import xarray as xr
 
 from water_timeseries.breakpoint import SimpleBreakpoint
 from water_timeseries.dataset import DWDataset, JRCDataset
+
+
+def _renamed(dataset: xr.Dataset, new_id: str) -> xr.Dataset:
+    """Return a copy of the dataset whose id dimension is renamed to `new_id`."""
+    return dataset.rename({"id_geohash": new_id})
 
 
 class TestDWDatasetPlotting:
@@ -180,5 +186,56 @@ class TestJRCDatasetPlotting:
 
         bp = SimpleBreakpoint()
         fig = ds.plot_timeseries_interactive(geohash, breakpoints=bp)
+        assert fig is not None
+        assert isinstance(fig, go.Figure)
+
+
+class TestCustomFieldPlotting:
+    """Ensure plotting works when the id column is named other than id_geohash (e.g. lake_id).
+
+    The public entry points (``plot_timeseries`` / ``plot_timeseries_interactive``) take an
+    opaque object identifier, so a dataset whose id coordinate is called ``lake_id`` must
+    behave identically to one whose id coordinate is called ``id_geohash``.
+    """
+
+    def test_dw_plot_timeseries_lake_id(self, dw_test_dataset):
+        """Static plot works for a dataset whose id column is ``lake_id``."""
+        renamed = _renamed(dw_test_dataset, "lake_id")
+        ds = DWDataset(renamed, id_field="lake_id")
+        lake_id = ds.ds.coords["lake_id"].values[0]
+
+        fig = ds.plot_timeseries(lake_id)
+        assert fig is not None
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_dw_plot_timeseries_interactive_lake_id(self, dw_test_dataset):
+        """Interactive plot works for a dataset whose id column is ``lake_id``."""
+        renamed = _renamed(dw_test_dataset, "lake_id")
+        ds = DWDataset(renamed, id_field="lake_id")
+        lake_id = ds.ds.coords["lake_id"].values[0]
+
+        fig = ds.plot_timeseries_interactive(lake_id)
+        assert fig is not None
+        assert isinstance(fig, go.Figure)
+
+    def test_jrc_plot_timeseries_lake_id(self, jrc_test_dataset):
+        """Static plot works for a JRC dataset whose id column is ``lake_id``."""
+        renamed = _renamed(jrc_test_dataset, "lake_id")
+        ds = JRCDataset(renamed, id_field="lake_id")
+        lake_id = ds.ds.coords["lake_id"].values[0]
+
+        fig = ds.plot_timeseries(lake_id)
+        assert fig is not None
+        assert isinstance(fig, plt.Figure)
+        plt.close(fig)
+
+    def test_jrc_plot_timeseries_interactive_lake_id(self, jrc_test_dataset):
+        """Interactive plot works for a JRC dataset whose id column is ``lake_id``."""
+        renamed = _renamed(jrc_test_dataset, "lake_id")
+        ds = JRCDataset(renamed, id_field="lake_id")
+        lake_id = ds.ds.coords["lake_id"].values[0]
+
+        fig = ds.plot_timeseries_interactive(lake_id)
         assert fig is not None
         assert isinstance(fig, go.Figure)
