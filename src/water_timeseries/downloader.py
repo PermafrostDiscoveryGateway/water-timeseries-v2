@@ -331,18 +331,14 @@ class EarthEngineDownloader:
         # Process each date inside this method to avoid large imlist in memory
         imlist = []
         for date in dates:
-            try:
-                # Calculate monthly Dynamic World land cover for the date
-                im = calc_monthly_dw(start_date=date, polygons=fc)
-                if im is None:
-                    self._log_warning(f"No data for date: {date}")
-                    continue
-                # Create masks for land cover classes
-                im_classes = create_dw_classes_mask(ee.Image(im))
-                imlist.append(im_classes)
-            except Exception:  # noqa: BLE001
-                # Skip dates with errors
+            # Calculate monthly Dynamic World land cover for the date
+            im = calc_monthly_dw(start_date=date, polygons=fc)
+            if im is None:
+                self._log_warning(f"No data for date: {date}")
                 continue
+            # Create masks for land cover classes
+            im_classes = create_dw_classes_mask(ee.Image(im))
+            imlist.append(im_classes)
 
         if not imlist:
             self._log_warning("No images processed for chunk")
