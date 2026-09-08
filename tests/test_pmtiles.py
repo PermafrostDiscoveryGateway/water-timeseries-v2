@@ -332,6 +332,162 @@ def test_centroids_are_drawn_more_opaque_than_the_polygons_they_replace(viz_conf
     assert points_paint["circle-stroke-width"]
 
 
+def test_drained_lakes_draw_over_stable_ones():
+    """A drained lake must never be painted over by a stable neighbour.
+
+    Both used to share one layer, coloured by a branch in the paint, so which
+    one ended up on top came down to the order features happened to sit in the
+    tile -- grey lakes covering the drained ones the map exists to show. They
+    are separate layers now, and the whole grey layer is drawn first.
+    """
+    from water_timeseries.map_utils import build_pmtiles_map
+    from water_timeseries.utils.map_styles.pmtiles import DRAINED_LAKE_FILTER, STABLE_LAKE_FILTER
+
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="drainage_year",
+        base_has_centroids=True,
+    )
+    layers = _style_layers(m.get_root().render(), "lakes-fill")
+    order = list(layers)
+
+    for stable, drained in (("lakes-stable-points", "lakes-points"), ("lakes-stable-fill", "lakes-fill")):
+        assert order.index(stable) < order.index(drained), f"{stable} paints over {drained}"
+        assert layers[stable]["filter"] == STABLE_LAKE_FILTER
+        assert layers[drained]["filter"] == DRAINED_LAKE_FILTER
+
+    # Neutral grey, and the same geometry treatment either side of the switch, so
+    # a lake does not change size or gain an outline as the handoff happens.
+    assert layers["lakes-stable-fill"]["paint"]["fill-color"] == "#bdbdbd"
+    assert layers["lakes-stable-points"]["paint"]["circle-radius"] == layers["lakes-points"]["paint"]["circle-radius"]
+    assert layers["lakes-stable-points"]["maxzoom"] == layers["lakes-points"]["maxzoom"]
+    assert layers["lakes-stable-fill"].get("minzoom") == layers["lakes-fill"].get("minzoom")
+
+
+def test_modes_without_a_stable_split_keep_one_set_of_lake_layers():
+    """Only drainage_year separates stable from drained; the rest style every lake alike."""
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    for viz in ("colored_historical", "generic_water", "nrt_drainage"):
+        m = build_pmtiles_map(
+            "http://localhost:1/lakes.pmtiles",
+            viz_configuration_name=viz,
+            base_has_centroids=True,
+        )
+        layers = _style_layers(m.get_root().render(), "lakes-fill")
+        assert "lakes-stable-fill" not in layers, viz
+        # No filter either -- these layers carry every lake in the archive.
+        assert "filter" not in layers["lakes-fill"], viz
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_historical_drained_overlay_holds_only_lakes_with_a_break(tmp_path):
+    """The overlay is the ~0.2% of lakes that drained, and nothing else.
+
+    Small enough to build with no tile budget, which is the whole point: the
+    base archive's 4M lakes have to be sampled to fit one, and that sampling
+    took drained lakes off the map when zoomed out along with the stable ones.
+    """
+    from shapely.geometry import box
+
+    from water_timeseries.utils.pmtiles_build import build_pmtiles_historical_drained
+
+    lakes = gpd.GeoDataFrame(
+        {
+            "id_geohash": ["drained1", "stable1", "drained2", "stable2"],
+            "date_break": ["2019-06", None, "2022-07", None],
+            "date_break_year": [2019.0, None, 2022.0, None],
+            "pre_break_median": [1.0, 2.0, 3.0, 4.0],
+            "post_break_median": [0.1, 2.0, 0.3, 4.0],
+            "water_change_ha": [-1.0, 0.0, -2.0, 0.0],
+            "water_change_perc": [-90.0, 0.0, -90.0, 0.0],
+        },
+        geometry=[box(x, 70.0, x + 0.01, 70.01) for x in (-150.0, -150.5, -151.0, -151.5)],
+        crs="EPSG:4326",
+    )
+    src = tmp_path / "lakes.parquet"
+    lakes.to_parquet(src)
+
+    out = build_pmtiles_historical_drained(src, tmp_path / "drained.pmtiles", keep_geojsonl=True)
+    written = [json.loads(line) for line in (tmp_path / "drained.geojsonl").read_text().splitlines()]
+
+    assert {f["properties"]["id_geohash"] for f in written} == {"drained1", "drained2"}
+    # Hover reads the polygons off the overlay now, so they carry the full set.
+    assert set(written[0]["properties"]) == {c for c in lakes.columns if c != "geometry"}
+
+    metadata = read_pmtiles_metadata(out)
+    assert {layer["id"] for layer in metadata["vector_layers"]} == {"drained", "drained_points"}
+    # Named to match build_pmtiles_nrt_monthly, which the dashboard layers the
+    # same way -- and built with its no-limit args, so nothing is dropped.
+    assert not any((s or {}).get("dropped_by_rate") for s in metadata.get("strategies") or [])
+
+
+def test_drained_overlay_replaces_the_filtered_base_layers():
+    """Given the overlay, the coloured layers read it instead of filtering the base."""
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    url = "http://localhost:1/drained.pmtiles"
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="drainage_year",
+        base_has_centroids=True,
+        historical_drained_tiles_url=url,
+    )
+    html = m.get_root().render()
+    layers = _style_layers(html, "lakes-fill")
+
+    assert f"pmtiles://{url}" in html
+    for lid, source_layer in (("lakes-points", "drained_points"), ("lakes-fill", "drained")):
+        assert layers[lid]["source"] == "drained_pmtiles"
+        assert layers[lid]["source-layer"] == source_layer
+        # Every feature in that tileset is drained, so no filter is needed.
+        assert "filter" not in layers[lid]
+
+    # The grey lakes still come from the base archive, still underneath.
+    assert layers["lakes-stable-points"]["source"] == "lakes_pmtiles"
+    order = list(layers)
+    assert order.index("lakes-stable-points") < order.index("lakes-points")
+
+
+def test_centroids_carry_only_the_properties_they_are_drawn_from():
+    """Property weight on a centroid costs lakes at low zoom, so it must be earned.
+
+    ``--drop-densest-as-needed`` discards features until a tile fits the byte
+    cap, so every property baked onto a centroid is lakes taken off the zoomed
+    out map. Hover is gated at the switch zoom and never reads these, so only
+    the id and the column the mode colours by belong here -- dropping the other
+    five roughly doubled how many lakes survive at z5-z6.
+    """
+    import tempfile
+
+    from water_timeseries.utils.pmtiles_build import DRAINAGE_YEAR_POINT_PROPERTIES, parquet_to_geojsonseq
+
+    with tempfile.TemporaryDirectory() as tmp:
+        poly_path, points_path = parquet_to_geojsonseq(
+            TEST_PARQUET,
+            Path(tmp) / "lakes.geojsonl",
+            property_columns=DEFAULT_TILE_PROPERTIES,
+            point_property_columns=("id_geohash",),
+        )
+        poly = json.loads(poly_path.read_text(encoding="utf-8").splitlines()[0])
+        point = json.loads(points_path.read_text(encoding="utf-8").splitlines()[0])
+
+    assert set(point["properties"]) == {"id_geohash"}
+    # The polygons keep the full set -- they are what hover reads.
+    assert set(poly["properties"]) > set(point["properties"])
+    # The id has to be there or the centroid loses its identity for promoteId.
+    assert "id_geohash" in DRAINAGE_YEAR_POINT_PROPERTIES
+
+
+def test_tile_byte_cap_is_raised_above_the_tippecanoe_default():
+    """The default 500 KB cap emptied the zoomed-out map; 2 MB keeps z6 complete."""
+    from water_timeseries.utils.pmtiles_build import DEFAULT_TIPPECANOE_ARGS
+
+    caps = [f for f in DEFAULT_TIPPECANOE_ARGS if f.startswith("--maximum-tile-bytes")]
+    assert len(caps) == 1, "exactly one tile byte cap, or tippecanoe takes the last one silently"
+    assert int(caps[0].split("=")[1]) > 500_000
+
+
 def test_archive_bakes_low_zoom_centroids_reads_the_build_strategies():
     """The predicate answers from what tippecanoe recorded, not from a flag beside the file."""
     healthy = {

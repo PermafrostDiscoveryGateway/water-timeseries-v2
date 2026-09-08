@@ -116,7 +116,9 @@ def test_build_pmtiles_map_highlight_survives_hide_stable_lakes():
     )
     layers = {lyr["id"]: lyr for lyr in _pmtiles_style_layers(m)}
 
-    assert layers["lakes-fill"]["filter"][0] == "all"  # stable lakes filtered out
+    # Stable lakes are their own grey layer now, so hiding them drops that layer
+    # rather than filtering the coloured one.
+    assert "lakes-stable-fill" not in layers
     assert layers["lakes-line-selected"]["filter"] == ["==", ["get", "id_geohash"], selected_id]
 
 
