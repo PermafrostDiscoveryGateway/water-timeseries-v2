@@ -1,7 +1,10 @@
 """Tests for plotting functionality."""
 
+import warnings
+
 import matplotlib.pyplot as plt
 import plotly.graph_objects as go
+import pytest
 import xarray as xr
 
 from water_timeseries.breakpoint import SimpleBreakpoint
@@ -82,7 +85,7 @@ class TestDWDatasetPlotting:
         plt.close(fig)
 
     def test_dw_plot_timeseries_interactive_bp_date(self, dw_test_dataset):
-        """Test that plot_timeseries creates a matplotlib figure."""
+        """Test that plot_timeseries_interactive creates a Plotly figure."""
         ds = DWDataset(dw_test_dataset)
         geohash = ds.ds.coords["id_geohash"].values[0]
 
@@ -239,3 +242,89 @@ class TestCustomFieldPlotting:
         fig = ds.plot_timeseries_interactive(lake_id)
         assert fig is not None
         assert isinstance(fig, go.Figure)
+
+
+class TestIdGeohashBackwardCompatibility:
+    """Ensure the legacy ``id_geohash=`` keyword still works and emits a DeprecationWarning.
+
+    All four plotting entry points (DW + JRC, static + interactive) must accept
+    ``id_geohash=`` exactly as they did before the refactor, while also supporting
+    the new ``object_id=`` keyword.
+    """
+
+    @pytest.mark.parametrize("method", ["plot_timeseries", "plot_timeseries_interactive"])
+    def test_dw_id_geohash_kwarg_emits_deprecation_warning(self, dw_test_dataset, method):
+        """DW static/interactive: legacy ``id_geohash=`` works but is deprecated."""
+        ds = DWDataset(dw_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        with pytest.warns(DeprecationWarning, match="object_id"):
+            fig = getattr(ds, method)(id_geohash=geohash)
+        assert fig is not None
+        if method == "plot_timeseries":
+            assert isinstance(fig, plt.Figure)
+            plt.close(fig)
+        else:
+            assert isinstance(fig, go.Figure)
+
+    @pytest.mark.parametrize("method", ["plot_timeseries", "plot_timeseries_interactive"])
+    def test_dw_object_id_kwarg_no_warning(self, dw_test_dataset, method):
+        """DW static/interactive: new ``object_id=`` works without warning."""
+        ds = DWDataset(dw_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)  # promote to error
+            fig = getattr(ds, method)(object_id=geohash)
+        assert fig is not None
+        if method == "plot_timeseries":
+            assert isinstance(fig, plt.Figure)
+            plt.close(fig)
+        else:
+            assert isinstance(fig, go.Figure)
+
+    def test_dw_both_kwargs_raises_type_error(self, dw_test_dataset):
+        """Providing both ``object_id=`` and ``id_geohash=`` is an error."""
+        ds = DWDataset(dw_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        with pytest.raises(TypeError, match="exactly one"):
+            ds.plot_timeseries(object_id=geohash, id_geohash=geohash)
+
+    def test_dw_neither_kwarg_raises_value_error(self, dw_test_dataset):
+        """Providing neither ``object_id=`` nor ``id_geohash=`` is an error."""
+        ds = DWDataset(dw_test_dataset)
+
+        with pytest.raises(ValueError, match="At least one"):
+            ds.plot_timeseries()
+
+    @pytest.mark.parametrize("method", ["plot_timeseries", "plot_timeseries_interactive"])
+    def test_jrc_id_geohash_kwarg_emits_deprecation_warning(self, jrc_test_dataset, method):
+        """JRC static/interactive: legacy ``id_geohash=`` works but is deprecated."""
+        ds = JRCDataset(jrc_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        with pytest.warns(DeprecationWarning, match="object_id"):
+            fig = getattr(ds, method)(id_geohash=geohash)
+        assert fig is not None
+        if method == "plot_timeseries":
+            assert isinstance(fig, plt.Figure)
+            plt.close(fig)
+        else:
+            assert isinstance(fig, go.Figure)
+
+    @pytest.mark.parametrize("method", ["plot_timeseries", "plot_timeseries_interactive"])
+    def test_jrc_object_id_kwarg_no_warning(self, jrc_test_dataset, method):
+        """JRC static/interactive: new ``object_id=`` works without warning."""
+        ds = JRCDataset(jrc_test_dataset)
+        geohash = ds.ds.coords["id_geohash"].values[0]
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", DeprecationWarning)  # promote to error
+            fig = getattr(ds, method)(object_id=geohash)
+        assert fig is not None
+        if method == "plot_timeseries":
+            assert isinstance(fig, plt.Figure)
+            plt.close(fig)
+        else:
+            assert isinstance(fig, go.Figure)
