@@ -195,6 +195,27 @@ region holding 3,052 lakes:
 | 5    | 9%              | 26%          | 42%                  |
 | 4    | 6%              | 11%          | 19%                  |
 
+The drained lakes escape this entirely. Only ~9,800 lakes in the whole record have
+a break date -- 0.2%, a quarter of a single NRT month -- so they get their own
+tileset built the way the NRT monthly overlay is, with no size or feature limit and
+nothing dropped, drawn over the sampled grey base. That is what keeps them complete
+at every zoom (3% -> 100% at z0), which the base archive cannot manage at any cap:
+
+```bash
+uv run python -c "
+from water_timeseries.utils.pmtiles_build import (
+    build_pmtiles_historical_drained, historical_drained_tiles_path)
+build_pmtiles_historical_drained(
+    'data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet',
+    historical_drained_tiles_path('data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.pmtiles'))"
+```
+
+Seconds to build, ~24 MB. **Rebuild it whenever the base archive is rebuilt** -- the
+dashboard finds it next to the base archive as `<base>_drained.pmtiles`, so a stale
+one is picked up silently and shows the previous run's drained lakes. Delete it (or
+point `drained_pmtiles_file:` at nothing) and the drained lakes come out of the base
+archive behind a filter instead, as they did before, sampling and all.
+
 Going past 2 MB is not worth it — at 8 MB the tiles stop growing (~2 MB) because a
 different limit binds, and coverage barely moves. Below z6 the map is still a
 sample: 4M centroids cannot fit in one z4 tile at any cap. The NRT *monthly*
