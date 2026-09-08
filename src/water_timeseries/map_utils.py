@@ -20,13 +20,22 @@ from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_nrt_drainage,
     get_style_pmtiles_nrt_monthly_tiles,
 )
-from water_timeseries.utils.pmtiles_build import NRT_POINT_POLY_SWITCH_ZOOM
+from water_timeseries.utils.pmtiles_build import (
+    POINT_POLY_SWITCH_ZOOM,
+    TILE_MAX_ZOOM,
+    archive_bakes_low_zoom_centroids,
+)
 from water_timeseries.utils.visualization import (
     get_legend_html_date_drainage_year,
     get_legend_html_drained_month,
     get_legend_html_net_change,
     get_legend_html_nrt_drainage,
 )
+
+# Exponent the base centroids' opacity is raised to, relative to the fill opacity
+# of the polygons they stand in for (see base_points_layer in build_pmtiles_map).
+# Below 1 it brightens; the smaller it is the harder the faint end is lifted.
+CENTROID_OPACITY_EXPONENT = 1 / 3
 
 
 class PMTilesMapLibreLayerSynced(PMTilesMapLibreLayer):
@@ -415,7 +424,11 @@ def build_pmtiles_map(
     viz_configuration_name: str = "colored_historical",
     tooltip=None,
     min_zoom=4,
-    max_zoom=15,
+    # One level of overzoom past the deepest baked tile: MapLibre scales the
+    # TILE_MAX_ZOOM tile rather than dropping its features, so the extra level
+    # costs nothing and the hover gate (below) follows this ceiling, not the
+    # tileset's.
+    max_zoom=TILE_MAX_ZOOM + 1,
     hide_stable_lakes: bool = False,
     drained_label: str | None = None,
     hidden_categories: frozenset[str] = frozenset(),
@@ -425,6 +438,7 @@ def build_pmtiles_map(
     nrt_month_has_confidence: bool = True,
     selected_id: str | None = None,
     id_column: str = "id_geohash",
+    base_has_centroids: bool = True,
 ) -> folium.Map:
     """Return a Folium map with a PMTiles vector layer for lake polygons.
 
@@ -449,6 +463,15 @@ def build_pmtiles_map(
             re-centers on it.
         id_column: Tile property holding the lake id (matched against
             ``selected_id``).
+        base_has_centroids: Whether the base archive bakes usable centroids
+            below ``POINT_POLY_SWITCH_ZOOM``, from
+            ``archive_bakes_low_zoom_centroids``. When it does not -- every
+            archive built before the per-feature zoom ranges, including the
+            shipped pan-arctic one -- the dot/polygon handoff has nothing to
+            hand off to, so the polygons are drawn at every zoom instead (which
+            is what those archives bake) and the centroid layer is left out.
+            Callers that know the archive should pass the detected value;
+            ``map_viewer`` does.
     """
     m = leafmap.Map(
         location=center,
@@ -485,7 +508,7 @@ def build_pmtiles_map(
             "date_break_year": "Drainage Year",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(
-            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
+            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=POINT_POLY_SWITCH_ZOOM, max_zoom=max_zoom
         )
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
         legend = get_legend_html_net_change()
@@ -504,7 +527,7 @@ def build_pmtiles_map(
             "water_change_perc": "Change of water area [%]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(
-            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=8, max_zoom=14
+            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=POINT_POLY_SWITCH_ZOOM, max_zoom=max_zoom
         )
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_drainage_year(
             hide_stable_lakes=hide_stable_lakes
@@ -554,8 +577,8 @@ def build_pmtiles_map(
                 column_aliases=aliases,
                 filter_layers=["nrt-drained-fill", "lakes-fill"],
                 suppressed_properties={"lakes-fill": ["date", "drainage_confidence"]},
-                min_zoom=8,
-                max_zoom=14,
+                min_zoom=POINT_POLY_SWITCH_ZOOM,
+                max_zoom=max_zoom,
             )
             # The month's drained lakes come from their own tileset (added
             # below); the base tiles are the backdrop of all other lakes.
@@ -564,8 +587,8 @@ def build_pmtiles_map(
             tooltip = PMTilesMapLibreTooltipWithRounding(
                 column_aliases=aliases,
                 filter_layers=["lakes-fill"],
-                min_zoom=8,
-                max_zoom=14,
+                min_zoom=POINT_POLY_SWITCH_ZOOM,
+                max_zoom=max_zoom,
                 property_overrides=nrt_tooltip_overrides,
             )
             if nrt_confidence_by_id is not None:
@@ -586,7 +609,9 @@ def build_pmtiles_map(
         tile_layer_esriworld.add_to(m)
 
     else:
-        tooltip = PMTilesMapLibreTooltipWithRounding(filter_layers=["lakes-fill"])
+        tooltip = PMTilesMapLibreTooltipWithRounding(
+            filter_layers=["lakes-fill"], min_zoom=POINT_POLY_SWITCH_ZOOM, max_zoom=max_zoom
+        )
         fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_generic_water()
         legend = None
         tile_layer_darkmatter.add_to(m)
@@ -609,11 +634,19 @@ def build_pmtiles_map(
         line_color = "#eeeeee"  # Default border color
         line_width = 0.5  # Default border width
 
+    # Below the switch the base lakes are drawn as centroids -- but only if the
+    # archive baked any (see archive_bakes_low_zoom_centroids). When it did not,
+    # gating the polygons here would leave those zooms blank, so they stay
+    # ungated and cover the whole range on their own, as they did before the
+    # handoff existed. Every base-source polygon layer takes the same gate.
+    poly_gate = {"minzoom": POINT_POLY_SWITCH_ZOOM} if base_has_centroids else {}
+
     lakes_fill_layer = {
         "id": "lakes-fill",
         "source": "lakes_pmtiles",
         "source-layer": source_layer,
         "type": "fill",
+        **poly_gate,
         "paint": {
             "fill-color": fill_color,
             "fill-opacity": fill_opacity,
@@ -624,10 +657,58 @@ def build_pmtiles_map(
         "source": "lakes_pmtiles",
         "source-layer": source_layer,
         "type": "line",
+        **poly_gate,
         "paint": {
             "line-color": line_color,
             "line-width": line_width,
             "line-opacity": line_opacity,
+        },
+    }
+
+    # A dot covers a few pixels where a polygon covers hundreds, so the fill
+    # opacity each viz mode picked -- tuned as a wash of colour over an area --
+    # does not survive the change of mark: drainage_year paints stable lakes at
+    # 0.05, a legible tint across a lake and nothing at all on a 2px circle.
+    #
+    # A root curve rather than a multiplier, because the modes start from very
+    # different places and a single factor big enough for 0.05 pins everything
+    # else at fully opaque -- which would cost the nrt_drainage base lakes their
+    # whole job of staying muted under the drained overlay. A root lifts the
+    # faint end hard, leaves the opaque end nearly alone, never exceeds 1, and is
+    # monotonic, so every mode keeps its own ordering:
+    #
+    #   drainage_year  stable 0.05 -> 0.37   drained 0.20 -> 0.58
+    #   nrt_drainage   base   0.35 -> 0.70   (overlay stays at 0.85, still the figure)
+    #   colored_historical /generic_water 0.70 -> 0.89
+    circle_opacity = ["^", fill_opacity, CENTROID_OPACITY_EXPONENT]
+
+    # Centroids below the switch zoom, where the base tileset has no polygons
+    # and a lake polygon would be sub-pixel anyway. maxzoom is exclusive and the
+    # polygon layers' minzoom is inclusive, so the shared POINT_POLY_SWITCH_ZOOM
+    # hands off in one step with no zoom drawn twice or left blank. Listed first
+    # so any overlay stays on top of it. Only reaches the style when the archive
+    # can back it (see poly_gate above); an unbacked circle layer would draw the
+    # handful of dots that survived a rate-dropped build and nothing else.
+    base_points_layer = {
+        "id": "lakes-points",
+        "source": "lakes_pmtiles",
+        "source-layer": "lakes_points",
+        "type": "circle",
+        "maxzoom": POINT_POLY_SWITCH_ZOOM,
+        "paint": {
+            "circle-color": fill_color,
+            "circle-opacity": circle_opacity,
+            # Ramp up to the last zoom the circles are drawn at, so the dots are
+            # at their largest just before the polygons take over.
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.2, POINT_POLY_SWITCH_ZOOM - 1, 3.0],
+            # A dark ring, the same trick the selection highlight uses: the dot's
+            # own colour carries it on Dark Matter, and the ring is what separates
+            # it from the mid-tone clutter of the satellite and TCVIS basemaps,
+            # where an unringed dot in lake colours disappears. Tracks the fill so
+            # a muted dot does not get a hard outline.
+            "circle-stroke-color": "#1a1a1a",
+            "circle-stroke-opacity": circle_opacity,
+            "circle-stroke-width": ["interpolate", ["linear"], ["zoom"], 0, 0.4, POINT_POLY_SWITCH_ZOOM - 1, 0.9],
         },
     }
 
@@ -639,6 +720,7 @@ def build_pmtiles_map(
                 "source": "lakes_pmtiles",
                 "source-layer": source_layer,
                 "type": "fill",
+                **poly_gate,
                 "filter": drained_filter,
                 "paint": {
                     "fill-color": "#d73027",  # Red fill for drained
@@ -650,6 +732,7 @@ def build_pmtiles_map(
                 "source": "lakes_pmtiles",
                 "source-layer": source_layer,
                 "type": "line",
+                **poly_gate,
                 "filter": drained_filter,
                 "paint": {
                     "line-color": "#7f0000",  # Dark red border for drained
@@ -672,6 +755,7 @@ def build_pmtiles_map(
                 "source": "lakes_pmtiles",
                 "source-layer": source_layer,
                 "type": "line",
+                **poly_gate,
                 "filter": selected_filter,
                 "paint": {
                     "line-color": "#1a1a1a",
@@ -684,6 +768,7 @@ def build_pmtiles_map(
                 "source": "lakes_pmtiles",
                 "source-layer": source_layer,
                 "type": "line",
+                **poly_gate,
                 "filter": selected_filter,
                 "paint": {
                     "line-color": "#ff2d2d",
@@ -693,6 +778,10 @@ def build_pmtiles_map(
             },
         ]
 
+    # The centroid layer is listed first so any overlay stays on top of it, and
+    # is left out entirely when the archive cannot back it (see poly_gate).
+    base_layers = ([base_points_layer] if base_has_centroids else []) + [lakes_fill_layer, lakes_line_layer]
+
     if viz_configuration_name == "drainage_year" and hide_stable_lakes:
         nan_filter = [
             "all",
@@ -700,8 +789,8 @@ def build_pmtiles_map(
             ["!=", ["to-string", ["get", "date_break_year"]], "NaN"],
             ["!=", ["to-string", ["get", "date_break_year"]], ""],
         ]
-        lakes_fill_layer["filter"] = nan_filter
-        lakes_line_layer["filter"] = nan_filter
+        for layer in base_layers:
+            layer["filter"] = nan_filter
 
     sources = {
         "lakes_pmtiles": {
@@ -712,7 +801,7 @@ def build_pmtiles_map(
             "promoteId": "id_geohash",
         }
     }
-    layers = [lakes_fill_layer, lakes_line_layer, *drained_overlay_layers]
+    layers = [*base_layers, *drained_overlay_layers]
 
     if nrt_monthly_tiles_url:
         drained_fill, drained_opacity, drained_line, drained_width, drained_line_opacity = (
@@ -722,47 +811,27 @@ def build_pmtiles_map(
             "type": "vector",
             "url": "pmtiles://" + nrt_monthly_tiles_url,
         }
-        # Base-lake centroids below z6, where the base tileset has no polygons
-        # (it bakes `lakes` at z6-14 and `lakes_points` at z0-5). Without this
-        # the zoomed-out view would show only the drained lakes, which do have
-        # a low-zoom layer. Drawn first so drained lakes stay on top.
-        base_points_layer = {
-            "id": "lakes-points",
-            "source": "lakes_pmtiles",
-            "source-layer": "lakes_points",
-            "type": "circle",
-            "maxzoom": 6,
-            "paint": {
-                "circle-color": fill_color,
-                "circle-opacity": fill_opacity,
-                "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 0.6, 5, 2.5],
-            },
-        }
-        layers.insert(0, base_points_layer)
-
         if hide_stable_lakes or "stable" in hidden_categories:
             # Switch the base layers off rather than painting them at zero
             # opacity: a zero-opacity layer still counts as rendered, so
             # queryRenderedFeatures would keep producing hover popups for the
             # lakes the user asked to hide. The drained overlay is unaffected.
-            for layer in (base_points_layer, lakes_fill_layer, lakes_line_layer):
+            for layer in base_layers:
                 layer["layout"] = {"visibility": "none"}
 
         nrt_drained_points_layer = {
-            # Centroids below the switch zoom, where the polygons are sub-pixel:
-            # this is what keeps drained lakes findable when zoomed out, without
-            # per-lake browser markers. maxzoom is exclusive and the polygon
-            # layers' minzoom is inclusive, so both using the same value hands
-            # off in one step with no zoom left uncovered.
+            # The overlay's own centroids, switching at the same zoom as the
+            # base lakes below it (see base_points_layer): this is what keeps
+            # drained lakes findable when zoomed out, without per-lake markers.
             "id": "nrt-drained-points",
             "source": "nrt_pmtiles",
             "source-layer": "drained_points",
             "type": "circle",
-            "maxzoom": NRT_POINT_POLY_SWITCH_ZOOM,
+            "maxzoom": POINT_POLY_SWITCH_ZOOM,
             "paint": {
                 "circle-color": drained_fill,
                 "circle-opacity": drained_opacity,
-                "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.5, 5, 4],
+                "circle-radius": ["interpolate", ["linear"], ["zoom"], 0, 1.5, POINT_POLY_SWITCH_ZOOM - 1, 4],
                 "circle-stroke-color": drained_line,
                 "circle-stroke-width": 0.5,
             },
@@ -772,7 +841,7 @@ def build_pmtiles_map(
             "source": "nrt_pmtiles",
             "source-layer": "drained",
             "type": "fill",
-            "minzoom": NRT_POINT_POLY_SWITCH_ZOOM,
+            "minzoom": POINT_POLY_SWITCH_ZOOM,
             "paint": {"fill-color": drained_fill, "fill-opacity": drained_opacity},
         }
         nrt_drained_line_layer = {
@@ -780,7 +849,7 @@ def build_pmtiles_map(
             "source": "nrt_pmtiles",
             "source-layer": "drained",
             "type": "line",
-            "minzoom": NRT_POINT_POLY_SWITCH_ZOOM,
+            "minzoom": POINT_POLY_SWITCH_ZOOM,
             "paint": {
                 "line-color": drained_line,
                 "line-width": drained_width,
@@ -875,6 +944,35 @@ def build_pmtiles_map(
     m.get_root().html.add_child(Element(style))
 
     return m
+
+
+@functools.lru_cache(maxsize=32)
+def pmtiles_has_low_zoom_centroids(pmtiles_source: str, points_layer: str = "lakes_points") -> bool:
+    """Whether ``pmtiles_source`` backs the dot/polygon handoff below the switch zoom.
+
+    ``pmtiles_source`` is what the config names -- a local path, an http(s) URL
+    or a ``gs://`` one -- read the same way the map's bounds are, from the
+    archive's own metadata rather than from a flag kept alongside it. So an
+    archive rebuilt with the current builder starts drawing centroids without
+    anything else having to be changed. Cached because Streamlit rebuilds the
+    map on every rerun and a remote archive costs two range requests.
+
+    False when the archive cannot be read at all: the whole point is to keep
+    lakes on screen, and the archives that fail this check are the ones that
+    bake polygons at every zoom.
+    """
+    from water_timeseries.utils.pmtiles_reader import read_pmtiles_metadata, read_pmtiles_metadata_remote
+
+    try:
+        if pmtiles_source.startswith(("http://", "https://", "gs://")):
+            metadata = read_pmtiles_metadata_remote(resolve_pmtiles_url(pmtiles_source))
+        else:
+            metadata = read_pmtiles_metadata(pmtiles_source)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Could not read PMTiles metadata for {pmtiles_source}: {exc}")
+        return False
+
+    return archive_bakes_low_zoom_centroids(metadata, points_layer=points_layer)
 
 
 def resolve_pmtiles_url(pmtiles_file: str) -> str:

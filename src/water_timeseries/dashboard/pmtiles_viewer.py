@@ -10,6 +10,7 @@ import geopandas as gpd
 import streamlit as st
 
 from water_timeseries.utils.io import load_vector_dataset
+from water_timeseries.utils.pmtiles_build import POINT_POLY_SWITCH_ZOOM
 from water_timeseries.utils.pmtiles_reader import read_pmtiles_header, read_pmtiles_header_remote
 from water_timeseries.utils.pmtiles_serve import PmtilesServer, build_map_url
 
@@ -126,11 +127,23 @@ def _build_map_config(
             if zoom is None:
                 zoom = zoom_est
 
+    # Imported here rather than at module scope: map_utils pulls in leafmap and
+    # folium, which this page has no other use for.
+    from water_timeseries.map_utils import pmtiles_has_low_zoom_centroids
+
+    pmtiles_source = str(pmtiles_file) if pmtiles_file else (pmtiles_url or "")
+    base_has_centroids = bool(pmtiles_source) and pmtiles_has_low_zoom_centroids(pmtiles_source)
+
     config: dict[str, Any] = {
         "pmtiles_url": pmtiles_url or "",
         "id_column": id_column,
         "viz_configuration": viz_configuration,
         "source_layer": "lakes",
+        "point_poly_switch_zoom": POINT_POLY_SWITCH_ZOOM,
+        # Gating the page's polygons on the switch zoom only works if this
+        # archive baked centroids below it; older ones did not (see
+        # archive_bakes_low_zoom_centroids).
+        "base_has_centroids": base_has_centroids,
         "center": center or [-164.1, 66.5],
         "zoom": zoom if zoom is not None else 8,
         "bounds": bounds,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import struct
 import urllib.request
 from pathlib import Path
@@ -75,3 +76,58 @@ def read_pmtiles_header_remote(url: str) -> dict[str, Any]:
         "center": [center_lon, center_lat],
         "zoom": center_zoom if center_zoom else max(2, min_zoom),
     }
+
+
+def _metadata_extent(header: bytes) -> tuple[int, int, int]:
+    """Return ``(offset, length, internal_compression)`` of the JSON metadata block.
+
+    The PMTiles v3 header stores the metadata offset/length at bytes 24-39 and
+    the compression applied to it (and to the directories) at byte 97: 1 is
+    "none", 2 is gzip. See the spec linked in ``read_pmtiles_header``.
+    """
+    offset, length = struct.unpack_from("<QQ", header, 24)
+    return offset, length, header[97]
+
+
+def _decode_metadata(raw: bytes, internal_compression: int) -> dict[str, Any]:
+    if internal_compression == 2:
+        import gzip
+
+        raw = gzip.decompress(raw)
+    return json.loads(raw.decode("utf-8"))
+
+
+def read_pmtiles_metadata(path: Path | str) -> dict[str, Any]:
+    """Parse the JSON metadata block of a PMTiles v3 archive.
+
+    This is what tippecanoe writes about the build itself -- ``vector_layers``,
+    ``tilestats``, the per-zoom ``strategies`` it had to fall back on, and the
+    command line it ran. ``archive_bakes_low_zoom_centroids`` reads it to tell
+    whether an archive's centroid layer survived the build.
+    """
+    path = Path(path)
+    with path.open("rb") as fh:
+        header = fh.read(127)
+        if len(header) < 127 or header[:7] != b"PMTiles":
+            raise ValueError(f"Not a PMTiles v3 file: {path}")
+        offset, length, compression = _metadata_extent(header)
+        fh.seek(offset)
+        raw = fh.read(length)
+    return _decode_metadata(raw, compression)
+
+
+def read_pmtiles_metadata_remote(url: str) -> dict[str, Any]:
+    """Fetch a remote archive's JSON metadata with two range requests."""
+    req = urllib.request.Request(url, headers={"Range": "bytes=0-126"})
+    with urllib.request.urlopen(req) as resp:
+        header = resp.read()[:127]
+    if len(header) < 127 or header[:7] != b"PMTiles":
+        raise ValueError(f"Not a valid PMTiles v3 remote URL: {url}")
+
+    offset, length, compression = _metadata_extent(header)
+    if length == 0:
+        return {}
+    req = urllib.request.Request(url, headers={"Range": f"bytes={offset}-{offset + length - 1}"})
+    with urllib.request.urlopen(req) as resp:
+        raw = resp.read()[:length]
+    return _decode_metadata(raw, compression)
