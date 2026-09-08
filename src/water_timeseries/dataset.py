@@ -152,7 +152,7 @@ class LakeDataset:
         identifier dimension (whatever name `self.id_field` happens to carry).
 
         Only one of the two keywords may be provided. When `id_geohash` is used
-        a :class:`DeprecationWarning` is emitted to encourage migration to
+        a :class:`FutureWarning` is emitted to encourage migration to
         `object_id`, which is stable regardless of the column name.
 
         Args:
@@ -175,7 +175,7 @@ class LakeDataset:
             warnings.warn(
                 "The `id_geohash` keyword is deprecated. Please use `object_id` instead. "
                 "`id_geohash` will be removed in a future release.",
-                DeprecationWarning,
+                FutureWarning,
                 stacklevel=3,
             )
             return id_geohash
@@ -617,7 +617,7 @@ class DWDataset(LakeDataset):
                 are shown. A string name maps to a list via `self.data_columns`.
             save_path: Optional path to save the image as PNG/PDF/SVG.
             id_geohash: DEPRECATED alias for `object_id`. Use `object_id` instead;
-                `id_geohash` is emitted as a :class:`DeprecationWarning`.
+                `id_geohash` is emitted as a :class:`FutureWarning`.
 
         Returns:
             matplotlib.Figure with a single axes and a legend. To access the axes:
@@ -680,7 +680,7 @@ class DWDataset(LakeDataset):
                 categories (via `self.data_columns`).
             save_path: Optional path to save the figure as an HTML file.
             id_geohash: DEPRECATED alias for `object_id`. Use `object_id` instead;
-                `id_geohash` emits a :class:`DeprecationWarning`.
+                `id_geohash` emits a :class:`FutureWarning`.
 
         Returns:
             Plotly Figure with the timeseries trace(s), a breakpoint line if provided,
@@ -929,7 +929,7 @@ class JRCDataset(LakeDataset):
                 If None (default), all available JRC categories are shown.
             save_path: Optional path to save the image as PNG/PDF/SVG.
             id_geohash: DEPRECATED alias for `object_id`. Use `object_id` instead;
-                `id_geohash` emits a :class:`DeprecationWarning`.
+                `id_geohash` emits a :class:`FutureWarning`.
 
         Returns:
             matplotlib.Figure with a single axes and a legend. See also
@@ -1001,7 +1001,7 @@ class JRCDataset(LakeDataset):
                 categories (via `self.data_columns`).
             save_path: Optional path to save the figure as an HTML file.
             id_geohash: DEPRECATED alias for `object_id`. Use `object_id` instead;
-                `id_geohash` emits a :class:`DeprecationWarning`.
+                `id_geohash` emits a :class:`FutureWarning`.
 
         Returns:
             Plotly Figure with the timeseries trace(s), a breakpoint line if provided,

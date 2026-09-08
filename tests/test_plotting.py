@@ -245,7 +245,7 @@ class TestCustomFieldPlotting:
 
 
 class TestIdGeohashBackwardCompatibility:
-    """Ensure the legacy ``id_geohash=`` keyword still works and emits a DeprecationWarning.
+    """Ensure the legacy ``id_geohash=`` keyword still works and emits a FutureWarning.
 
     All four plotting entry points (DW + JRC, static + interactive) must accept
     ``id_geohash=`` exactly as they did before the refactor, while also supporting
@@ -258,7 +258,7 @@ class TestIdGeohashBackwardCompatibility:
         ds = DWDataset(dw_test_dataset)
         geohash = ds.ds.coords["id_geohash"].values[0]
 
-        with pytest.warns(DeprecationWarning, match="object_id"):
+        with pytest.warns(FutureWarning, match="object_id"):
             fig = getattr(ds, method)(id_geohash=geohash)
         assert fig is not None
         if method == "plot_timeseries":
@@ -274,7 +274,7 @@ class TestIdGeohashBackwardCompatibility:
         geohash = ds.ds.coords["id_geohash"].values[0]
 
         with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)  # promote to error
+            warnings.simplefilter("error", FutureWarning)  # promote to error
             fig = getattr(ds, method)(object_id=geohash)
         assert fig is not None
         if method == "plot_timeseries":
@@ -304,7 +304,7 @@ class TestIdGeohashBackwardCompatibility:
         ds = JRCDataset(jrc_test_dataset)
         geohash = ds.ds.coords["id_geohash"].values[0]
 
-        with pytest.warns(DeprecationWarning, match="object_id"):
+        with pytest.warns(FutureWarning, match="object_id"):
             fig = getattr(ds, method)(id_geohash=geohash)
         assert fig is not None
         if method == "plot_timeseries":
@@ -320,7 +320,7 @@ class TestIdGeohashBackwardCompatibility:
         geohash = ds.ds.coords["id_geohash"].values[0]
 
         with warnings.catch_warnings():
-            warnings.simplefilter("error", DeprecationWarning)  # promote to error
+            warnings.simplefilter("error", FutureWarning)  # promote to error
             fig = getattr(ds, method)(object_id=geohash)
         assert fig is not None
         if method == "plot_timeseries":
