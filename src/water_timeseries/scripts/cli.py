@@ -906,7 +906,7 @@ def breakpoint_analysis_nrt(
     output_file: Path | None = None,
     output_dir: Path | None = None,
     no_resume: bool = False,
-    drain_threshold: float = -0.25,
+    drain_threshold: float | None = None,
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
@@ -955,7 +955,7 @@ def breakpoint_analysis_nrt(
         file already exists in ``--output-dir``.
     drain_threshold:
         ``water_residual`` threshold below which a lake is classified as
-        drained (default ``-0.25``).
+        drained (default ``None``).
     data_aggregation_period:
         Passed to ``NRTBreakpoint.calculate_break`` (default ``"all"``).
     lake_chunk_size:
