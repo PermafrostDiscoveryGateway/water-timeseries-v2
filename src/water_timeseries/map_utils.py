@@ -572,10 +572,18 @@ def build_pmtiles_map(
             "id_geohash": "Lake ID",
             "date_break": "Break date [YYYY-MM]",
             "date_break_year": "Year of change",
+            "date_break_month": "Month of change",
             "pre_break_median": "Lake area before break [ha]",
             "post_break_median": "Lake area after break [ha]",
             "water_change_ha": "Change of water area [ha]",
             "water_change_perc": "Change of water area [%]",
+            # Carried by the base tiles, so these are what a stable lake hovers --
+            # it is in no overlay and has no break columns to show. Same labels
+            # the nrt_drainage aliases give them, since it is the same archive.
+            "Area_start_ha": "Lake area year 2000 [ha]",
+            "Area_end_ha": "Lake area year 2020 [ha]",
+            "NetChange_ha": "Net change [ha]",
+            "NetChange_perc": "Net change [%]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(
             column_aliases=aliases,
@@ -610,6 +618,7 @@ def build_pmtiles_map(
             # Carried by the base lake tiles, which non-drained lakes hover.
             "date_break": "Historical break date",
             "date_break_year": "Historical break year",
+            "date_break_month": "Historical break month",
             "Area_start_ha": "Lake area year 2000 [ha]",
             "Area_end_ha": "Lake area year 2020 [ha]",
             "NetChange_perc": "Net change [%]",
