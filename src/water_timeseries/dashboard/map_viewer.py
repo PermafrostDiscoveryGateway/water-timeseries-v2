@@ -30,7 +30,11 @@ from water_timeseries.dashboard.share_state import (
 from water_timeseries.dashboard.tutorial_popup import show_help_button, show_tutorial_popup
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
-from water_timeseries.map_utils import geohash_to_human_readable_name, resolve_nrt_monthly_tiles_url
+from water_timeseries.map_utils import (
+    geohash_to_human_readable_name,
+    pmtiles_has_layer,
+    resolve_nrt_monthly_tiles_url,
+)
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
     check_dataset_availability_ds_raw,
@@ -52,6 +56,7 @@ from water_timeseries.utils.map_styling import (
     get_colored_style_function,
     get_default_style_function,
 )
+from water_timeseries.utils.pmtiles_build import NRT_SCORED_LAYER
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
@@ -168,6 +173,10 @@ class MapViewer:
         # they travel to the browser inline on every rerun, so they are much
         # more expensive (see build_pmtiles_map).
         self.nrt_monthly_tiles_url: str | None = None
+        # Whether that tileset also holds the month's prediction for every lake
+        # it scored, not just the drained ones -- only months with a full NRT
+        # run do (see NRT_SCORED_LAYER).
+        self.nrt_monthly_has_scored: bool = False
         self.historical_drained_tiles_url: str | None = None
         self.nrt_confidence_by_id: dict[str, int | None] | None = None
         self.nrt_tooltip_overrides: dict[str, dict] | None = None
@@ -407,6 +416,7 @@ class MapViewer:
             nrt_confidence_by_id=self.nrt_confidence_by_id,
             nrt_tooltip_overrides=self.nrt_tooltip_overrides,
             nrt_monthly_tiles_url=self.nrt_monthly_tiles_url,
+            nrt_monthly_has_scored=self.nrt_monthly_has_scored,
             historical_drained_tiles_url=self.historical_drained_tiles_url,
             selected_id=st.session_state.get("selected_geohash"),
             id_column=self.id_column,
@@ -1417,6 +1427,7 @@ def create_app(
     # (``nrt_pmtiles_dir``); otherwise recolored at runtime from the per-lake
     # dicts below via MapLibre feature-state.
     nrt_monthly_tiles_url: str | None = None
+    nrt_monthly_has_scored: bool = False
     nrt_confidence_by_id: dict[str, int | None] | None = None
     nrt_tooltip_overrides: dict[str, dict] | None = None
 
@@ -1474,7 +1485,15 @@ def create_app(
             # another ~6MB in the page for streamlit-folium to serialize).
             nrt_monthly_tiles_url = resolve_nrt_monthly_tiles_url(nrt_pmtiles_dir, selected_conf_month)
             if nrt_monthly_tiles_url:
-                logger.info(f"NRT monthly tiles for {selected_conf_month}: {nrt_monthly_tiles_url}")
+                # Read off the archive, not configured: a month built before the
+                # scored layer existed, or one with no full NRT run to build it
+                # from, simply does not have it and its non-drained lakes keep
+                # hovering the base tiles.
+                nrt_monthly_has_scored = pmtiles_has_layer(nrt_monthly_tiles_url, NRT_SCORED_LAYER)
+                logger.info(
+                    f"NRT monthly tiles for {selected_conf_month}: {nrt_monthly_tiles_url} "
+                    f"(scored layer: {nrt_monthly_has_scored})"
+                )
 
             if not nrt_monthly_tiles_url:
                 tooltip_override_cols = [
@@ -1683,6 +1702,7 @@ def create_app(
                     hidden_nrt_categories=hidden_nrt_categories,
                 )
                 viewer.nrt_monthly_tiles_url = nrt_monthly_tiles_url
+                viewer.nrt_monthly_has_scored = nrt_monthly_has_scored
                 viewer.historical_drained_tiles_url = historical_drained_tiles_url
                 viewer.nrt_confidence_by_id = nrt_confidence_by_id
                 viewer.nrt_tooltip_overrides = nrt_tooltip_overrides
