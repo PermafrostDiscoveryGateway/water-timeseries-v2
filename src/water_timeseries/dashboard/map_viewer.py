@@ -1767,7 +1767,6 @@ def create_app(
             st.sidebar.selectbox(
                 "Previously clicked lakes:",
                 display_options,
-                index=display_options.index(target_value),
                 label_visibility="collapsed",
                 help="Select a previously clicked lake",
                 format_func=lambda x: (
