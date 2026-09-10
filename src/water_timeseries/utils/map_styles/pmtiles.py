@@ -35,19 +35,7 @@ STABLE_LAKE_FILTER: list = [
 DRAINED_LAKE_FILTER: list = ["!", STABLE_LAKE_FILTER]
 
 
-def get_style_pmtiles_drainage_year() -> tuple:
-    """Paint for lakes with a drainage year, coloured by ``get_legend_html_date_drainage_year``.
-
-    Drained lakes only: stable lakes are drawn underneath by
-    ``get_style_pmtiles_stable_lakes`` and filtered out of here, so the two can
-    be separate layers and the drained ones always land on top (see
-    ``build_pmtiles_map``). Before the split, one layer held both and a stable
-    lake later in the tile would paint over a drained one.
-
-    Opacity matches the NRT drained overlay rather than the 0.2 this used when it
-    also had to carry stable lakes: these sit over satellite imagery and are the
-    figure of the map.
-    """
+def get_style_pmtiles_drainage_year(hide_stable_lakes: bool = False) -> tuple:
     fill_color = [
         "interpolate",
         ["linear"],
@@ -73,36 +61,73 @@ def get_style_pmtiles_drainage_year() -> tuple:
         2025,
         "#a50026",
     ]
-    fill_opacity = 0.85
-    # One step darker than the fill, so a drained lake keeps an edge against its
-    # own colour where several of them touch.
-    line_color = [
-        "interpolate",
-        ["linear"],
-        ["to-number", ["get", "date_break_year"]],
-        2016,
-        "#1f2c6e",
-        2017,
-        "#2c5384",
-        2018,
-        "#4a86a8",
-        2019,
-        "#7fb0c2",
-        2020,
-        "#a8c4cc",
-        2021,
-        "#c9a83f",
-        2022,
-        "#c07f38",
-        2023,
-        "#b84c30",
-        2024,
-        "#a1231c",
-        2025,
-        "#6d0018",
+    # fill_color_no_date = "#ADD8E6"
+    fill_opacity = [
+        "case",
+        [
+            "any",
+            ["==", ["to-string", ["get", "date_break_year"]], ""],
+            ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
+        ],
+        0.05,
+        0.2,
     ]
-    line_width = 1
+    line_color = [
+        "case",
+        [
+            "any",
+            ["==", ["to-string", ["get", "date_break_year"]], ""],
+            ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
+        ],
+        "#9e9e9e",  # default line color for stable lakes
+        [
+            "interpolate",
+            ["linear"],
+            ["to-number", ["get", "date_break_year"]],
+            2017,
+            "#4575b4",
+            2018,
+            "#74add1",
+            2019,
+            "#abd9e9",
+            2020,
+            "#e0f3f8",
+            2021,
+            "#ffffbf",
+            2022,
+            "#fee090",
+            2023,
+            "#fdae61",
+            2024,
+            "#f46d43",
+            2025,
+            "#d73027",
+        ],
+    ]
     line_opacity = 1
+    # switch to disable non drained lakes (stable lakes) from being displayed on the map
+    if hide_stable_lakes:
+        line_width = [
+            "case",
+            [
+                "any",
+                ["==", ["to-string", ["get", "date_break_year"]], ""],
+                ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
+            ],
+            0,
+            3,
+        ]
+    else:
+        line_width = [
+            "case",
+            [
+                "any",
+                ["==", ["to-string", ["get", "date_break_year"]], ""],
+                ["==", ["to-string", ["get", "date_break_year"]], "NaN"],
+            ],
+            0.6,
+            3,
+        ]
     return fill_color, fill_opacity, line_color, line_width, line_opacity
 
 
