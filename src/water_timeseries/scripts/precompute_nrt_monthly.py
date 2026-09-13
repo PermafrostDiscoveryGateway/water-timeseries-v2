@@ -41,7 +41,6 @@ Example
 from __future__ import annotations
 
 import logging
-import os
 from pathlib import Path
 
 import numpy as np
@@ -120,41 +119,32 @@ def _run_nrt_for_month(
     all_ids = np.array(valid_ids)
     chunk_results: list[pd.DataFrame] = []
 
-    # Patch os.cpu_count so NRTBreakpoint's internal Parallel uses our n_jobs
-    original_cpu_count = os.cpu_count
+    for start in range(0, len(all_ids), lake_chunk_size):
+        chunk_ids = all_ids[start : start + lake_chunk_size].tolist()
 
-    def _patched_cpu_count():
-        return n_jobs
+        # Materialise only these lakes — peak RAM ∝ chunk_size, not total lakes
+        chunk_raw = raw_ds.sel(id_geohash=chunk_ids).compute()
+        chunk_dw = DWDataset(chunk_raw)
 
-    os.cpu_count = _patched_cpu_count
-    try:
-        for start in range(0, len(all_ids), lake_chunk_size):
-            chunk_ids = all_ids[start : start + lake_chunk_size].tolist()
-
-            # Materialise only these lakes — peak RAM ∝ chunk_size, not total lakes
-            chunk_raw = raw_ds.sel(id_geohash=chunk_ids).compute()
-            chunk_dw = DWDataset(chunk_raw)
-
-            try:
-                result = nrt.calculate_break(
-                    chunk_dw,
-                    analysis_date=month_ts,
-                    data_aggregation_period=data_aggregation_period,
-                )
-                if result is not None and not result.empty:
-                    chunk_results.append(result)
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "%s chunk [%d:%d] failed: %s",
-                    month_ts.strftime("%Y-%m"),
-                    start,
-                    start + lake_chunk_size,
-                    exc,
-                )
-            finally:
-                del chunk_raw, chunk_dw  # release this chunk before the next
-    finally:
-        os.cpu_count = original_cpu_count
+        try:
+            result = nrt.calculate_break(
+                chunk_dw,
+                analysis_date=month_ts,
+                data_aggregation_period=data_aggregation_period,
+                n_jobs=n_jobs,
+            )
+            if result is not None and not result.empty:
+                chunk_results.append(result)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "%s chunk [%d:%d] failed: %s",
+                month_ts.strftime("%Y-%m"),
+                start,
+                start + lake_chunk_size,
+                exc,
+            )
+        finally:
+            del chunk_raw, chunk_dw  # release this chunk before the next
 
     if not chunk_results:
         return pd.DataFrame()
