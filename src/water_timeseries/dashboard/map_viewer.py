@@ -2159,13 +2159,24 @@ def create_app(
                     unsafe_allow_html=True,
                 )
 
+                generated_key = f"yt_generated_years_{current}"
+
                 with st.container(key="yt_controls"):
                     # Quick actions
-                    btn_cols = st.columns(2, gap="small")
+                    btn_cols = st.columns(3, gap="small")
                     if btn_cols[0].button("Select all", key="yt_select_all"):
                         st.session_state.update({f"yt_year_{y}": True for y in year_range})
                     if btn_cols[1].button("Clear", key="yt_clear_all"):
                         st.session_state.update({f"yt_year_{y}": False for y in year_range})
+
+                    years_selected_now = [
+                        y for y in year_range if st.session_state.get(f"yt_year_{y}", False)
+                    ]
+                    generate_clicked = btn_cols[2].button(
+                        "Generate thumbnails",
+                        key=f"yt_generate_{current}",
+                        disabled=not years_selected_now,
+                    )
 
                     # Checkboxes reflow into as many per row as fit the width
                     cols = st.columns(len(year_range), gap="small")
@@ -2177,6 +2188,17 @@ def create_app(
 
                 if not selected_years:
                     st.caption("Select at least one year to generate thumbnails.")
+                    return
+
+                if generate_clicked:
+                    st.session_state[generated_key] = sorted(selected_years)
+
+                generated_years = st.session_state.get(generated_key)
+                if generated_years is None:
+                    st.caption("Select your years, then click **Generate thumbnails**.")
+                    return
+                if generated_years != sorted(selected_years):
+                    st.caption("Selection changed — click **Generate thumbnails** to update.")
                     return
 
                 # ── Fixed seasonal window: May 1 – Oct 31 per year ───────────
