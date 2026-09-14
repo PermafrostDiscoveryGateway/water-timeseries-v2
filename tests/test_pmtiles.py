@@ -74,6 +74,33 @@ def _write_breaks_fixture(path: Path, geohashes: list[str]) -> Path:
 
 
 @pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_build_pmtiles_nrt_monthly_excludes_non_drained(tmp_path):
+    """Only drainage detections are baked, not every lake the month's run scored.
+
+    Since the precompute drain_threshold default became None, the breaks table
+    carries a row per scored lake; a stable (<NA>) or unevaluable (-1) row must
+    not end up in an overlay whose every feature is styled as drained.
+    """
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
+    breaks_path = tmp_path / "breaks.parquet"
+    pd.DataFrame(
+        {
+            "analysis_month": ["2026-07"] * 3,
+            "id_geohash": geohashes,
+            "water_residual": [-0.5, 0.02, float("nan")],
+            "drainage_confidence": pd.array([2, pd.NA, -1], dtype="Int64"),
+        }
+    ).to_parquet(breaks_path, index=False)
+
+    build_pmtiles_nrt_monthly(breaks_path, TEST_PARQUET, tmp_path / "tiles", keep_geojsonl=True)
+
+    lines = (tmp_path / "tiles" / "nrt_2026-07_drainage.geojsonl").read_text().strip().splitlines()
+    baked = [json.loads(line)["properties"] for line in lines]
+    assert [p["id_geohash"] for p in baked] == [geohashes[0]]
+    assert baked[0]["drainage_confidence"] == 2
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
 def test_build_pmtiles_nrt_monthly(tmp_path):
     """One archive per month, holding only that month's drained lakes."""
     geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]

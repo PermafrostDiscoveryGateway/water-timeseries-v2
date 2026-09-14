@@ -39,26 +39,13 @@ from water_timeseries.utils.data import (
     calculate_water_area_after,
     calculate_water_area_before,
 )
-from water_timeseries.utils.nrt_postprocessing import add_confidence_interval_strings
-
-warnings.filterwarnings("ignore")
-
-# Columns the three drainage criteria in ``NRTBreakpoint._add_confidence_level``
-# are computed from. A row missing any of them cannot be scored at all: every
-# comparison against NaN is False, so an unevaluable lake would otherwise score
-# the same as a lake that was checked and found perfectly normal.
-CONFIDENCE_INPUT_COLUMNS: tuple[str, ...] = (
-    "water_residual",
-    "water_observed",
-    "water_predicted_lower_90",
-    "water_historical_min",
+from water_timeseries.utils.nrt_postprocessing import (
+    CONFIDENCE_INPUT_COLUMNS,
+    CONFIDENCE_INVALID,
+    add_confidence_interval_strings,
 )
 
-# ``drainage_confidence`` for a lake whose criteria could not be evaluated --
-# no observation for the analysis month, an ARIMA fit that was skipped for too
-# short a history, or missing historical stats. Distinct from <NA>, which means
-# the lake *was* evaluated and is not draining.
-CONFIDENCE_INVALID: int = -1
+warnings.filterwarnings("ignore")
 
 
 class BreakpointMethod:

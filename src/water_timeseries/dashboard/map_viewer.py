@@ -56,6 +56,7 @@ from water_timeseries.utils.map_styling import (
     get_colored_style_function,
     get_default_style_function,
 )
+from water_timeseries.utils.nrt_postprocessing import drained_mask
 from water_timeseries.utils.pmtiles_build import NRT_SCORED_LAYER
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
@@ -1436,6 +1437,19 @@ def create_app(
         default_activate_historical = False
     precomputed_counts: pd.DataFrame | None = st.session_state.precomputed_nrt_counts
     precomputed_breaks: pd.DataFrame | None = st.session_state.precomputed_nrt_breaks
+
+    # The breaks table carries a row per lake the month's run scored, not per
+    # lake that drained, so drop the rows that are not detections once, here,
+    # before anything downstream counts them, lists them, colors them or hovers
+    # them -- every consumer below reads "has a row this month" as "drained this
+    # month". Matches the filter build_pmtiles_nrt_monthly applies when baking a
+    # month's tiles, so the runtime path and the tileset path agree on what
+    # "drained" means. See drained_mask.
+    if precomputed_breaks is not None and not precomputed_breaks.empty:
+        is_drained = drained_mask(precomputed_breaks)
+        if not is_drained.all():
+            logger.info(f"Ignoring {(~is_drained).sum()} non-drained row(s) of {len(precomputed_breaks)} in NRT breaks")
+            precomputed_breaks = precomputed_breaks[is_drained]
 
     # Monthly drainage-status overlay (NRT mode): pick a month of the most
     # recent year in the pre-computed breaks and show that month's drained

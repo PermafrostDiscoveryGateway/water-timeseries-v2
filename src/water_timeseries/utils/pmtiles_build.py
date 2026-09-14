@@ -15,6 +15,8 @@ import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
+from water_timeseries.utils.nrt_postprocessing import DRAIN_THRESHOLD, drained_mask
+
 # Attributes kept in vector tiles (hover, styling, selection).
 DEFAULT_TILE_PROPERTIES: tuple[str, ...] = (
     "id_geohash",
@@ -716,6 +718,7 @@ def build_pmtiles_nrt_monthly(
     keep_geojsonl: bool = False,
     month_column: str = "analysis_month",
     id_column: str = "id_geohash",
+    drain_threshold: float = DRAIN_THRESHOLD,
     poly_max_zoom: int = TILE_MAX_ZOOM,
     run_parquet_by_month: Mapping[str, Path | str] | None = None,
     scored_property_columns: Sequence[str] = NRT_SCORED_TILE_PROPERTIES,
@@ -754,6 +757,9 @@ def build_pmtiles_nrt_monthly(
         months: Months to build (``YYYY-MM``). Defaults to every month in the
             breaks table.
         property_columns: Columns to bake into tile properties (missing ones are skipped).
+        drain_threshold: ``water_residual`` threshold used to decide which rows are
+            drainage detections, for rows carrying no ``drainage_confidence``
+            (see ``drained_mask``).
         keep_geojsonl: Keep the intermediate GeoJSONL files next to the output.
         poly_max_zoom: Highest zoom to bake polygon geometry at. Lowering this is
             by far the biggest size lever, because the top zooms dominate the
@@ -799,6 +805,16 @@ def build_pmtiles_nrt_monthly(
         breaks = breaks[breaks[month_column].isin(set(months))]
     if breaks.empty:
         raise ValueError(f"No rows in {breaks_parquet} for months={months}")
+
+    # Every feature in this tileset is styled and hovered as a lake that drained
+    # in its month, so a row that is not a drainage detection must not get in --
+    # the breaks table itself no longer guarantees that (see drained_mask).
+    before = len(breaks)
+    breaks = breaks[drained_mask(breaks, drain_threshold=drain_threshold)]
+    if len(breaks) != before:
+        print(f"Dropped {before - len(breaks)} non-drained row(s) of {before} from {breaks_parquet.name}")
+    if breaks.empty:
+        raise ValueError(f"No drained lakes in {breaks_parquet} for months={months}")
 
     # One lake can drain in several months; dedupe within a month so a month's
     # tileset has exactly one feature per lake.
