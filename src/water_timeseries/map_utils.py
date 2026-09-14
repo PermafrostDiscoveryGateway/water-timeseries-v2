@@ -580,10 +580,10 @@ def build_pmtiles_map(
             # Carried by the base tiles, so these are what a stable lake hovers --
             # it is in no overlay and has no break columns to show. Same labels
             # the nrt_drainage aliases give them, since it is the same archive.
+            "NetChange_perc": "Net change [%]",
+            "NetChange_ha": "Net change [ha]",
             "Area_start_ha": "Lake area year 2000 [ha]",
             "Area_end_ha": "Lake area year 2020 [ha]",
-            "NetChange_ha": "Net change [ha]",
-            "NetChange_perc": "Net change [%]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(
             column_aliases=aliases,
@@ -619,10 +619,10 @@ def build_pmtiles_map(
             "date_break": "Historical break date",
             "date_break_year": "Historical break year",
             "date_break_month": "Historical break month",
-            "Area_start_ha": "Lake area year 2000 [ha]",
-            "Area_end_ha": "Lake area year 2020 [ha]",
             "NetChange_perc": "Net change [%]",
             "NetChange_ha": "Net change [ha]",
+            "Area_start_ha": "Lake area year 2000 [ha]",
+            "Area_end_ha": "Lake area year 2020 [ha]",
             # Baked into the per-month drainage tilesets: the NRT months carry
             # these rather than the "_absolute" variants above.
             "analysis_month": "Analysis month [YYYY-MM]",
