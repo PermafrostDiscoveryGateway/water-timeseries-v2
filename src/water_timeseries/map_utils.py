@@ -230,6 +230,10 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     autoPan: true,
     autoPanPadding: [50, 50]
     });
+    // Whole-number categories, not measured quantities -- skip toFixed(2).
+    const integerFields_{{ this.get_name() }} = new Set([
+    "date_break_year", "date_break_month", "drainage_confidence",
+    ]);
     var columnAliases_{{ this.get_name() }} = {{ this.column_aliases_json }};
     var propertyOverrides_{{ this.get_name() }} = {{ this.property_overrides_json }};
     var filterLayers_{{ this.get_name() }} = {{ this.filter_layers_json }};
@@ -282,10 +286,13 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     if (asText === "" || ["nat", "nan", "none", "null"].includes(asText.toLowerCase())) { return ""; }
     let displayKey = aliases[key] || key;
     let displayVal = value;
+    const isInteger = integerFields_{{ this.get_name() }}.has(key);
+    const decimalOpts = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
     if (typeof value === 'number') {
-    displayVal = value.toFixed(2);
+    displayVal = isInteger ? String(Math.round(value)) : value.toLocaleString(undefined, decimalOpts);
     } else if (typeof value === 'string' && !isNaN(value) && value.includes('.')) {
-    displayVal = parseFloat(value).toFixed(2);
+    const parsed = parseFloat(value);
+    displayVal = isInteger ? String(Math.round(parsed)) : parsed.toLocaleString(undefined, decimalOpts);
     }
     return `<tr><td>${displayKey}</td><td style="text-align: right">${displayVal}</td></tr>`;
     }).join("")}
