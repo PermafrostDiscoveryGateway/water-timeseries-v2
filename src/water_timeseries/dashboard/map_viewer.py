@@ -2141,20 +2141,39 @@ def create_app(
                 # ── Year selection via checkboxes ─────────────────────────────
                 year_range = list(range(2016, datetime.now(tz=UTC).year + 1))  # 2016..2026
 
-                # Quick actions
-                btn_cols = st.columns([1, 1, 4])
-                if btn_cols[0].button("Select all", key="yt_select_all"):
-                    st.session_state.update({f"yt_year_{y}": True for y in year_range})
-                if btn_cols[1].button("Clear", key="yt_clear_all"):
-                    st.session_state.update({f"yt_year_{y}": False for y in year_range})
+                
+                st.markdown(
+                    """
+                    <style>
+                    div.st-key-yt_controls div[data-testid="stHorizontalBlock"] {
+                        flex-wrap: wrap;
+                        row-gap: 0.4rem;
+                    }
+                    div.st-key-yt_controls div[data-testid="stColumn"] {
+                        flex: 0 0 auto;
+                        width: auto !important;
+                        min-width: fit-content;
+                    }
+                    </style>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                # 5-column grid → compact, tightly packed checkboxes
-                cols = st.columns(len(year_range))
-                selected_years = []
-                for i, year in enumerate(year_range):
-                    with cols[i % len(cols)]:
-                        if st.checkbox(str(year), value=False, key=f"yt_year_{year}"):
-                            selected_years.append(year)
+                with st.container(key="yt_controls"):
+                    # Quick actions
+                    btn_cols = st.columns(2, gap="small")
+                    if btn_cols[0].button("Select all", key="yt_select_all"):
+                        st.session_state.update({f"yt_year_{y}": True for y in year_range})
+                    if btn_cols[1].button("Clear", key="yt_clear_all"):
+                        st.session_state.update({f"yt_year_{y}": False for y in year_range})
+
+                    # Checkboxes reflow into as many per row as fit the width
+                    cols = st.columns(len(year_range), gap="small")
+                    selected_years = []
+                    for i, year in enumerate(year_range):
+                        with cols[i % len(cols)]:
+                            if st.checkbox(str(year), value=False, key=f"yt_year_{year}"):
+                                selected_years.append(year)
 
                 if not selected_years:
                     st.caption("Select at least one year to generate thumbnails.")
