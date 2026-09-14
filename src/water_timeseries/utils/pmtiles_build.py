@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import pyarrow.parquet as pq
 
@@ -426,7 +427,10 @@ def _write_features(
     for _, row in gdf.iterrows():
         props = {c: row[c] for c in property_columns if c in gdf.columns}
         for key, val in list(props.items()):
-            if isinstance(val, float) and pd.isna(val):
+            # `pd.isna` rather than a float check alone: a nullable column
+            # (drainage_confidence is Int64) holds pd.NA, which is not a float
+            # and has no `.item()`, so it would reach json.dumps and raise.
+            if val is None or (np.ndim(val) == 0 and pd.isna(val)):
                 props[key] = None
             elif hasattr(val, "item"):
                 props[key] = val.item()

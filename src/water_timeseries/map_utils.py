@@ -626,7 +626,7 @@ def build_pmtiles_map(
             "water_predicted_absolute": "Predicted water area [ha]",
             "water_predicted_ci_absolute": "Predicted water area range [ha]",
             "water_residual_absolute": "Difference of lake area from prediction [ha]",
-            "drainage_confidence": "Confidence of drainage detection [0 (low) to 3 (high)]",
+            "drainage_confidence": "Confidence of drainage detection [1 (low) to 3 (high); -1 = not evaluated]",
             "water_change_ha": "Change of water area [ha]",
             "water_change_perc": "Change of water area [%]",
             "pre_break_median": "Lake area before break [ha]",
