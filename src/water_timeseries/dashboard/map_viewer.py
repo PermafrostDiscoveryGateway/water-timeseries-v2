@@ -614,7 +614,7 @@ class MapViewer:
                 # Include Area columns for full tooltip display
                 tooltip_columns = [
                     ("pre_break_median", "Water area before break [ha]:", "{:.2f}", ""),
-                    ("post_break_median", "Water area before break [ha]:", "{:.2f}", ""),
+                    ("post_break_median", "Water area after break [ha]:", "{:.2f}", ""),
                 ]
             else:
                 style_function = get_default_style_function()

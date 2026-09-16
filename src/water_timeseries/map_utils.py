@@ -231,6 +231,10 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     autoPan: true,
     autoPanPadding: [50, 50]
     });
+    // Whole-number categories, not measured quantities -- skip toFixed(2).
+    const integerFields_{{ this.get_name() }} = new Set([
+    "date_break_year", "date_break_month", "drainage_confidence",
+    ]);
     var columnAliases_{{ this.get_name() }} = {{ this.column_aliases_json }};
     var propertyOverrides_{{ this.get_name() }} = {{ this.property_overrides_json }};
     var filterLayers_{{ this.get_name() }} = {{ this.filter_layers_json }};
@@ -283,10 +287,13 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     if (asText === "" || ["nat", "nan", "none", "null"].includes(asText.toLowerCase())) { return ""; }
     let displayKey = aliases[key] || key;
     let displayVal = value;
+    const isInteger = integerFields_{{ this.get_name() }}.has(key);
+    const decimalOpts = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
     if (typeof value === 'number') {
-    displayVal = value.toFixed(2);
+    displayVal = isInteger ? String(Math.round(value)) : value.toLocaleString(undefined, decimalOpts);
     } else if (typeof value === 'string' && !isNaN(value) && value.includes('.')) {
-    displayVal = parseFloat(value).toFixed(2);
+    const parsed = parseFloat(value);
+    displayVal = isInteger ? String(Math.round(parsed)) : parsed.toLocaleString(undefined, decimalOpts);
     }
     return `<tr><td>${displayKey}</td><td style="text-align: right">${displayVal}</td></tr>`;
     }).join("")}
@@ -589,10 +596,10 @@ def build_pmtiles_map(
             # Carried by the base tiles, so these are what a stable lake hovers --
             # it is in no overlay and has no break columns to show. Same labels
             # the nrt_drainage aliases give them, since it is the same archive.
+            "NetChange_perc": "Net change [%]",
+            "NetChange_ha": "Net change [ha]",
             "Area_start_ha": "Lake area year 2000 [ha]",
             "Area_end_ha": "Lake area year 2020 [ha]",
-            "NetChange_ha": "Net change [ha]",
-            "NetChange_perc": "Net change [%]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(
             column_aliases=aliases,
@@ -628,10 +635,10 @@ def build_pmtiles_map(
             "date_break": "Historical break date",
             "date_break_year": "Historical break year",
             "date_break_month": "Historical break month",
-            "Area_start_ha": "Lake area year 2000 [ha]",
-            "Area_end_ha": "Lake area year 2020 [ha]",
             "NetChange_perc": "Net change [%]",
             "NetChange_ha": "Net change [ha]",
+            "Area_start_ha": "Lake area year 2000 [ha]",
+            "Area_end_ha": "Lake area year 2020 [ha]",
             # Baked into the per-month drainage tilesets: the NRT months carry
             # these rather than the "_absolute" variants above.
             "analysis_month": "Analysis month [YYYY-MM]",
