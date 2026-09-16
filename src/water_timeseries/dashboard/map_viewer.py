@@ -1325,8 +1325,24 @@ def create_app(
     - **Click** on a feature to select it and view time series & show latest imagery.
     """)
 
-    # Create sidebar for controls
-    # st.sidebar.header("Settings")
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] {
+            gap: 0.25rem;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"]:has(> div[data-testid="stCheckbox"])
+            + [data-testid="stElementContainer"]:has(> div[data-testid="stCheckbox"]) {
+            margin-top: -0.75rem;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"]:has(div[data-testid="stCaptionContainer"])
+            + [data-testid="stElementContainer"]:has(> div[data-testid="stCheckbox"]) {
+            margin-top: -0.75rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     with st.sidebar.divider():
         show_help_button(config_name=viz_configuration_name)
 
