@@ -94,13 +94,14 @@ DEFAULT_TIPPECANOE_ARGS: tuple[str, ...] = (
 # (``get_style_pmtiles_stable_lakes``) -- but they are the last thing a stable lake
 # can hover, and for many of them the only thing. Historical mode's overlay holds
 # drained lakes only, so a stable lake is in no overlay at all there; NRT's monthly
-# archive also carries every lake its run scored (``NRT_SCORED_TILE_PROPERTIES``),
-# but a run scores only part of the table (45.8% for 2026-06, 75.2% for 2026-07), so
-# the rest still land here. Stripping the base to the id alone left millions of lakes
-# with an empty popup. The four area/change columns are populated for 100% of stable
-# lakes and describe the lake itself, not a month, which is what makes them safe to
-# share; per-month values are not, and stay in the monthly archives (see
-# NRT_MONTHLY_TILE_PROPERTIES and NRT_SCORED_TILE_PROPERTIES).
+# archive also carries every lake its run scored (the `scored` layer, built by the
+# unmerged nrt-monthly/12-nrt-scored-layer branch and present in the deployed
+# 2026-06/07 archives -- see docs/tile_generation.md), but a run scores only part of
+# the table (45.8% for 2026-06, 75.2% for 2026-07), so the rest still land here.
+# Stripping the base to the id alone left millions of lakes with an empty popup. The
+# four area/change columns are populated for 100% of stable lakes and describe the
+# lake itself, not a month, which is what makes them safe to share; per-month values
+# are not, and stay in the monthly archives (see NRT_MONTHLY_TILE_PROPERTIES).
 #
 # ``date_break_year`` rides along because ``STABLE_LAKE_FILTER`` tests it to tell
 # the two layers apart, and it is null for all 4,016,467 stable lakes -- nulls are
@@ -117,16 +118,15 @@ SHARED_GEOMETRY_TILE_PROPERTIES: tuple[str, ...] = (*DEFAULT_TILE_PROPERTIES, "d
 # DRAINAGE_YEAR_POINT_PROPERTIES below.
 SHARED_GEOMETRY_POINT_PROPERTIES: tuple[str, ...] = ("id_geohash",)
 
-# Properties worth baking onto the centroids. They are drawn below
-# POINT_POLY_SWITCH_ZOOM, where hover is gated off, so the only ones that earn
-# their place are the id (identity, and `promoteId` for feature state) and
-# whatever the mode colours by -- and they earn it twice over, because every
-# byte of property spent on a centroid is a lake `--drop-densest-as-needed`
-# takes off the map at low zoom. Dropping the other five roughly doubled how
-# many lakes survive there (z6 32% -> 60%, z5 9% -> 26%) before the tile cap
-# above was touched at all.
+# Properties baked onto the historical drained overlay's centroids. They are
+# drawn below POINT_POLY_SWITCH_ZOOM, where hover is gated off, so the only ones
+# that earn their place are the id (identity, and `promoteId` for feature state)
+# and what the overlay colours by (the break year) -- and they earn it twice
+# over, because every byte of property spent on a centroid is a lake
+# `--drop-densest-as-needed` takes off the map at low zoom. Dropping the other
+# five roughly doubled how many lakes survive there (z6 32% -> 60%, z5 9% ->
+# 26%) before the tile cap above was touched at all.
 DRAINAGE_YEAR_POINT_PROPERTIES: tuple[str, ...] = ("id_geohash", "date_break_year")
-NRT_POINT_PROPERTIES: tuple[str, ...] = ("id_geohash", "drainage_confidence")
 
 # Properties baked into the per-month NRT drainage tilesets. These carry the
 # month's drainage signal *in the tiles*, so the dashboard styles and hovers
@@ -923,31 +923,6 @@ def build_pmtiles_nrt_monthly(
     return outputs
 
 
-def build_pmtiles_drainage_year(
-    parquet_path: Path | str,
-    output_path: Path | str,
-    **kwargs,
-) -> Path:
-    """Build PMTiles with drainage year styling properties."""
-    columns = (
-        "id_geohash",
-        "date_break",
-        "date_break_year",
-        "date_break_month",
-        "pre_break_median",
-        "post_break_median",
-        "water_change_ha",
-        "water_change_perc",
-    )
-    return build_pmtiles(
-        parquet_path,
-        output_path,
-        property_columns=columns,
-        point_property_columns=DRAINAGE_YEAR_POINT_PROPERTIES,
-        **kwargs,
-    )
-
-
 def build_pmtiles_shared_geometry(
     parquet_path: Path | str,
     output_path: Path | str,
@@ -1025,29 +1000,5 @@ def build_pmtiles_historical_drained(
         layer_names=("drained", "drained_points"),
         row_filter=lambda df: df[break_year_column].notna(),
         tippecanoe_args=HISTORICAL_DRAINED_TIPPECANOE_ARGS,
-        **kwargs,
-    )
-
-
-def build_pmtiles_nrt_drainage(
-    parquet_path: Path | str,
-    output_path: Path | str,
-    **kwargs,
-) -> Path:
-    """Build PMTiles with drainage year styling properties."""
-    # columns = (
-    #     "id_geohash",
-    #     "date",
-    #     "water_observed",
-    #     "water_predicted",
-    #     "water_residual",
-    #     "drainage_confidence",
-    # )
-
-    return build_pmtiles(
-        parquet_path,
-        output_path,
-        property_columns=NRT_SCORED_TILE_PROPERTIES,
-        point_property_columns=NRT_POINT_PROPERTIES,
         **kwargs,
     )
