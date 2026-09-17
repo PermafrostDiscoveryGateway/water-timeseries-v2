@@ -507,21 +507,17 @@ gif_path = create_timelapse(
 
 ### Dashboard Visualization Configurations
 
-The dashboard supports three visualization configurations for the map viewer, controlled by the `--viz-configuration` parameter:
+The dashboard supports two visualization configurations for the map viewer, controlled by the `--viz-configuration` parameter — one per dashboard mode:
 
 | Configuration | Description |
 |--------------|-------------|
-| `"colored_historical"` | Historical time series with color-coded data (default) |
-| `"drainage_year"` | Data displayed by drainage year |
+| `"drainage_year"` | Data displayed by drainage year (default) |
 | `"nrt_drainage"` | Near-real-time drainage data |
 
 **Example usage:**
 
 ```bash
-# Use colored_historical (default)
-uv run water-timeseries dashboard --viz-configuration colored_historical
-
-# Use drainage_year for viewing data by drainage year
+# Use drainage_year for viewing data by drainage year (default)
 uv run water-timeseries dashboard --viz-configuration drainage_year
 
 # Use nrt_drainage for near-real-time drainage monitoring

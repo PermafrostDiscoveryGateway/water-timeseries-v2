@@ -119,7 +119,7 @@ class MapViewer:
         drained_gdf: gpd.GeoDataFrame | None = None,
         drained_label: str | None = None,
         show_main_layer: bool = True,
-        viz_configuration_name: str | None = "colored_historical",
+        viz_configuration_name: str | None = "drainage_year",
         hide_stable_lakes: bool = False,
         hidden_nrt_categories: frozenset[str] | None = None,
         logger=None,
@@ -354,7 +354,7 @@ class MapViewer:
     def _render_pmtiles(
         self,
         # valid_gdf: gpd.GeoDataFrame,
-        viz_configuration_name: str | None = "colored_historical",
+        viz_configuration_name: str | None = "drainage_year",
     ) -> str | None:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import (
@@ -525,7 +525,7 @@ class MapViewer:
         self,
         valid_gdf: gpd.GeoDataFrame,
         layer_column: str | None = None,
-        viz_configuration_name: str | None = "colored_historical",
+        viz_configuration_name: str | None = "drainage_year",
     ) -> str | None:
         """Render using folium with optional layer selection.
 
@@ -567,33 +567,7 @@ class MapViewer:
 
         tooltip_columns = None
 
-        if viz_configuration_name == "colored_historical":
-            # Create style function based on whether NetChange_perc column exists
-            if "NetChange_perc" in valid_gdf.columns:
-                # add tile layers
-                tile_layer_darkmatter.add_to(m)
-                tile_layer_esriworld.add_to(m)
-                tcvis_tile_layer.add_to(m)
-
-                style_function = get_colored_style_function(
-                    color_column="NetChange_perc",
-                    vmin=-40,
-                    vmax=40,
-                    colormap=plt.cm.RdYlBu,
-                )
-
-                # Format tooltip columns using utility function
-                # Include Area columns for full tooltip display
-                tooltip_columns = [
-                    ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
-                    ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
-                    ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
-                    ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
-                ]
-            else:
-                style_function = get_default_style_function()
-
-        elif viz_configuration_name == "drainage_year":
+        if viz_configuration_name == "drainage_year":
             # Create style function based on whether NetChange_perc column exists
             if "water_residual" in valid_gdf.columns:
                 # add tile layers
@@ -1220,7 +1194,7 @@ def create_app(
     dw_end_year: int = 2025,
     dw_start_month: int = 6,
     dw_end_month: int = 9,
-    viz_configuration_name: str | None = "colored_historical",
+    viz_configuration_name: str | None = "drainage_year",
     pmtiles_file: str | Path | None = None,
     pmtiles_url: str | None = None,
     nrt_pmtiles_dir: str | Path | None = None,
@@ -1309,9 +1283,7 @@ def create_app(
     show_tutorial_popup(config_name=viz_configuration_name)
 
     # Setup page header
-    if viz_configuration_name == "colored_historical":
-        dashboard_title = "Lost Lakes: Lake Changes 2000-2020"
-    elif viz_configuration_name == "drainage_year":
+    if viz_configuration_name == "drainage_year":
         dashboard_title = "Lost Lakes: Lake Drainage Drainage Analysis: 2017-2025"
     elif viz_configuration_name == "nrt_drainage":
         dashboard_title = "Lost Lakes: Near Real-Time Lake Drainage: 2017-2025"

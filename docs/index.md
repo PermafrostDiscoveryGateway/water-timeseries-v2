@@ -338,7 +338,7 @@ The dashboard accepts the following optional arguments:
 | `dw_end_year` | End year for Dynamic World dataset time series | `2025` |
 | `dw_start_month` | Start month (1-12) for Dynamic World dataset time series filtering | `6` (June) |
 | `dw_end_month` | End month (1-12) for Dynamic World dataset time series filtering | `9` (September) |
-| `viz_configuration` | Visualization configuration for the map viewer. Valid options: `"colored_historical"` (historical time series with color-coded data), `"drainage_year"` (data displayed by drainage year), `"nrt_drainage"` (near-real-time drainage data) | `colored_historical` |
+| `viz_configuration` | Visualization configuration for the map viewer. Valid options: `"drainage_year"` (data displayed by drainage year), `"nrt_drainage"` (near-real-time drainage data) | `drainage_year` |
 | `port` | Port to run the dashboard on | `8501` |
 | `logfile` | Path to log file | Auto-generated |
 | `verbose` | Verbosity level (`-v` for DEBUG) | `0` (INFO) |

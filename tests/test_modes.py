@@ -87,7 +87,7 @@ def _paths(tmp_path):
 
 def test_mode_key_for_viz():
     assert mode_key_for_viz("drainage_year") == "drainage_year"
-    assert mode_key_for_viz("colored_historical") == "drainage_year"
+    assert mode_key_for_viz("no_such_preset") == "drainage_year"
     assert mode_key_for_viz("nrt_drainage") == "nrt_drainage"
     assert mode_key_for_viz(None) == "drainage_year"
 
@@ -282,7 +282,7 @@ def test_apply_mode_override_fills_in_dataless_launch(tmp_path, monkeypatch):
 
     # What a config naming no data produces: no vector_file/pmtiles_file, and
     # the CLI's default viz_configuration.
-    launch = {"vector_file": None, "pmtiles_file": None, "viz_configuration": "colored_historical"}
+    launch = {"vector_file": None, "pmtiles_file": None, "viz_configuration": "drainage_year"}
 
     settings, active, _ = apply_mode_override(launch, requested_mode="drainage_year")
 

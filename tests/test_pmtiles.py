@@ -274,7 +274,7 @@ def _assert_single_cover(points: dict, fill: dict, line: dict) -> None:
 
 @pytest.mark.parametrize(
     "viz_configuration_name",
-    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+    ["drainage_year", "nrt_drainage", "generic_water"],
 )
 def test_base_lake_centroid_polygon_handoff_has_no_gap(viz_configuration_name):
     """Every viz mode draws the base lakes at every zoom, dots below the switch, polygons above.
@@ -296,7 +296,7 @@ def test_base_lake_centroid_polygon_handoff_has_no_gap(viz_configuration_name):
 
 @pytest.mark.parametrize(
     "viz_configuration_name",
-    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+    ["drainage_year", "nrt_drainage", "generic_water"],
 )
 def test_base_polygons_cover_every_zoom_when_the_archive_has_no_centroids(viz_configuration_name):
     """An archive with no usable centroid layer must not have its polygons gated.
@@ -326,7 +326,7 @@ def test_base_polygons_cover_every_zoom_when_the_archive_has_no_centroids(viz_co
 
 @pytest.mark.parametrize(
     "viz_configuration_name",
-    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+    ["drainage_year", "nrt_drainage", "generic_water"],
 )
 def test_centroids_are_drawn_more_opaque_than_the_polygons_they_replace(viz_configuration_name):
     """A dot painted at the polygon's fill opacity is invisible.
@@ -500,7 +500,7 @@ def test_modes_without_a_stable_split_keep_one_set_of_lake_layers():
     """Only drainage_year separates stable from drained; the rest style every lake alike."""
     from water_timeseries.map_utils import build_pmtiles_map
 
-    for viz in ("colored_historical", "generic_water", "nrt_drainage"):
+    for viz in ("generic_water", "nrt_drainage"):
         m = build_pmtiles_map(
             "http://localhost:1/lakes.pmtiles",
             viz_configuration_name=viz,

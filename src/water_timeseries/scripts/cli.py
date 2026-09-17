@@ -124,7 +124,6 @@ def dashboard(
         dw_end_month: End month for Dynamic World dataset
 viz_configuration: The visualization configuration name for the map viewer.
             Valid options:
-            - "colored_historical": Historical time series with color-coded data.
             - "drainage_year": Data displayed by drainage year.
             - "nrt_drainage": Near-real-time drainage data.
         pmtiles_file: Path to a .pmtiles archive for fast vector-tile rendering.
@@ -206,7 +205,7 @@ viz_configuration: The visualization configuration name for the map viewer.
     dw_end_year = config_dict.get("dw_end_year", 2025)
     dw_start_month = config_dict.get("dw_start_month", 6)
     dw_end_month = config_dict.get("dw_end_month", 9)
-    viz_configuration = config_dict.get("viz_configuration", "colored_historical")
+    viz_configuration = config_dict.get("viz_configuration", "drainage_year")
     pmtiles_file = config_dict.get("pmtiles_file")
     pmtiles_url = config_dict.get("pmtiles_url")
     nrt_pmtiles_dir = config_dict.get("nrt_pmtiles_dir")
