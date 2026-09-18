@@ -56,6 +56,7 @@ from water_timeseries.utils.map_styling import (
     get_colored_style_function,
     get_default_style_function,
 )
+from water_timeseries.utils.nrt_postprocessing import drained_mask
 from water_timeseries.utils.pmtiles_build import NRT_SCORED_LAYER
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
@@ -118,7 +119,7 @@ class MapViewer:
         drained_gdf: gpd.GeoDataFrame | None = None,
         drained_label: str | None = None,
         show_main_layer: bool = True,
-        viz_configuration_name: str | None = "colored_historical",
+        viz_configuration_name: str | None = "drainage_year",
         hide_stable_lakes: bool = False,
         hidden_nrt_categories: frozenset[str] | None = None,
         logger=None,
@@ -353,7 +354,7 @@ class MapViewer:
     def _render_pmtiles(
         self,
         # valid_gdf: gpd.GeoDataFrame,
-        viz_configuration_name: str | None = "colored_historical",
+        viz_configuration_name: str | None = "drainage_year",
     ) -> str | None:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
         from water_timeseries.map_utils import (
@@ -524,7 +525,7 @@ class MapViewer:
         self,
         valid_gdf: gpd.GeoDataFrame,
         layer_column: str | None = None,
-        viz_configuration_name: str | None = "colored_historical",
+        viz_configuration_name: str | None = "drainage_year",
     ) -> str | None:
         """Render using folium with optional layer selection.
 
@@ -566,33 +567,7 @@ class MapViewer:
 
         tooltip_columns = None
 
-        if viz_configuration_name == "colored_historical":
-            # Create style function based on whether NetChange_perc column exists
-            if "NetChange_perc" in valid_gdf.columns:
-                # add tile layers
-                tile_layer_darkmatter.add_to(m)
-                tile_layer_esriworld.add_to(m)
-                tcvis_tile_layer.add_to(m)
-
-                style_function = get_colored_style_function(
-                    color_column="NetChange_perc",
-                    vmin=-40,
-                    vmax=40,
-                    colormap=plt.cm.RdYlBu,
-                )
-
-                # Format tooltip columns using utility function
-                # Include Area columns for full tooltip display
-                tooltip_columns = [
-                    ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
-                    ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
-                    ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
-                    ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
-                ]
-            else:
-                style_function = get_default_style_function()
-
-        elif viz_configuration_name == "drainage_year":
+        if viz_configuration_name == "drainage_year":
             # Create style function based on whether NetChange_perc column exists
             if "water_residual" in valid_gdf.columns:
                 # add tile layers
@@ -1219,7 +1194,7 @@ def create_app(
     dw_end_year: int = 2025,
     dw_start_month: int = 6,
     dw_end_month: int = 9,
-    viz_configuration_name: str | None = "colored_historical",
+    viz_configuration_name: str | None = "drainage_year",
     pmtiles_file: str | Path | None = None,
     pmtiles_url: str | None = None,
     nrt_pmtiles_dir: str | Path | None = None,
@@ -1308,9 +1283,7 @@ def create_app(
     show_tutorial_popup(config_name=viz_configuration_name)
 
     # Setup page header
-    if viz_configuration_name == "colored_historical":
-        dashboard_title = "Lost Lakes: Lake Changes 2000-2020"
-    elif viz_configuration_name == "drainage_year":
+    if viz_configuration_name == "drainage_year":
         dashboard_title = "Lost Lakes: Lake Drainage Drainage Analysis: 2017-2025"
     elif viz_configuration_name == "nrt_drainage":
         dashboard_title = "Lost Lakes: Near Real-Time Lake Drainage: 2017-2025"
@@ -1436,6 +1409,19 @@ def create_app(
         default_activate_historical = False
     precomputed_counts: pd.DataFrame | None = st.session_state.precomputed_nrt_counts
     precomputed_breaks: pd.DataFrame | None = st.session_state.precomputed_nrt_breaks
+
+    # The breaks table carries a row per lake the month's run scored, not per
+    # lake that drained, so drop the rows that are not detections once, here,
+    # before anything downstream counts them, lists them, colors them or hovers
+    # them -- every consumer below reads "has a row this month" as "drained this
+    # month". Matches the filter build_pmtiles_nrt_monthly applies when baking a
+    # month's tiles, so the runtime path and the tileset path agree on what
+    # "drained" means. See drained_mask.
+    if precomputed_breaks is not None and not precomputed_breaks.empty:
+        is_drained = drained_mask(precomputed_breaks)
+        if not is_drained.all():
+            logger.info(f"Ignoring {(~is_drained).sum()} non-drained row(s) of {len(precomputed_breaks)} in NRT breaks")
+            precomputed_breaks = precomputed_breaks[is_drained]
 
     # Monthly drainage-status overlay (NRT mode): pick a month of the most
     # recent year in the pre-computed breaks and show that month's drained
