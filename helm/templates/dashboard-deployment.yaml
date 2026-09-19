@@ -66,6 +66,13 @@ spec:
             - name: GOOGLE_APPLICATION_CREDENTIALS
               value: "/var/secrets/google/gee-sa-key.json"
             {{- end }}
+            {{- if .Values.dashboard.cartoSecretName }}
+            - name: CARTODB_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.dashboard.cartoSecretName }}
+                  key: CARTODB_KEY
+            {{- end }}
           volumeMounts:
           {{- if .Values.persistence.enabled }}
             - name: data

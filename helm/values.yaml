@@ -29,9 +29,11 @@ dashboard:
   ## @param dashboard.offlineMode Run the dashboard without outbound network access (disables live Earth Engine calls).
   offlineMode: false
   ## @param dashboard.eeProject Google Earth Engine project ID used for authenticated GEE API calls.
-  eeProject: "pdg-project-406720"
+  eeProject: "pdg-wg-machlearn"
   ## @param dashboard.eeSecretName Name of the Kubernetes secret containing the Earth Engine service account key.
   eeSecretName: "lostlakes-ee-sa-secret"
+  ## @param dashboard.cartoSecretName Name of the Kubernetes secret containing the CartoDB account key.
+  cartoSecretName: "lostlakes-carto-secret"
   ## @param dashboard.configFile Path inside the container to the dashboard YAML config file (typically in a pvc mount).
   configFile: /data/dashboard-config.yaml
   ## @param dashboard.pmtilesFile Explicit path to a .pmtiles file. If empty, the path is read from configFile.

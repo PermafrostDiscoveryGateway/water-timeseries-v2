@@ -286,7 +286,8 @@ Typical prerequisities for deployment are:
 
 1. Create or identify the PVC to be used for data and config files (e.g., `lostlakes-vardata`).
 2. Copy the config file and data files to that PVC volume at the paths set in the config file.
-2. Create or identify the secret containtaing Google Earth Engine service account credentials (e.g., `lostlakes-ee-sa-secret`).
+3. Create or identify the secret containtaing Google Earth Engine service account credentials (e.g., `lostlakes-ee-sa-secret`).
+4. Create or identify the secret containing the CARTODB_KEY environment setting (e.g., `lostlakes-carto-secret`)
 
 In our typical deployment, the dashboard app is installed or upgraded using helm in the `lostlakes` namespace,
 with the following command, executed from the root of the water-timeseries-v2 repository:
