@@ -20,7 +20,9 @@ from tqdm import tqdm
 
 from water_timeseries.utils.data import annotate_xr_dataset_dw, annotate_xr_dataset_jrc, dw_bandnames, jrc_bandnames
 from water_timeseries.utils.earthengine import (
+    NoDynamicWorldDataError,
     calc_monthly_dw,
+    call_with_retry,
     create_dw_classes_mask,
     drop_z_from_gdf,
     setup_annual_dates,
@@ -33,6 +35,7 @@ from water_timeseries.utils.spatial import chunk_gdf_simple, chunk_gdf_spatial_k
 # Re-export for backward compatibility
 __all__ = [
     "EarthEngineDownloader",
+    "NoDynamicWorldDataError",
     "setup_annual_dates",
     "setup_dates_from_options",
     "setup_monthly_dates",
@@ -350,8 +353,8 @@ class EarthEngineDownloader:
         # Extract time series data by regions
         fc_out = ic_classes.getTimeSeriesByRegions(**reducer_dict)
 
-        # Convert FeatureCollection to pandas DataFrame
-        df_out = geemap.ee_to_df(fc_out)
+        # Convert FeatureCollection to pandas DataFrame (this is where the computation runs)
+        df_out = call_with_retry(geemap.ee_to_df, fc_out)
 
         # Return DataFrame with multi-index
         return df_out  # .set_index([name_attribute, "date"])
@@ -496,6 +499,10 @@ class EarthEngineDownloader:
                 vector dataset.
             ValueError: If neither (years and months) nor date_list is provided,
                 or if both are provided.
+            NoDynamicWorldDataError: If Earth Engine confirms there is no Dynamic World
+                data for any chunk and date requested.
+            ee.EEException, requests.exceptions.RequestException, ...: If an Earth Engine
+                or network request fails after retrying transient errors.
         """
         # check mutually exclusive vector_dataset versus gdf
         if vector_dataset is None and gdf is None:
@@ -595,9 +602,13 @@ class EarthEngineDownloader:
         # Filter out None/empty results
         df_out_list = [df for df in df_out_list if df is not None and not df.empty]
 
-        # Combine all chunks
+        # Combine all chunks. Errors have already been raised above, so an empty list
+        # here means Earth Engine confirmed there is no Dynamic World data at all.
         if not df_out_list:
-            raise ValueError("No data was extracted from any chunk. Check GEE request parameters.")
+            raise NoDynamicWorldDataError(
+                f"No data was extracted from any chunk: Earth Engine returned no Dynamic World data "
+                f"for any of the {len(gdf_chunks)} chunks and {n_dates} dates requested."
+            )
 
         df_out = pd.concat(df_out_list)
         ds = df_out.set_index([name_attribute, "date"]).to_xarray()

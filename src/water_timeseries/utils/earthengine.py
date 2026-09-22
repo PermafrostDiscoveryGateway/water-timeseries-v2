@@ -1,5 +1,6 @@
 import os
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -8,9 +9,11 @@ import eemont  # noqa: F401
 import geemap
 import geopandas as gpd
 import google.auth
+import httplib2
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import requests
 import streamlit as st
 import xarray as xr
 from loguru import logger
@@ -127,6 +130,72 @@ def create_no_data_image():
     return ee.Image().rename(["no_data"])
 
 
+class NoDynamicWorldDataError(ValueError):
+    """Earth Engine was reached and confirmed no Dynamic World images exist for the request.
+
+    Subclasses ValueError, and its message starts with "No data was extracted", so callers
+    that match on the older ValueError keep working.
+    """
+
+
+# Network-level failures that the ee client does not wrap in ee.EEException
+TRANSIENT_NETWORK_ERRORS = (
+    ConnectionError,
+    TimeoutError,
+    requests.exceptions.RequestException,
+    httplib2.HttpLib2Error,
+)
+
+# Substrings of ee.EEException messages that indicate a transient server-side problem
+TRANSIENT_EE_MESSAGES = (
+    "timed out",
+    "deadline exceeded",
+    "too many",
+    "rate limit",
+    "quota",
+    "internal error",
+    "backend error",
+    "service unavailable",
+)
+
+
+def is_transient_ee_error(exc: BaseException) -> bool:
+    """Return True if an exception looks like a transient network or Earth Engine failure."""
+    if isinstance(exc, TRANSIENT_NETWORK_ERRORS):
+        return True
+    if isinstance(exc, ee.EEException):
+        msg = str(exc).lower()
+        return any(s in msg for s in TRANSIENT_EE_MESSAGES)
+    return False
+
+
+def call_with_retry(fn: Callable, *args, attempts: int = 3, base_delay: float = 5.0, **kwargs):
+    """Call fn, retrying with exponential backoff on transient network/Earth Engine errors.
+
+    Non-transient errors are raised immediately. Transient errors are raised once
+    all attempts are exhausted, so a failure is never mistaken for missing data.
+
+    Args:
+        fn: The callable to invoke.
+        *args: Positional arguments passed to fn.
+        attempts: Total number of attempts (default: 3).
+        base_delay: Delay in seconds before the first retry; doubles each retry (default: 5).
+        **kwargs: Keyword arguments passed to fn.
+
+    Returns:
+        The return value of fn.
+    """
+    for attempt in range(attempts):
+        try:
+            return fn(*args, **kwargs)
+        except Exception as e:
+            if not is_transient_ee_error(e) or attempt == attempts - 1:
+                raise
+            delay = base_delay * 2**attempt
+            logger.warning(f"Transient error ({type(e).__name__}: {e}); retrying in {delay:.0f}s")
+            time.sleep(delay)
+
+
 def calc_monthly_dw(
     start_date: str,
     polygons: ee.FeatureCollection,
@@ -147,11 +216,16 @@ def calc_monthly_dw(
         scale (float, optional): The pixel scale in meters. Defaults to 10.
 
     Returns:
-        ee.Image | None: The Dynamic World composite image, or None if no data
-            is available for the given time period and location.
+        ee.Image | None: The Dynamic World composite image, or None if Earth Engine
+            confirms no images exist for the given time period and location.
+
+    Raises:
+        ee.EEException, requests.exceptions.RequestException, ...: If the Earth Engine
+            request fails (after retrying transient errors).
     """
     import warnings
 
+    start_date_str = str(start_date)
     # Cast startDate back to an ee.Date, type erasure happens when mapping on a list.
     start_date = ee.Date(start_date)
     end_date = start_date.advance(1, "month")
@@ -159,25 +233,19 @@ def calc_monthly_dw(
         ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1").filterBounds(polygons).filterDate(start_date, end_date)
     )
 
-    try:
-        # Check if collection is empty on the client side before processing
-        size = dw_filtered_image_collection.size().getInfo()
-        if size == 0:
-            warnings.warn(f"No data available for start_date: {start_date.getInfo()}")
-            return None
+    # Check if collection is empty on the client side before processing. This is the
+    # only case that returns None; any error (after retries) is raised to the caller.
+    size = call_with_retry(dw_filtered_image_collection.size().getInfo)
+    if size == 0:
+        warnings.warn(f"No data available for start_date: {start_date_str}")
+        return None
 
-        image = (
-            dw_filtered_image_collection.select("label")
-            .reduce(ee.Reducer.mode())
-            .set("system:time_start", start_date.millis())
-            .setDefaultProjection(crs=crs, scale=scale)
-        )
-    except ee.EEException as e:
-        # Check if this is a band matching error indicating no data
-        if "did not match any bands" in str(e) or "no_data" in str(e):
-            warnings.warn(f"No data available for start_date: {start_date.getInfo()}")
-            return None
-        raise
+    image = (
+        dw_filtered_image_collection.select("label")
+        .reduce(ee.Reducer.mode())
+        .set("system:time_start", start_date.millis())
+        .setDefaultProjection(crs=crs, scale=scale)
+    )
 
     return ee.Image(image)
 

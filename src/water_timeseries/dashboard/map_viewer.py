@@ -29,7 +29,7 @@ from water_timeseries.dashboard.share_state import (
 )
 from water_timeseries.dashboard.tutorial_popup import show_help_button, show_tutorial_popup
 from water_timeseries.dataset import DWDataset, JRCDataset
-from water_timeseries.downloader import EarthEngineDownloader
+from water_timeseries.downloader import EarthEngineDownloader, NoDynamicWorldDataError
 from water_timeseries.map_utils import geohash_to_human_readable_name, resolve_nrt_monthly_tiles_url
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
@@ -1961,6 +1961,9 @@ def create_app(
                             st.rerun()
                         else:
                             st.error("Download returned no data.")
+                except NoDynamicWorldDataError as e:
+                    logger.warning(f"No Dynamic World data for lake {current}: {e}")
+                    st.warning("Earth Engine has no Dynamic World data for this lake and date range.")
                 except Exception as e:  # noqa: BLE001
                     logger.error(f"Failed to download data for lake {current}: {e}")
                     st.error(f"Error downloading data: {e}")
