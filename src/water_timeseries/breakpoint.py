@@ -39,7 +39,11 @@ from water_timeseries.utils.data import (
     calculate_water_area_after,
     calculate_water_area_before,
 )
-from water_timeseries.utils.nrt_postprocessing import add_confidence_interval_strings
+from water_timeseries.utils.nrt_postprocessing import (
+    CONFIDENCE_INPUT_COLUMNS,
+    CONFIDENCE_INVALID,
+    add_confidence_interval_strings,
+)
 
 warnings.filterwarnings("ignore")
 
@@ -670,20 +674,33 @@ class NRTBreakpoint(BreakpointMethod):
         ``water_observed < water_historical_min``
 
         Each satisfied criterion contributes 1 to the score. The final
-        ``drainage_confidence`` column contains:
+        ``drainage_confidence`` column (nullable ``Int64``) contains:
 
-        | Score | Meaning   |
-        |-------|-----------|
-        | 1     | Low       |
-        | 2     | Medium    |
-        | 3     | High      |
+        | Score | Meaning                                          |
+        |-------|--------------------------------------------------|
+        | -1    | Invalid – the criteria could not be evaluated    |
+        | <NA>  | Evaluated, no criterion met: the lake is stable  |
+        | 1     | Low                                              |
+        | 2     | Medium                                           |
+        | 3     | High                                             |
+
+        A lake that met no criterion is deliberately **not** scored 0. Zero read
+        as a confidence value on the same scale as 1-3, and downstream tile
+        styling picked it up as a (grey) drained lake; ``<NA>`` says "no
+        drainage detected, so confidence does not apply" and cannot be confused
+        with a weak detection. ``-1`` is reserved for lakes that could not be
+        judged either way — any of ``CONFIDENCE_INPUT_COLUMNS`` missing, which
+        covers a lake with no observation for the analysis month, one whose
+        ARIMA fit was skipped for too short a history, and one with no
+        historical stats. Those rows previously scored 0 as well, because each
+        criterion silently compares against NaN and yields False.
 
         Parameters
         ----------
         break_output_df : pd.DataFrame
-            DataFrame with at least the following columns: ``water_residual``,
-            ``water_observed``, ``water_predicted_lower_90``, and
-            ``water_historical_min``.
+            DataFrame with at least the columns in ``CONFIDENCE_INPUT_COLUMNS``:
+            ``water_residual``, ``water_observed``, ``water_predicted_lower_90``
+            and ``water_historical_min``.
 
         Returns
         -------
@@ -691,20 +708,25 @@ class NRTBreakpoint(BreakpointMethod):
             Input DataFrame with an additional ``drainage_confidence`` column.
         """
 
-        cat1 = break_output_df["water_residual"] < -0.25  # observed water area min. 25 less than expected
-        cat2 = (
-            break_output_df["water_observed"] < break_output_df["water_predicted_lower_90"]
-        )  # water area less than lower 90% confidence
-        cat3 = (
-            break_output_df["water_observed"] < break_output_df["water_historical_min"]
-        )  # minimum observed water extent ever
+        # Coerce first: the all-NaN placeholder frames built for lakes without a
+        # prediction carry object dtype, where `<` against a float raises.
+        inputs = break_output_df.reindex(columns=list(CONFIDENCE_INPUT_COLUMNS)).apply(pd.to_numeric, errors="coerce")
+
+        # A lake is only scorable if every criterion can actually be tested.
+        evaluable = inputs.notna().all(axis=1)
+
+        cat1 = inputs["water_residual"] < -0.25  # observed water area min. 25 less than expected
+        cat2 = inputs["water_observed"] < inputs["water_predicted_lower_90"]  # below lower 90% confidence
+        cat3 = inputs["water_observed"] < inputs["water_historical_min"]  # minimum observed water extent ever
 
         # sum all 3 criteria and output confidence (1:low, 2: medium, 3: high)
-        drain_confidence = pd.concat([cat1, cat2, cat3], axis=1).sum(axis=1)
-        break_output_df["drainage_confidence"] = drain_confidence
+        score = pd.concat([cat1, cat2, cat3], axis=1).sum(axis=1)
 
-        # force int dtype
-        break_output_df["drainage_confidence"] = break_output_df["drainage_confidence"].astype(int)
+        confidence = pd.Series(pd.NA, index=break_output_df.index, dtype="Int64")
+        drained = evaluable & (score > 0)
+        confidence[drained] = score[drained]
+        confidence[~evaluable] = CONFIDENCE_INVALID
+        break_output_df["drainage_confidence"] = confidence
 
         return break_output_df
 
@@ -781,7 +803,11 @@ class NRTBreakpoint(BreakpointMethod):
 
         if len(valid_ids) == 0:
             if keep_nans:
-                return pd.DataFrame(index=nan_ids, columns=self.output_columns)
+                empty_nans = pd.DataFrame(index=nan_ids, columns=self.output_columns)
+                # Nothing was scored, so none of these lakes is "not draining":
+                # they are unevaluable, which is what CONFIDENCE_INVALID says.
+                empty_nans["drainage_confidence"] = pd.Series(CONFIDENCE_INVALID, index=empty_nans.index, dtype="Int64")
+                return empty_nans
             else:
                 return pd.DataFrame(columns=self.output_columns)
 
@@ -858,6 +884,11 @@ class NRTBreakpoint(BreakpointMethod):
             df_historical_stats_nans.columns = "water_historical_" + df_historical_stats_nans.columns.astype(str)
             df_output_nan = prediction_df_nan.join(df_historical_stats_nans, how="left").round(4)
 
+            # These lakes have no observation for the analysis month, so the
+            # criteria cannot be tested: they score CONFIDENCE_INVALID rather
+            # than sinking to the bottom of the 1-3 scale via NaN comparisons.
+            df_output_nan = self._add_confidence_level(df_output_nan)
+
             # compute absolute values for nan entries
             scaling_factors_nan = dataset.ds.max(dim="date")["area_data"].to_dataframe()
             scaling_factors_nan = scaling_factors_nan.loc[df_output_nan.index]
@@ -866,6 +897,9 @@ class NRTBreakpoint(BreakpointMethod):
                     df_output_nan[f"{col}_absolute"] = df_output_nan[col] * scaling_factors_nan["area_data"]
 
             df_output = pd.concat([df_output, df_output_nan]).sort_index()
+            # concat of two Int64 columns can fall back to object if either side
+            # is empty; keep the column's dtype stable for parquet round-trips.
+            df_output["drainage_confidence"] = df_output["drainage_confidence"].astype("Int64")
 
         # Add confidence interval string columns
         df_output = add_confidence_interval_strings(df_output)

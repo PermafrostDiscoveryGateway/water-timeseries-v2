@@ -14,7 +14,6 @@ from folium_pmtiles.vector import PMTilesMapLibreLayer
 from water_timeseries.utils.map_styles.pmtiles import (
     DRAINED_LAKE_FILTER,
     STABLE_LAKE_FILTER,
-    get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
     get_style_pmtiles_generic_water,
     get_style_pmtiles_nrt_confidence_featurestate,
@@ -23,6 +22,7 @@ from water_timeseries.utils.map_styles.pmtiles import (
     get_style_pmtiles_stable_lakes,
 )
 from water_timeseries.utils.pmtiles_build import (
+    NRT_SCORED_LAYER,
     POINT_POLY_SWITCH_ZOOM,
     TILE_MAX_ZOOM,
     archive_bakes_low_zoom_centroids,
@@ -30,7 +30,6 @@ from water_timeseries.utils.pmtiles_build import (
 from water_timeseries.utils.visualization import (
     get_legend_html_date_drainage_year,
     get_legend_html_drained_month,
-    get_legend_html_net_change,
     get_legend_html_nrt_drainage,
 )
 
@@ -230,6 +229,10 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     autoPan: true,
     autoPanPadding: [50, 50]
     });
+    // Whole-number categories, not measured quantities -- skip toFixed(2).
+    const integerFields_{{ this.get_name() }} = new Set([
+    "date_break_year", "date_break_month", "drainage_confidence",
+    ]);
     var columnAliases_{{ this.get_name() }} = {{ this.column_aliases_json }};
     var propertyOverrides_{{ this.get_name() }} = {{ this.property_overrides_json }};
     var filterLayers_{{ this.get_name() }} = {{ this.filter_layers_json }};
@@ -282,10 +285,13 @@ class PMTilesMapLibreTooltipWithRounding(folium.elements.JSCSSMixin, branca.elem
     if (asText === "" || ["nat", "nan", "none", "null"].includes(asText.toLowerCase())) { return ""; }
     let displayKey = aliases[key] || key;
     let displayVal = value;
+    const isInteger = integerFields_{{ this.get_name() }}.has(key);
+    const decimalOpts = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
     if (typeof value === 'number') {
-    displayVal = value.toFixed(2);
+    displayVal = isInteger ? String(Math.round(value)) : value.toLocaleString(undefined, decimalOpts);
     } else if (typeof value === 'string' && !isNaN(value) && value.includes('.')) {
-    displayVal = parseFloat(value).toFixed(2);
+    const parsed = parseFloat(value);
+    displayVal = isInteger ? String(Math.round(parsed)) : parsed.toLocaleString(undefined, decimalOpts);
     }
     return `<tr><td>${displayKey}</td><td style="text-align: right">${displayVal}</td></tr>`;
     }).join("")}
@@ -456,7 +462,7 @@ def build_pmtiles_map(
     zoom_start: int = 4,
     source_layer: str = "lakes",
     drained_ids: list[str] | None = None,
-    viz_configuration_name: str = "colored_historical",
+    viz_configuration_name: str = "drainage_year",
     tooltip=None,
     min_zoom=4,
     # One level of overzoom past the deepest baked tile: MapLibre scales the
@@ -470,6 +476,7 @@ def build_pmtiles_map(
     nrt_confidence_by_id: dict[str, int | None] | None = None,
     nrt_tooltip_overrides: dict[str, dict] | None = None,
     nrt_monthly_tiles_url: str | None = None,
+    nrt_monthly_has_scored: bool = False,
     historical_drained_tiles_url: str | None = None,
     nrt_month_has_confidence: bool = True,
     selected_id: str | None = None,
@@ -506,6 +513,13 @@ def build_pmtiles_map(
             own unlimited tileset instead they are all present at every zoom,
             over the base archive's sampled grey. Without it the drained lakes
             are filtered out of the base archive as before.
+        nrt_monthly_has_scored: Whether the month's archive carries the
+            ``scored`` layer -- every lake that month's full NRT run predicted
+            for, not just the drained ones (``build_pmtiles_nrt_monthly``).
+            When it does, a non-drained lake hovers the month's own prediction
+            instead of falling through to the mode-agnostic base tiles. Months
+            with no full run have no such layer, so this is per month, not per
+            deployment; ``map_viewer`` reads it off the archive.
         base_has_centroids: Whether the base archive bakes usable centroids
             below ``POINT_POLY_SWITCH_ZOOM``, from
             ``archive_bakes_low_zoom_centroids``. When it does not -- every
@@ -550,24 +564,7 @@ def build_pmtiles_map(
         "Esri.WorldImagery", name="ESRI World Imagery", min_zoom=min_zoom, max_zoom=max_zoom
     )
 
-    if viz_configuration_name == "colored_historical" and not drained_ids:
-        aliases = {
-            "NetChange_perc": "Net Change (%)",
-            "NetChange_ha": "Net Change (ha)",
-            "Area_start_ha": "Lake Area year 2000 (ha)",
-            "Area_end_ha": "Lake Area year 2020 (ha)",
-            "date_break_year": "Drainage Year",
-        }
-        tooltip = PMTilesMapLibreTooltipWithRounding(
-            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=POINT_POLY_SWITCH_ZOOM, max_zoom=max_zoom
-        )
-        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
-        legend = get_legend_html_net_change()
-        tile_layer_darkmatter.add_to(m)
-        tile_layer_esriworld.add_to(m)
-        tcvis_tile_layer.add_to(m)
-
-    elif viz_configuration_name == "drainage_year" and not drained_ids:
+    if viz_configuration_name == "drainage_year" and not drained_ids:
         aliases = {
             "id_geohash": "Lake ID",
             "date_break": "Break date [YYYY-MM]",
@@ -580,10 +577,10 @@ def build_pmtiles_map(
             # Carried by the base tiles, so these are what a stable lake hovers --
             # it is in no overlay and has no break columns to show. Same labels
             # the nrt_drainage aliases give them, since it is the same archive.
+            "NetChange_perc": "Net change [%]",
+            "NetChange_ha": "Net change [ha]",
             "Area_start_ha": "Lake area year 2000 [ha]",
             "Area_end_ha": "Lake area year 2020 [ha]",
-            "NetChange_ha": "Net change [ha]",
-            "NetChange_perc": "Net change [%]",
         }
         tooltip = PMTilesMapLibreTooltipWithRounding(
             column_aliases=aliases,
@@ -610,7 +607,7 @@ def build_pmtiles_map(
             "water_predicted_absolute": "Predicted water area [ha]",
             "water_predicted_ci_absolute": "Predicted water area range [ha]",
             "water_residual_absolute": "Difference of lake area from prediction [ha]",
-            "drainage_confidence": "Confidence of drainage detection [0 (low) to 3 (high)]",
+            "drainage_confidence": "Confidence of drainage detection [1 (low) to 3 (high); -1 = not evaluated]",
             "water_change_ha": "Change of water area [ha]",
             "water_change_perc": "Change of water area [%]",
             "pre_break_median": "Lake area before break [ha]",
@@ -619,10 +616,10 @@ def build_pmtiles_map(
             "date_break": "Historical break date",
             "date_break_year": "Historical break year",
             "date_break_month": "Historical break month",
-            "Area_start_ha": "Lake area year 2000 [ha]",
-            "Area_end_ha": "Lake area year 2020 [ha]",
             "NetChange_perc": "Net change [%]",
             "NetChange_ha": "Net change [ha]",
+            "Area_start_ha": "Lake area year 2000 [ha]",
+            "Area_end_ha": "Lake area year 2020 [ha]",
             # Baked into the per-month drainage tilesets: the NRT months carry
             # these rather than the "_absolute" variants above.
             "analysis_month": "Analysis month [YYYY-MM]",
@@ -638,9 +635,18 @@ def build_pmtiles_map(
             # whatever the base tiles carry. `date`/`drainage_confidence` are
             # suppressed for the base layer because some base tilesets bake
             # them from a single NRT run, which would report the wrong month.
+            # Ordered by preference (see filterLayers in the tooltip template):
+            # the month's drained values first, then the month's prediction for
+            # any other lake it scored, then whatever the base tiles carry.
+            # `date`/`drainage_confidence` are suppressed on the base layer
+            # only: some base tilesets bake them from a single NRT run, so they
+            # would report the wrong month, while the scored layer IS one month.
+            hover_layers = ["nrt-drained-fill", "lakes-fill"]
+            if nrt_monthly_has_scored:
+                hover_layers.insert(1, "nrt-scored-fill")
             tooltip = PMTilesMapLibreTooltipWithRounding(
                 column_aliases=aliases,
-                filter_layers=["nrt-drained-fill", "lakes-fill"],
+                filter_layers=hover_layers,
                 suppressed_properties={"lakes-fill": ["date", "drainage_confidence"]},
                 min_zoom=POINT_POLY_SWITCH_ZOOM,
                 max_zoom=max_zoom,
@@ -775,7 +781,7 @@ def build_pmtiles_map(
     #
     #   drainage_year  stable 0.05 -> 0.37   drained 0.20 -> 0.58
     #   nrt_drainage   base   0.35 -> 0.70   (overlay stays at 0.85, still the figure)
-    #   colored_historical /generic_water 0.70 -> 0.89
+    #   generic_water  0.70 -> 0.89
     circle_opacity = ["^", fill_opacity, CENTROID_OPACITY_EXPONENT]
 
     # Centroids below the switch zoom, where the base tileset has no polygons
@@ -981,12 +987,44 @@ def build_pmtiles_map(
             "type": "vector",
             "url": "pmtiles://" + nrt_monthly_tiles_url,
         }
+        # Every lake the month's run scored, as a hover target only: the grey a
+        # user sees is still the base layer's single fill, so this cannot
+        # double-paint it (two fills at 0.35 would read as 0.58 -- scored lakes
+        # would look darker than unscored ones). A zero-opacity fill is still
+        # returned by queryRenderedFeatures, which is what makes an invisible
+        # layer a working hover target; `visibility: none` is not, which is what
+        # makes it the way to hide one. Verified on maplibre 2.2.1, the version
+        # PMTilesMapLibreLayerSynced loads.
+        #
+        # No centroid layer to match: hover is gated to POINT_POLY_SWITCH_ZOOM
+        # and above, where the base archive's centroids have already handed off
+        # to polygons, so nothing would ever read it (see NRT_SCORED_LAYER).
+        nrt_scored_layers: list[dict] = []
+        if nrt_monthly_has_scored:
+            nrt_scored_layers.append(
+                {
+                    "id": "nrt-scored-fill",
+                    "source": "nrt_pmtiles",
+                    "source-layer": NRT_SCORED_LAYER,
+                    "type": "fill",
+                    "minzoom": POINT_POLY_SWITCH_ZOOM,
+                    # The grey the base lakes are painted, not the confidence
+                    # ramp: invisible either way, but if the opacity is ever
+                    # raised to debug this layer it should look like what it
+                    # stands in for.
+                    "paint": {"fill-color": get_style_pmtiles_stable_lakes()[0], "fill-opacity": 0},
+                }
+            )
+
         if hide_stable_lakes or "stable" in hidden_categories:
             # Switch the base layers off rather than painting them at zero
             # opacity: a zero-opacity layer still counts as rendered, so
             # queryRenderedFeatures would keep producing hover popups for the
             # lakes the user asked to hide. The drained overlay is unaffected.
-            for layer in base_layers:
+            # The scored layer goes with them -- it is a hover target for those
+            # same lakes, and hiding a lake has to hide its popup too. A drained
+            # lake still hovers, from the layer above it in `hover_layers`.
+            for layer in [*base_layers, *nrt_scored_layers]:
                 layer["layout"] = {"visibility": "none"}
 
         nrt_drained_points_layer = {
@@ -1046,7 +1084,7 @@ def build_pmtiles_map(
             for layer in (nrt_drained_points_layer, nrt_drained_fill_layer, nrt_drained_line_layer):
                 layer["filter"] = drained_filter
 
-        layers.extend([nrt_drained_points_layer, nrt_drained_fill_layer, nrt_drained_line_layer])
+        layers.extend([*nrt_scored_layers, nrt_drained_points_layer, nrt_drained_fill_layer, nrt_drained_line_layer])
 
     layers.extend(selected_overlay_layers)
 
@@ -1119,6 +1157,36 @@ def build_pmtiles_map(
     m.get_root().html.add_child(Element(style))
 
     return m
+
+
+@functools.lru_cache(maxsize=64)
+def pmtiles_has_layer(pmtiles_source: str, layer: str) -> bool:
+    """Whether ``pmtiles_source`` carries ``layer``.
+
+    Read off the archive rather than configured beside it, for the same reason
+    as ``pmtiles_has_low_zoom_centroids``: which layers a month's tileset has
+    depends on what data existed when it was built, and only a month with a full
+    NRT run can carry ``NRT_SCORED_LAYER``. So an archive rebuilt with a newer
+    builder starts being hovered without anything else changing, and a month
+    without one keeps working. Cached per URL -- Streamlit rebuilds the map on
+    every rerun, and each miss is two range requests against a remote archive.
+
+    False when the archive cannot be read: the layer is a hover target, so
+    guessing wrong towards "absent" costs a richer popup, while guessing wrong
+    towards "present" would point a style at a source-layer that is not there.
+    """
+    from water_timeseries.utils.pmtiles_reader import read_pmtiles_metadata, read_pmtiles_metadata_remote
+
+    try:
+        if pmtiles_source.startswith(("http://", "https://", "gs://")):
+            metadata = read_pmtiles_metadata_remote(resolve_pmtiles_url(pmtiles_source))
+        else:
+            metadata = read_pmtiles_metadata(pmtiles_source)
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"Could not read PMTiles metadata for {pmtiles_source}: {exc}")
+        return False
+
+    return layer in {entry.get("id") for entry in metadata.get("vector_layers") or []}
 
 
 @functools.lru_cache(maxsize=32)

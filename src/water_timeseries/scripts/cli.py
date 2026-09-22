@@ -30,13 +30,13 @@ from water_timeseries.utils.cli import (
     merge_config_with_args,
     mode_configs,
 )
-from water_timeseries.utils.pmtiles_build import build_pmtiles as build_pmtiles_archive
 from water_timeseries.utils.pmtiles_build import (
-    build_pmtiles_drainage_year,
-    build_pmtiles_nrt_drainage,
+    build_pmtiles_historical_drained,
     build_pmtiles_nrt_monthly,
     build_pmtiles_shared_geometry,
+    find_nrt_run_parquets,
     find_tippecanoe,
+    historical_drained_tiles_path,
 )
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
@@ -124,7 +124,6 @@ def dashboard(
         dw_end_month: End month for Dynamic World dataset
 viz_configuration: The visualization configuration name for the map viewer.
             Valid options:
-            - "colored_historical": Historical time series with color-coded data.
             - "drainage_year": Data displayed by drainage year.
             - "nrt_drainage": Near-real-time drainage data.
         pmtiles_file: Path to a .pmtiles archive for fast vector-tile rendering.
@@ -206,7 +205,7 @@ viz_configuration: The visualization configuration name for the map viewer.
     dw_end_year = config_dict.get("dw_end_year", 2025)
     dw_start_month = config_dict.get("dw_start_month", 6)
     dw_end_month = config_dict.get("dw_end_month", 9)
-    viz_configuration = config_dict.get("viz_configuration", "colored_historical")
+    viz_configuration = config_dict.get("viz_configuration", "drainage_year")
     pmtiles_file = config_dict.get("pmtiles_file")
     pmtiles_url = config_dict.get("pmtiles_url")
     nrt_pmtiles_dir = config_dict.get("nrt_pmtiles_dir")
@@ -287,15 +286,21 @@ def build_pmtiles(
     vector_file: Path | None = None,
     output_file: Path | None = None,
     pmtiles_file: Path | None = None,
-    viz_configuration: str | None = None,
-    shared_geometry: bool = False,
     keep_geojsonl: bool | None = None,
     logfile: str | None = None,
     verbose: int = 0,
     config_file: Path | None = None,
     mode: str | None = None,
 ):
-    """Convert a lake GeoParquet file to a single .pmtiles archive for fast map rendering.
+    """Build the shared base archive: one .pmtiles of every lake polygon, for both viz modes.
+
+    This is the grey lake layer under both Historical and Near Real-Time. The two
+    modes cover the same lake table with the same geometry and neither styles from
+    a baked property, so one archive serves both -- point each mode's
+    ``pmtiles_file`` at the result. The per-year and per-month drainage data lives
+    in the overlays, which build separately and far more cheaply
+    (``build-drained-pmtiles`` and ``build-nrt-pmtiles``); rebuild this one only
+    when the lake geometry itself changes. ~35 min for 4M lakes.
 
     Requires tippecanoe on PATH (``brew install tippecanoe``). Upload the resulting
     ``.pmtiles`` file to object storage (S3, GCS, etc.) and pass ``--pmtiles-url`` to
@@ -306,17 +311,10 @@ def build_pmtiles(
     works for both building and serving tiles. A multi-mode config builds one mode
     at a time -- ``--mode`` picks which, defaulting to the config's ``default_mode``.
 
-    ``--shared-geometry`` builds the mode-agnostic base archive instead: geometry
-    and ``id_geohash`` only, which both viz modes point ``pmtiles_file`` at. Use it
-    rather than one base archive per mode -- the modes cover the same lakes with
-    the same geometry, and their drained overlays carry everything hover reads.
-
     Example:
-        water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
-        water-timeseries build-pmtiles lakes.parquet data/lake_geometry/lakes.pmtiles --shared-geometry
+        water-timeseries build-pmtiles lakes.parquet data/lake_geometry/lakes.pmtiles
         water-timeseries build-pmtiles --config-file configs/dashboard_panarctic.yaml
-        water-timeseries build-pmtiles --config-file configs/dashboard_panarctic.yaml --mode nrt_drainage
-        water-timeseries dashboard --pmtiles-file tiles/lakes.pmtiles --vector-file lakes.parquet
+        water-timeseries dashboard --pmtiles-file data/lake_geometry/lakes.pmtiles --vector-file lakes.parquet
     """
     # Load config file if provided, selecting one mode from a multi-mode config
     config_dict = flatten_mode(load_required_config(config_file, logger), mode)
@@ -327,10 +325,6 @@ def build_pmtiles(
         vector_file=str(vector_file) if vector_file else None,
         output_file=str(output_file) if output_file else None,
         pmtiles_file=str(pmtiles_file) if pmtiles_file else None,
-        viz_configuration=viz_configuration,
-        # False is the flag's default, not a choice, so it must not override a
-        # config that asked for the shared archive.
-        shared_geometry=shared_geometry or None,
         keep_geojsonl=keep_geojsonl,
         logfile=logfile,
         verbose=verbose,
@@ -350,7 +344,6 @@ def build_pmtiles(
 
     vector_file_path = Path(vector_file_str)
     output_file_path = Path(output_file_str)
-    viz_config = config_dict.get("viz_configuration", "colored_historical")
     keep_geojsonl_val = config_dict.get("keep_geojsonl", False)
     logfile_val = config_dict.get("logfile")
     verbose_val = config_dict.get("verbose", 0)
@@ -362,15 +355,99 @@ def build_pmtiles(
         raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
 
     print(f"Building PMTiles from {vector_file_path} -> {output_file_path}")
-    if config_dict.get("shared_geometry"):
-        build_pmtiles_shared_geometry(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
-    elif viz_config == "drainage_year":
-        build_pmtiles_drainage_year(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
-    elif viz_config == "nrt_drainage":
-        build_pmtiles_nrt_drainage(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
-    else:
-        build_pmtiles_archive(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
+    build_pmtiles_shared_geometry(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
     print(f"Wrote PMTiles archive: {output_file_path}")
+
+
+@app.command(group="Visualization")
+def build_drained_pmtiles(
+    vector_file: Path | None = None,
+    pmtiles_file: Path | None = None,
+    output_file: Path | None = None,
+    keep_geojsonl: bool | None = None,
+    logfile: str | None = None,
+    verbose: int = 0,
+    config_file: Path | None = None,
+    mode: str = "drainage_year",
+):
+    """Build the historical drained-lakes overlay: every lake with a break date.
+
+    The base archive holds all 4M lakes and tippecanoe samples them to fit its
+    tile budget, so zooming out drops drained lakes along with the stable ones --
+    the very lakes the map exists to show. There are only ~9,800 with a break
+    date in the whole record, so they get their own tileset built with no size or
+    feature limit and nothing dropped, drawn over the sampled grey base. Complete
+    at every zoom, seconds to build, ~24 MB.
+
+    The output must land beside the base archive as ``<base>_drained.pmtiles``,
+    which is where the dashboard looks for it; that is the default when
+    ``--pmtiles-file`` is given (or read from the config) and ``--output-file`` is
+    not. Rebuild it whenever the historical breaks change -- a stale one is picked
+    up silently and shows the previous run's drained lakes.
+
+    Args:
+        vector_file: Historical lake table with ``id_geohash``, geometry and
+            ``date_break_year`` (the ``*_with_allgeoms_*`` parquet).
+        pmtiles_file: The base archive the overlay belongs beside. Used only to
+            derive the default output path.
+        output_file: Write here instead of ``<pmtiles_file>_drained.pmtiles``.
+        keep_geojsonl: Keep the intermediate GeoJSONL file next to the output.
+        config_file: A dashboard config YAML; its ``vector_file``, ``pmtiles_file``
+            and ``drained_pmtiles_file`` are read when the flags aren't set.
+            ``--mode`` picks which mode to read them from (default
+            ``drainage_year``). CLI flags always take priority.
+
+    Example:
+        water-timeseries build-drained-pmtiles --config-file configs/dashboard_panarctic.yaml
+        water-timeseries build-drained-pmtiles \\
+            --vector-file data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet \\
+            --pmtiles-file data/lake_geometry/lakes.pmtiles
+    """
+    config_dict = flatten_mode(load_config(config_file, logger), mode) if config_file else {}
+    # The config names the overlay `drained_pmtiles_file`; treat it as the output
+    # path so a config-driven build writes exactly where the dashboard reads.
+    if not config_dict.get("output_file") and config_dict.get("drained_pmtiles_file"):
+        config_dict["output_file"] = config_dict["drained_pmtiles_file"]
+
+    config_dict = merge_config_with_args(
+        config_dict,
+        vector_file=str(vector_file) if vector_file else None,
+        pmtiles_file=str(pmtiles_file) if pmtiles_file else None,
+        output_file=str(output_file) if output_file else None,
+        keep_geojsonl=keep_geojsonl,
+        logfile=logfile,
+        verbose=verbose,
+    )
+
+    vector_file_str = config_dict.get("vector_file")
+    output_file_str = config_dict.get("output_file")
+    pmtiles_file_str = config_dict.get("pmtiles_file")
+
+    if not vector_file_str:
+        logger.error("vector_file is required. Provide via CLI arguments or config file.")
+        raise SystemExit(1)
+    if not output_file_str and not pmtiles_file_str:
+        logger.error("Either output_file or pmtiles_file is required, to know where to write the overlay.")
+        raise SystemExit(1)
+
+    output_file_path = (
+        Path(output_file_str) if output_file_str else historical_drained_tiles_path(Path(pmtiles_file_str))
+    )
+
+    logfile_val = config_dict.get("logfile")
+    if logfile_val:
+        setup_logging(logfile=logfile_val, verbose=config_dict.get("verbose", 0))
+
+    if not find_tippecanoe():
+        raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
+
+    print(f"Building drained-lakes overlay from {vector_file_str} -> {output_file_path}")
+    build_pmtiles_historical_drained(
+        Path(vector_file_str),
+        output_file_path,
+        keep_geojsonl=bool(config_dict.get("keep_geojsonl", False)),
+    )
+    print(f"Wrote drained-lakes overlay: {output_file_path}")
 
 
 @app.command(group="Visualization")
@@ -378,6 +455,7 @@ def build_nrt_pmtiles(
     breaks_file: Path | None = None,
     geometry_file: Path | None = None,
     output_dir: Path | None = None,
+    nrt_run_dir: Path | None = None,
     months: str | None = None,
     keep_geojsonl: bool | None = None,
     poly_max_zoom: int | None = None,
@@ -385,13 +463,18 @@ def build_nrt_pmtiles(
     logfile: str | None = None,
     verbose: int = 0,
 ):
-    """Build one small drained-lakes PMTiles archive per NRT analysis month.
+    """Build one PMTiles archive of a month's NRT results per analysis month.
 
-    Each archive holds only that month's drained lakes, with the month's
-    drainage signal baked into the tile properties. The dashboard layers the
-    selected month's archive over the base tiles, so switching months costs a
-    source-URL swap instead of shipping per-lake values into the browser on
-    every rerun.
+    Each archive holds that month's data and nothing else, so the dashboard
+    switches months with a source-URL swap instead of shipping per-lake values
+    into the browser on every rerun. Two layers:
+
+    * ``drained`` -- the lakes that drained that month, with the drainage signal.
+    * ``scored`` -- every lake the month's full NRT run predicted for, with that
+      prediction (observed vs predicted area, confidence interval, residual,
+      confidence). This is what a non-drained lake hovers. Built for the months
+      ``--nrt-run-dir`` has a run parquet for; only a full run scores every
+      lake, so other months get the drained layers alone.
 
     Re-run this after each new NRT month lands (``aggregate-nrt``), then point
     the dashboard at the output with ``--nrt-pmtiles-dir``.
@@ -401,6 +484,10 @@ def build_nrt_pmtiles(
         geometry_file: Lake table with ``id_geohash`` + geometry (the ``*_with_allgeoms_*``
             parquet). Scanned once for all months.
         output_dir: Directory to write ``nrt_<month>_drainage.pmtiles`` into.
+        nrt_run_dir: Root holding the full NRT runs
+            (``DW_NRT_<month>_run<date>/DW_NRT_<month>_run<date>_allGeoms_v*_repartitioned.parquet``,
+            i.e. ``data/DW_NRT``). Each month found there gets the ``scored``
+            layer. Omit it to build the drained layers only, as before.
         months: Comma-separated ``YYYY-MM`` list. Defaults to every month in the breaks table.
         keep_geojsonl: Keep the intermediate GeoJSONL files next to the output.
         poly_max_zoom: Highest zoom to bake polygon geometry at (default 14). The
@@ -411,15 +498,16 @@ def build_nrt_pmtiles(
         config_file: A dashboard config YAML (e.g. the one deployed as
             ``dashboard-config.yaml``) or a config using these flags' own names.
             Its ``precomputed_nrt_dir`` (+ ``nrt_monthly_drain_breaks.parquet``),
-            ``vector_file`` and ``nrt_pmtiles_dir`` are read as breaks_file,
-            geometry_file and output_dir respectively when those keys aren't
-            set directly. CLI flags always take priority over the config file.
+            ``vector_file``, ``nrt_pmtiles_dir`` and ``nrt_run_dir`` are read as
+            breaks_file, geometry_file, output_dir and nrt_run_dir respectively
+            when those keys aren't set directly. CLI flags always take priority
+            over the config file.
 
     Example:
         water-timeseries build-nrt-pmtiles \\
             --breaks-file precomputed/nrt/nrt_monthly_drain_breaks.parquet \\
             --geometry-file data/lakes_with_allgeoms.parquet \\
-            --output-dir data/nrt_tiles
+            --output-dir data/nrt_tiles --nrt-run-dir data/DW_NRT
         water-timeseries build-nrt-pmtiles --config-file configs/dashboard_panarctic.yaml --months 2026-08
         water-timeseries dashboard --pmtiles-file data/lakes.pmtiles \\
             --nrt-pmtiles-dir data/nrt_tiles --viz-configuration nrt_drainage
@@ -441,6 +529,7 @@ def build_nrt_pmtiles(
         breaks_file=str(breaks_file) if breaks_file else None,
         geometry_file=str(geometry_file) if geometry_file else None,
         output_dir=str(output_dir) if output_dir else None,
+        nrt_run_dir=str(nrt_run_dir) if nrt_run_dir else None,
         months=months,
         keep_geojsonl=keep_geojsonl,
         poly_max_zoom=poly_max_zoom,
@@ -449,6 +538,7 @@ def build_nrt_pmtiles(
     breaks_file = Path(config_dict["breaks_file"]) if config_dict.get("breaks_file") else None
     geometry_file = Path(config_dict["geometry_file"]) if config_dict.get("geometry_file") else None
     output_dir = Path(config_dict["output_dir"]) if config_dict.get("output_dir") else None
+    nrt_run_dir = Path(config_dict["nrt_run_dir"]) if config_dict.get("nrt_run_dir") else None
     months = config_dict.get("months")
     if isinstance(months, list):
         months = ",".join(months)
@@ -465,6 +555,17 @@ def build_nrt_pmtiles(
         raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
 
     month_list = [m.strip() for m in months.split(",") if m.strip()] if months else None
+
+    # Months with no full run keep the drained layers alone, so say which got
+    # the scored layer rather than leaving it to the build log.
+    run_parquets = find_nrt_run_parquets(nrt_run_dir, months=month_list) if nrt_run_dir else {}
+    if nrt_run_dir and not run_parquets:
+        logger.warning(
+            f"No full NRT run parquets found under {nrt_run_dir}; building the drained layers only (no 'scored' layer)."
+        )
+    elif run_parquets:
+        logger.info(f"Scored layer from full runs: {', '.join(sorted(run_parquets))}")
+
     outputs = build_pmtiles_nrt_monthly(
         breaks_file,
         geometry_file,
@@ -472,6 +573,7 @@ def build_nrt_pmtiles(
         months=month_list,
         keep_geojsonl=keep_geojsonl,
         poly_max_zoom=poly_max_zoom,
+        run_parquet_by_month=run_parquets,
     )
     print(f"Wrote {len(outputs)} monthly drainage tilesets to {output_dir}")
 
@@ -906,7 +1008,7 @@ def breakpoint_analysis_nrt(
     output_file: Path | None = None,
     output_dir: Path | None = None,
     no_resume: bool = False,
-    drain_threshold: float | None = None,
+    drain_threshold: float = -0.25,
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
@@ -955,7 +1057,7 @@ def breakpoint_analysis_nrt(
         file already exists in ``--output-dir``.
     drain_threshold:
         ``water_residual`` threshold below which a lake is classified as
-        drained (default ``None``).
+        drained (default ``-0.25``, must match ``merge-nrt-confidence``).
     data_aggregation_period:
         Passed to ``NRTBreakpoint.calculate_break`` (default ``"all"``).
     lake_chunk_size:

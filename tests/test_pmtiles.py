@@ -9,6 +9,8 @@ import pytest
 
 from water_timeseries.utils.pmtiles_build import (
     DEFAULT_TILE_PROPERTIES,
+    NRT_SCORED_LAYER,
+    NRT_SCORED_TILE_PROPERTIES,
     POINT_POLY_OVERLAP_ZOOMS,
     POINT_POLY_SWITCH_ZOOM,
     SHARED_GEOMETRY_POINT_PROPERTIES,
@@ -17,8 +19,10 @@ from water_timeseries.utils.pmtiles_build import (
     archive_bakes_low_zoom_centroids,
     build_pmtiles_nrt_monthly,
     build_pmtiles_shared_geometry,
+    find_nrt_run_parquets,
     find_tippecanoe,
     nrt_monthly_tiles_filename,
+    nrt_scored_rows,
     parquet_to_geojsonseq,
     point_poly_zoom_ranges,
 )
@@ -67,6 +71,33 @@ def _write_breaks_fixture(path: Path, geohashes: list[str]) -> Path:
     ]
     pd.DataFrame(rows).to_parquet(path, index=False)
     return path
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_build_pmtiles_nrt_monthly_excludes_non_drained(tmp_path):
+    """Only drainage detections are baked, not every lake the month's run scored.
+
+    Since the precompute drain_threshold default became None, the breaks table
+    carries a row per scored lake; a stable (<NA>) or unevaluable (-1) row must
+    not end up in an overlay whose every feature is styled as drained.
+    """
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
+    breaks_path = tmp_path / "breaks.parquet"
+    pd.DataFrame(
+        {
+            "analysis_month": ["2026-07"] * 3,
+            "id_geohash": geohashes,
+            "water_residual": [-0.5, 0.02, float("nan")],
+            "drainage_confidence": pd.array([2, pd.NA, -1], dtype="Int64"),
+        }
+    ).to_parquet(breaks_path, index=False)
+
+    build_pmtiles_nrt_monthly(breaks_path, TEST_PARQUET, tmp_path / "tiles", keep_geojsonl=True)
+
+    lines = (tmp_path / "tiles" / "nrt_2026-07_drainage.geojsonl").read_text().strip().splitlines()
+    baked = [json.loads(line)["properties"] for line in lines]
+    assert [p["id_geohash"] for p in baked] == [geohashes[0]]
+    assert baked[0]["drainage_confidence"] == 2
 
 
 @pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
@@ -243,7 +274,7 @@ def _assert_single_cover(points: dict, fill: dict, line: dict) -> None:
 
 @pytest.mark.parametrize(
     "viz_configuration_name",
-    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+    ["drainage_year", "nrt_drainage", "generic_water"],
 )
 def test_base_lake_centroid_polygon_handoff_has_no_gap(viz_configuration_name):
     """Every viz mode draws the base lakes at every zoom, dots below the switch, polygons above.
@@ -265,7 +296,7 @@ def test_base_lake_centroid_polygon_handoff_has_no_gap(viz_configuration_name):
 
 @pytest.mark.parametrize(
     "viz_configuration_name",
-    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+    ["drainage_year", "nrt_drainage", "generic_water"],
 )
 def test_base_polygons_cover_every_zoom_when_the_archive_has_no_centroids(viz_configuration_name):
     """An archive with no usable centroid layer must not have its polygons gated.
@@ -295,7 +326,7 @@ def test_base_polygons_cover_every_zoom_when_the_archive_has_no_centroids(viz_co
 
 @pytest.mark.parametrize(
     "viz_configuration_name",
-    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+    ["drainage_year", "nrt_drainage", "generic_water"],
 )
 def test_centroids_are_drawn_more_opaque_than_the_polygons_they_replace(viz_configuration_name):
     """A dot painted at the polygon's fill opacity is invisible.
@@ -469,7 +500,7 @@ def test_modes_without_a_stable_split_keep_one_set_of_lake_layers():
     """Only drainage_year separates stable from drained; the rest style every lake alike."""
     from water_timeseries.map_utils import build_pmtiles_map
 
-    for viz in ("colored_historical", "generic_water", "nrt_drainage"):
+    for viz in ("generic_water", "nrt_drainage"):
         m = build_pmtiles_map(
             "http://localhost:1/lakes.pmtiles",
             viz_configuration_name=viz,
@@ -1013,3 +1044,243 @@ def test_pmtiles_server_map_page_keeps_config_url(tmp_path):
             html = resp.read().decode("utf-8")
         assert tile_url in html
         assert server.url_for("default.pmtiles") not in html
+
+
+def _write_run_fixture(path: Path, unscored: int = 2) -> tuple[Path, list[str]]:
+    """A stand-in for a full NRT run's parquet: a row per lake, most of them scored.
+
+    Mirrors the real shape (``data/DW_NRT/DW_NRT_<month>_run<date>/...``): the
+    run covers the whole lake table but predicts only where it had enough of a
+    time series, leaving the rest null -- 45.8% scored in the 2026-06 run.
+    """
+    gdf = gpd.read_parquet(TEST_PARQUET)
+    gdf["date"] = pd.Timestamp("2026-07-01")
+    gdf["water_observed_absolute"] = 100.0
+    gdf["water_predicted_absolute"] = 99.0
+    gdf["water_predicted_ci_absolute"] = "98.0 : 100.0"
+    gdf["water_residual_absolute"] = 1.0
+    gdf["drainage_confidence"] = 0
+    if unscored:
+        blank = gdf.index[-unscored:]
+        gdf.loc[blank, [c for c in NRT_SCORED_TILE_PROPERTIES if c != "id_geohash"]] = None
+        gdf.loc[blank, "water_predicted_ci_absolute"] = "nan : nan"
+    gdf.to_parquet(path, index=False)
+    scored_ids = gdf[gdf["date"].notna()]["id_geohash"].astype(str).tolist()
+    return path, scored_ids
+
+
+def test_nrt_scored_rows_keeps_only_lakes_the_run_predicted_for():
+    """`date` is the marker for a scored lake; a "nan : nan" CI is not enough to count."""
+    df = pd.DataFrame(
+        {
+            "date": [pd.Timestamp("2026-07-01"), pd.NaT],
+            "water_predicted_ci_absolute": ["98.0 : 100.0", "nan : nan"],
+        }
+    )
+    assert nrt_scored_rows(df).tolist() == [True, False]
+    # A table with no date column at all scores nothing, rather than erroring.
+    assert nrt_scored_rows(pd.DataFrame({"id_geohash": ["a"]})).tolist() == [False]
+
+
+def test_find_nrt_run_parquets_prefers_repartitioned_and_skips_subsets(tmp_path):
+    june = tmp_path / "DW_NRT_2026-06_run2025-06-25"
+    june.mkdir()
+    (june / "DW_NRT_2026-06_run2025-06-25_allGeoms_v3.parquet").write_bytes(b"0")
+    (june / "DW_NRT_2026-06_run2025-06-25_allGeoms_v3_repartitioned.parquet").write_bytes(b"0")
+    july = tmp_path / "DW_NRT_2026-07_run2026-07-31"
+    july.mkdir()
+    # The small local extract must not pass as a month's full run.
+    (july / "DW_NRT_2026-07_run2026-07-31_v1_subset.parquet").write_bytes(b"0")
+    (tmp_path / "unrelated").mkdir()
+
+    found = find_nrt_run_parquets(tmp_path)
+    assert set(found) == {"2026-06"}
+    assert found["2026-06"].name.endswith("_repartitioned.parquet")
+    assert find_nrt_run_parquets(tmp_path, months=["2026-07"]) == {}
+    assert find_nrt_run_parquets(tmp_path / "missing") == {}
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_monthly_archive_carries_every_scored_lake_not_just_the_drained_ones(tmp_path):
+    """The month's tileset speaks for every lake the run scored, not only the drained ones."""
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()
+    run_path, scored_ids = _write_run_fixture(tmp_path / "run.parquet")
+    breaks = _write_breaks_fixture(tmp_path / "breaks.parquet", geohashes[:3])
+
+    outputs = build_pmtiles_nrt_monthly(
+        breaks,
+        TEST_PARQUET,
+        tmp_path / "tiles",
+        months=["2026-07"],
+        run_parquet_by_month={"2026-07": run_path},
+        keep_geojsonl=True,
+    )
+
+    archive = outputs["2026-07"]
+    layer_ids = {layer["id"] for layer in read_pmtiles_metadata(archive)["vector_layers"]}
+    assert layer_ids == {"drained", "drained_points", NRT_SCORED_LAYER}
+
+    # Every scored lake is in the scored layer -- 116 of them, against the 3 the
+    # month called drained -- and the two the run left null are not.
+    scored = [
+        json.loads(line)
+        for line in (tmp_path / "tiles" / "nrt_2026-07_drainage.scored.geojsonl").read_text().strip().splitlines()
+    ]
+    assert {f["properties"]["id_geohash"] for f in scored} == set(scored_ids)
+    assert len(scored) == len(geohashes) - 2
+    assert len(scored) > 3  # far more lakes than the 3 this month called drained
+    props = scored[0]["properties"]
+    assert props["date"] == "2026-07-01"
+    assert props["water_observed_absolute"] == 100.0
+    assert props["water_predicted_ci_absolute"] == "98.0 : 100.0"
+    assert props["drainage_confidence"] == 0
+
+    # Polygons only: hover is gated to the switch zoom and above, where the base
+    # archive's centroids have already handed off.
+    assert not (tmp_path / "tiles" / "nrt_2026-07_drainage.scored_points.geojsonl").exists()
+    # The join leaves no sidecars behind.
+    assert not (tmp_path / "tiles" / "nrt_2026-07_drainage.drained.pmtiles").exists()
+    assert not (tmp_path / "tiles" / "nrt_2026-07_drainage.scored.pmtiles").exists()
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_months_without_a_full_run_keep_the_drained_layers_alone(tmp_path):
+    """Only a full run scores every lake, so other months are unchanged by this."""
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
+    run_path, _ = _write_run_fixture(tmp_path / "run.parquet")
+    breaks = _write_breaks_fixture(tmp_path / "breaks.parquet", geohashes)
+
+    outputs = build_pmtiles_nrt_monthly(
+        breaks,
+        TEST_PARQUET,
+        tmp_path / "tiles",
+        run_parquet_by_month={"2026-07": run_path},
+    )
+
+    assert {layer["id"] for layer in read_pmtiles_metadata(outputs["2018-07"])["vector_layers"]} == {
+        "drained",
+        "drained_points",
+    }
+    assert NRT_SCORED_LAYER in {layer["id"] for layer in read_pmtiles_metadata(outputs["2026-07"])["vector_layers"]}
+
+
+def test_build_pmtiles_nrt_monthly_rejects_a_missing_run_parquet(tmp_path):
+    """Fail before the geometry scan rather than quietly building a scored-less month."""
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
+    breaks = _write_breaks_fixture(tmp_path / "breaks.parquet", geohashes)
+
+    with pytest.raises(FileNotFoundError, match="run parquet"):
+        build_pmtiles_nrt_monthly(
+            breaks,
+            TEST_PARQUET,
+            tmp_path / "tiles",
+            months=["2026-07"],
+            run_parquet_by_month={"2026-07": tmp_path / "nope.parquet"},
+        )
+
+
+def _nrt_map_html(**kwargs) -> str:
+    from water_timeseries.map_utils import build_pmtiles_map
+
+    m = build_pmtiles_map(
+        "http://localhost:1/lakes.pmtiles",
+        viz_configuration_name="nrt_drainage",
+        base_has_centroids=True,
+        nrt_monthly_tiles_url="http://localhost:1/nrt_2026-06_drainage.pmtiles",
+        **kwargs,
+    )
+    return m.get_root().render()
+
+
+def test_scored_layer_is_a_hover_target_a_user_never_sees():
+    """A non-drained lake hovers the month's prediction without the map looking different."""
+    layers = _style_layers(_nrt_map_html(nrt_monthly_has_scored=True), "nrt-scored-fill")
+    scored = layers["nrt-scored-fill"]
+
+    assert scored["source-layer"] == NRT_SCORED_LAYER
+    # Invisible on purpose: the grey the user sees stays the base layer's single
+    # fill, so scored lakes cannot end up darker than unscored ones. A
+    # zero-opacity fill is still returned by queryRenderedFeatures (verified
+    # against maplibre 2.2.1), which is what makes this work as a hover target.
+    assert scored["paint"]["fill-opacity"] == 0
+    assert scored.get("layout", {}).get("visibility") != "none"
+    assert layers["lakes-fill"]["paint"]["fill-opacity"] > 0
+    # Gated with the polygons: below the switch zoom the base archive's
+    # centroids are what is drawn, and hover is off there anyway.
+    assert scored["minzoom"] == POINT_POLY_SWITCH_ZOOM
+    # Polygons only -- a centroid layer here would be ~1.8M features per month
+    # that nothing ever reads.
+    assert "nrt-scored-points" not in layers
+
+
+def test_hover_prefers_the_month_over_the_base_tiles():
+    """Ordered by how month-specific the values are: drained, then scored, then base."""
+    assert '["nrt-drained-fill", "nrt-scored-fill", "lakes-fill"]' in _nrt_map_html(nrt_monthly_has_scored=True)
+    # A month with no full run has no scored layer to hover, and must not have a
+    # style pointing at one.
+    plain = _nrt_map_html()
+    assert '["nrt-drained-fill", "lakes-fill"]' in plain
+    assert "nrt-scored-fill" not in plain
+    assert NRT_SCORED_LAYER not in json.dumps(_style_layers(plain, "nrt-drained-fill"))
+
+
+def test_hiding_stable_lakes_hides_what_they_hover():
+    """A hidden lake must not keep answering hover from the scored layer."""
+    for kwargs in ({"hide_stable_lakes": True}, {"hidden_categories": frozenset({"stable"})}):
+        layers = _style_layers(_nrt_map_html(nrt_monthly_has_scored=True, **kwargs), "nrt-scored-fill")
+        # `visibility: none`, not zero opacity: only the former is dropped from
+        # queryRenderedFeatures (see test_scored_layer_is_a_hover_target...).
+        assert layers["nrt-scored-fill"]["layout"]["visibility"] == "none"
+        assert layers["lakes-fill"]["layout"]["visibility"] == "none"
+        # The month's drained lakes are the point of hiding the stable ones.
+        assert layers["nrt-drained-fill"].get("layout", {}).get("visibility") != "none"
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_pmtiles_has_layer_reads_it_off_the_archive(tmp_path):
+    """Which layers a month has is data, not configuration -- see pmtiles_has_layer."""
+    from water_timeseries.map_utils import pmtiles_has_layer
+
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()
+    run_path, _ = _write_run_fixture(tmp_path / "run.parquet")
+    breaks = _write_breaks_fixture(tmp_path / "breaks.parquet", geohashes[:3])
+    outputs = build_pmtiles_nrt_monthly(
+        breaks, TEST_PARQUET, tmp_path / "tiles", run_parquet_by_month={"2026-07": run_path}
+    )
+
+    assert pmtiles_has_layer(str(outputs["2026-07"]), NRT_SCORED_LAYER) is True
+    assert pmtiles_has_layer(str(outputs["2018-07"]), NRT_SCORED_LAYER) is False
+    assert pmtiles_has_layer(str(outputs["2018-07"]), "drained") is True
+    # An unreadable archive answers "absent" rather than raising: the layer is a
+    # hover target, so the cost of guessing wrong that way is a plainer popup.
+    assert pmtiles_has_layer(str(tmp_path / "missing.pmtiles"), NRT_SCORED_LAYER) is False
+
+
+def test_write_features_serializes_nullable_confidence(tmp_path):
+    """A <NA> drainage_confidence must become JSON null, not reach json.dumps.
+
+    ``drainage_confidence`` is a nullable Int64 column (<NA> = evaluated, not
+    draining), and pd.NA is neither a float nor `.item()`-able, so the old
+    float-only NaN check let it through to json.dumps, which raises.
+    """
+    from shapely.geometry import box
+
+    from water_timeseries.utils.pmtiles_build import _sanitize_properties, _write_features
+
+    columns = ["id_geohash", "drainage_confidence"]
+    gdf = gpd.GeoDataFrame(
+        {
+            "id_geohash": ["stable", "invalid", "high"],
+            "drainage_confidence": pd.array([pd.NA, -1, 3], dtype="Int64"),
+        },
+        geometry=[box(0, 0, 1, 1), box(1, 1, 2, 2), box(2, 2, 3, 3)],
+        crs="EPSG:4326",
+    )
+
+    poly_path = tmp_path / "features.geojsonl"
+    points_path = tmp_path / "features_points.geojsonl"
+    with poly_path.open("w") as fh_poly, points_path.open("w") as fh_points:
+        _write_features(_sanitize_properties(gdf, columns), columns, fh_poly, fh_points)
+
+    props = [json.loads(line)["properties"] for line in poly_path.read_text().splitlines()]
+    assert [p["drainage_confidence"] for p in props] == [None, -1, 3]

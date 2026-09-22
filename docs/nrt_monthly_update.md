@@ -23,8 +23,8 @@ render but do not respond to clicks.
 
 | Artifact | What it drives | Refreshed by | Cost |
 |---|---|---|---|
-| Shared base archive (`data/lake_geometry/lakes.pmtiles`) | The grey lake polygons, in *both* modes | `build-pmtiles --shared-geometry` | ~35 min |
-| Historical drained overlay (`lakes_drained.pmtiles`) | The colored drained lakes in historical mode | `build_pmtiles_historical_drained` | seconds |
+| Shared base archive (`data/lake_geometry/lakes.pmtiles`) | The grey lake polygons, in *both* modes | `build-pmtiles` | ~35 min |
+| Historical drained overlay (`lakes_drained.pmtiles`) | The colored drained lakes in historical mode | `build-drained-pmtiles` | seconds |
 
 Both modes render their lakes from the *one* shared base archive, so an NRT month no
 longer needs its multi-GB `.pmtiles` downloaded or `pmtiles_file` re-pointed — the
@@ -33,6 +33,11 @@ neither styles the base layer from a baked property.
 
 The historical mode is otherwise untouched by an NRT month — it reads its own
 `precomputed_historical` directory and its own drained overlay.
+
+How each of those tilesets is actually built — inputs, layers, tippecanoe profiles, and
+why there are three archives rather than one — is in
+[Building Map Tilesets](tile_generation.md). This page is the monthly routine; that one
+is the reference behind it.
 
 ## 0. See what upstream actually has
 
@@ -56,6 +61,11 @@ has no drainage confidence to extract, and the only route to one is the ~30 h/mo
 
 Note the exact `run<date>` suffix — it is stamped upstream and is not derivable from
 the month. 2026-06's run is `run2025-06-25`; 2026-07's is `run2026-07-31`.
+
+The `allGeoms_v<n>` version is stamped upstream too, and it does **not** track the
+month: 2026-07 published `allGeoms_v2` while the older 2026-06 run is `allGeoms_v3`.
+Read it off the listing rather than assuming; the commands below use a `v*` glob, and
+so does `find_nrt_run_parquets`.
 
 ## 1. Dynamic World cube
 
@@ -81,7 +91,7 @@ the year rolls over.
 
 Only the parquet is needed. The run also publishes a multi-GB `.pmtiles`, but the
 dashboard no longer uses it: both modes render from the shared base archive (see
-[Rebuilding the shared base archive](#rebuilding-the-shared-base-archive)), so
+[Rebuilding the base archive and the historical overlay](#rebuilding-the-base-archive-and-the-historical-overlay)), so
 downloading the run's tiles and re-pointing `pmtiles_file` is no longer part of a
 monthly refresh.
 
@@ -98,9 +108,15 @@ one row group instead of scanning ~1M rows:
 
 ```bash
 uv run water-timeseries repartition-parquet \
-    data/DW_NRT/DW_NRT_<month>_run<date>/DW_NRT_<month>_run<date>_allGeoms_v3.parquet \
-    data/DW_NRT/DW_NRT_<month>_run<date>/DW_NRT_<month>_run<date>_allGeoms_v3_repartitioned.parquet
+    data/DW_NRT/DW_NRT_<month>_run<date>/DW_NRT_<month>_run<date>_allGeoms_v<n>.parquet \
+    data/DW_NRT/DW_NRT_<month>_run<date>/DW_NRT_<month>_run<date>_allGeoms_v<n>_repartitioned.parquet
 ```
+
+Substitute the `v<n>` the run actually published (see above). Keep the
+`_repartitioned` suffix: `find_nrt_run_parquets` prefers that copy when it picks the
+month's run for the `scored` layer, and the dashboard reads single lakes out of it.
+For 2026-07 this was 2.92 GB downloaded at ~30 MB/s and a 13 s repartition into 2014
+row groups.
 
 Then update the `nrt_drainage` mode in `configs/dashboard_panarctic.yaml`:
 
@@ -139,18 +155,76 @@ are dropped before the merge, so re-running is safe.
 This is what makes the month appear in the sidebar at all: the month list is built
 from `analysis_month` in this table, not from the tilesets on disk.
 
-## 4. Build the month's Drainage Status tileset
+## 4. Build the month's tileset
+
+```bash
+uv run water-timeseries build-nrt-pmtiles \
+    --config-file configs/dashboard_panarctic.yaml \
+    --months <month> --poly-max-zoom 12
+```
+
+The config supplies `breaks_file`, `geometry_file`, `output_dir` and `nrt_run_dir`
+(the last one is what gets the `scored` layer built — see below); pass them as flags
+instead if you are working outside a config:
 
 ```bash
 uv run water-timeseries build-nrt-pmtiles \
     --breaks-file data/precomputed_nrt/nrt_monthly_drain_breaks.parquet \
     --geometry-file data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet \
-    --output-dir data/nrt_tiles \
+    --output-dir data/nrt_tiles --nrt-run-dir data/DW_NRT \
     --months <month> --poly-max-zoom 12
 ```
 
-**Always pass `--months`.** Without it every month is rebuilt: ~7 minutes instead of
-~40 seconds. Needs `tippecanoe` (`brew install tippecanoe`).
+**Always pass `--months`.** Without it every month in the breaks table is rebuilt —
+drained layers are ~10 s each (~7 minutes across a 41-month table), but every month
+that also has a full run under `nrt_run_dir` adds 8-12 minutes of its own. Needs
+`tippecanoe` (`brew install tippecanoe`).
+
+### What the archive holds, and why `--nrt-run-dir`
+
+Two layers, because two sets of lakes have two different kinds of value:
+
+| Layer | Lakes | Values | Budget |
+|---|---|---|---|
+| `drained` (+ `drained_points`) | drained that month (~36k-61k) | the drainage signal | every feature kept, at every zoom |
+| `scored` | every lake the month's full run predicted for | observed vs predicted area, CI, residual, confidence | `--drop-densest-as-needed`, 2 MB tiles |
+
+The `scored` layer is what a **non-drained** lake hovers. Without it the month's
+tileset spoke only for its drained lakes, and every other lake fell through to
+`pmtiles_file` — the shared base archive, which is mode-agnostic and has nothing
+month-specific in it, so a stable lake's popup showed the lake id and the historical
+area columns and no NRT values at all.
+
+It is built only for the months `--nrt-run-dir` finds a run parquet for
+(`DW_NRT_<month>_run<date>/..._allGeoms_v*_repartitioned.parquet`, `_subset` files
+ignored), because only a full run predicts per lake: the breaks table has the drained
+lakes and nothing else. A month with no run there gets the `drained` layers alone and
+works exactly as before, and the dashboard reads which layers a month actually has off
+the archive (`pmtiles_has_layer`), so nothing has to be configured per month.
+
+The two layers cannot come out of one tippecanoe run: its density and tile-size flags
+are per invocation, not per `-L` layer, and these two need opposite ones (a dropped
+drained lake is a lake missing from the map; 1.8M scored lakes have to be dropped to
+fit). So they are tiled separately and merged with `tile-join -pk` — `-pk` matters,
+since tile-join otherwise re-applies its own 500 KB cap and would drop from the
+drained layer that the split build exists to protect.
+
+Measured at `--poly-max-zoom 12`, both months that have a full run:
+
+| Month | Run | Scored lakes | Archive | Build |
+|---|---|---|---|---|
+| 2026-06 | `run2025-06-25`, `allGeoms_v3` | 1,842,467 (45.8%) | 820.6 MB | ~8 min |
+| 2026-07 | `run2026-07-31`, `allGeoms_v2` | 3,027,972 (75.2%) | 1339.7 MB | ~12 min |
+
+Most of that is the scored layer: it streams a ~3 GB intermediate GeoJSONL through
+tippecanoe. The drained-only path is still ~40 s, and the drained layer itself is
+33.9 MB at `--poly-max-zoom 12` against 57.3 MB at 14.
+
+**Scored coverage is a property of the run, not of this build** — 45.8% of lakes for
+2026-06 against 75.2% for 2026-07. So the same lake can hover full NRT values on one
+month and only the base archive's historical area columns on another. An unscored lake
+has null values and `"nan : nan"` in its CI column, which the popup drops rather than
+showing, so this reads as a shorter popup and not as an error.
 
 Order matters: build this *after* step 3. A tileset baked from a month with no
 confidence bakes that absence into its tile properties, and the overlay falls back to
@@ -163,152 +237,38 @@ layers derive their `minzoom`/`maxzoom` from it. Both layers are baked
 that band is a one-line style change; moving it further needs every archive rebuilt
 (~7 minutes for all months) or the map draws nothing at the uncovered zooms.
 
-### Rebuilding the shared base archive
+### Rebuilding the base archive and the historical overlay
 
-There is one base archive for both modes. Its polygons bake `id_geohash` plus the
-four mode-agnostic area/change columns (`Area_start_ha`, `Area_end_ha`,
-`NetChange_ha`, `NetChange_perc`) and `date_break_year`; its centroids bake the id
-alone. Rebuild it only when the lake geometry changes — an NRT month does not need it:
+Neither is part of a monthly refresh — rebuild them only when the lake geometry or the
+historical breaks change. [Building Map Tilesets](tile_generation.md) covers what each
+carries and why; the commands are:
 
 ```bash
+# The shared base archive both modes render their grey lakes from (~35 min, ~2.6 GB)
 uv run water-timeseries build-pmtiles \
     data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet \
-    data/lake_geometry/lakes.pmtiles --shared-geometry
+    data/lake_geometry/lakes.pmtiles
+
+# The historical drained-lakes overlay, which must land beside it (seconds, ~24 MB)
+uv run water-timeseries build-drained-pmtiles --config-file configs/dashboard_panarctic.yaml
 ```
 
-Either mode's table works as the geometry source: both cover the same 4,026,306 lakes
-with the same `id_geohash` and byte-identical geometry. The historical one is the
-canonical choice.
+Either mode's table works as the geometry source for the base archive: both cover the
+same 4,026,306 lakes with the same `id_geohash` and byte-identical geometry. The
+historical one is the canonical choice, and the only one carrying `date_break_year`,
+which the drained overlay filters on.
 
-Takes ~35 minutes on a laptop for 4M lakes (~6 min of that exporting GeoJSONL, the
-rest tippecanoe), needs ~10 GB of scratch space, and lands at ~2.6 GB.
+> **The drained overlay is not optional.** Deleting it (or pointing
+> `drained_pmtiles_file:` at nothing) falls back to filtering the base archive on
+> `date_break_year`, which the shared base archive does not carry — so the filter
+> matches nothing, every lake renders as a stable grey dot under a "Drainage Year"
+> legend, and the map looks like data rather than like a misconfiguration. `app.py`
+> logs a warning when it is missing in `drainage_year` mode; that warning is the only
+> signal.
 
-Do **not** use the older per-mode builders (`build_pmtiles_drainage_year`,
-`build_pmtiles_nrt_drainage`) for the base archive. They bake mode- and month-specific
-properties that nothing can read correctly from a shared archive, and on 4M features
-that weight costs lakes at low zoom, because `--drop-densest-as-needed` discards
-features to fit the byte cap.
-
-#### What the base archive has to carry, and why
-
-Neither mode *styles* from a base property — the base lakes are flat grey in both
-(`get_style_pmtiles_stable_lakes`). But the base tile is the last thing a **stable**
-lake can hover, and for many of them the only thing. In historical mode the drained
-overlay holds drained lakes only, so a stable lake is in no overlay at all. In NRT
-mode the month's archive also carries every lake its run scored, but a run scores only
-part of the table (45.8% for 2026-06, 75.2% for 2026-07), so the rest still fall
-through to here. Baking the id alone therefore left millions of lakes with an empty
-popup (the tooltip drops null and the `"NaT"`/`"nan"` placeholders, so a tile with
-nothing else on it renders no rows at all).
-
-The four area/change columns are the right thing to share because they describe the
-lake rather than a month, and are populated for 100% of stable lakes. Per-month NRT
-values are the opposite and must stay in the monthly archives — a single run's
-`water_observed_absolute` would be the wrong month's number for every other month,
-which is why `build_pmtiles_map` suppresses `date`/`drainage_confidence` from the base
-layer. Those values are emphatically *not* empty for non-drained lakes — a stable lake
-the run scored has an observed area, a prediction, an interval and a confidence of 0,
-which is exactly what the `scored` layer exists to serve. They just have to come from
-the month's own archive rather than from a base archive shared by 41 months and two
-modes.
-
-`date_break_year` rides along for two reasons: `STABLE_LAKE_FILTER` tests it to tell
-the stable and drained layers apart, and it is null for all 4,016,467 stable lakes, so
-tippecanoe drops it and it costs bytes only on the ~9,800 drained ones. `date_break`
-is deliberately excluded — being a datetime it stringifies to `"NaT"` instead of
-dropping, putting a placeholder on 4M features.
-
-The geometry source is itself a local derivative, not a GCS artifact:
-`DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet` is
-`breakpoint-analysis` output (`output_geometry_all=True`, so all 4,026,306 lakes get
-a row), built over the `Nitze_etal_Lakes_filtered_full_set_V2d.parquet` geometry on
-the AWI share named in `configs/config.yaml`. **v4 was never uploaded to GCS** —
-`gs://pdg-storage-default/workflows_optimization/lake_drainage/DW_historical_drainage`
-has v3 only. Don't go looking for v4 in the bucket; the routes are someone's local
-copy or a multi-hour regeneration.
-
-#### Background: the centroid handoff
-
-Every current archive bakes real centroids below the switch zoom. Archives built
-before `_write_features` stamped per-feature zoom ranges did not — every centroid was
-baked at every zoom with the tileset's maxzoom of 14, and tippecanoe's default drop
-rate of 2.5 per level thinned them by ~2.5^14 (4,026,306 centroids in `tilestats`
-against a `dropped_by_rate` of 4,026,295 at z0, one or two dots per tile), so the map
-went blank when zoomed out. The pre-2026-08-27 per-mode archives are kept alongside as
-`*.pre-centroids.pmtiles`; they are unreferenced by any config.
-
-Nothing needs configuring either way: `archive_bakes_low_zoom_centroids` reads the
-answer out of each archive's own tippecanoe metadata, and `map_viewer` /
-`pmtiles_viewer` gate the polygons only when it is yes. An archive that says no
-gets its polygons drawn at every zoom, as it did before the handoff existed, so an
-old archive still renders.
-
-Two settings decide how much of the map survives being zoomed out, because
-`--drop-densest-as-needed` discards lakes until each tile fits the byte cap:
-`--maximum-tile-bytes` in `DEFAULT_TIPPECANOE_ARGS` (2 MB, four times the
-tippecanoe default) and how few properties get baked — `SHARED_GEOMETRY_TILE_PROPERTIES`
-for the shared base (the id alone), or the per-builder `*_POINT_PROPERTIES` for the
-overlays (the id plus the column the mode colours by). Measured in one z7
-region holding 3,052 lakes:
-
-| zoom | 7 props, 500 KB | slim, 500 KB | slim, 2 MB (shipped) |
-|-----:|----------------:|-------------:|---------------------:|
-| 6    | 32%             | 60%          | 100%                 |
-| 5    | 9%              | 26%          | 42%                  |
-| 4    | 6%              | 11%          | 19%                  |
-
-The drained lakes escape this entirely. Only ~9,800 lakes in the whole record have
-a break date -- 0.2%, a quarter of a single NRT month -- so they get their own
-tileset built the way the NRT monthly overlay is, with no size or feature limit and
-nothing dropped, drawn over the sampled grey base. That is what keeps them complete
-at every zoom (3% -> 100% at z0), which the base archive cannot manage at any cap:
-
-```bash
-uv run python -c "
-from water_timeseries.utils.pmtiles_build import (
-    build_pmtiles_historical_drained, historical_drained_tiles_path)
-build_pmtiles_historical_drained(
-    'data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet',
-    historical_drained_tiles_path('data/lake_geometry/lakes.pmtiles'))"
-```
-
-Seconds to build, ~24 MB. It must land **beside the shared base archive** — the
-dashboard finds it as `<base>_drained.pmtiles`, i.e.
-`data/lake_geometry/lakes_drained.pmtiles`. Rebuild it whenever the historical breaks
-change; a stale one is picked up silently and shows the previous run's drained lakes.
-
-> **This overlay is not optional.** Deleting it (or pointing `drained_pmtiles_file:`
-> at nothing) used to fall back to filtering the base archive on `date_break_year`.
-> The shared base archive does not carry that property, so the filter matches nothing:
-> every lake renders as a stable grey dot under a "Drainage Year" legend, and the map
-> looks like data rather than like a misconfiguration. `app.py` logs a warning when
-> the overlay is missing in `drainage_year` mode — that warning is the only signal.
-
-One trap when relocating it: `drained_pmtiles_file:` in the YAML only reaches a fresh
-page load because `cli.py dashboard` forwards it as `--drained-pmtiles-file`. Any new
-mode setting needs all three hops — config, `cli.py` `script_args`, and `app.py`
-argparse plus the `main()` call — or it silently applies only after a mode switch,
-which re-reads the YAML directly. Keeping the overlay at the conventional path means
-both routes agree and either one alone is sufficient.
-
-Going past 2 MB is not worth it — at 8 MB the tiles stop growing (~2 MB) because a
-different limit binds, and coverage barely moves. Below z6 the map is still a
-sample: 4M centroids cannot fit in one z4 tile at any cap. The NRT *monthly*
-overlay escapes this entirely by being small enough (tens of thousands of
-features) to build with `--no-tile-size-limit --no-feature-limit`, which is why
-its drained lakes are all present at every zoom.
-Build to a new path, check it, then swap it in — the dashboard keeps serving the
-old one meanwhile:
-
-```bash
-uv run python -c "
-from water_timeseries.utils.pmtiles_reader import read_pmtiles_metadata
-from water_timeseries.utils.pmtiles_build import archive_bakes_low_zoom_centroids
-print(archive_bakes_low_zoom_centroids(read_pmtiles_metadata('<archive>.pmtiles')))"
-
-# and that each zoom draws lakes exactly one way (z0-6 points, z7-9 both, z10+ polys)
-tippecanoe-decode <archive>.pmtiles <z> <x> <y> | grep -o '"layer": "[a-z_]*"' | sort | uniq -c
-```
+Build to a new path, check it, then swap it in — the dashboard keeps serving the old
+one meanwhile. See
+[Verifying an archive](tile_generation.md#verifying-an-archive).
 
 ## 5. Verify
 
@@ -328,9 +288,27 @@ uv run water-timeseries dashboard --config-file configs/dashboard_panarctic.yaml
 ```
 
 The month should appear in the sidebar's "Drainage Status" list with its drained-lake
-count, and the log should carry `NRT monthly tiles for <month>: ...`. That log line is
-the one to check — without it the overlay silently fell back to the slower runtime
-feature-state path, which means step 4's archive was not found.
+count, and the log should carry
+`NRT monthly tiles for <month>: ... (scored layer: True)`. That log line is the one to
+check, in two parts: no line at all means the overlay silently fell back to the slower
+runtime feature-state path (step 4's archive was not found), and `scored layer: False`
+means the archive is there but was built without a full run for the month, so
+non-drained lakes will hover the base archive's historical columns instead of the
+month's prediction.
+
+Confirm what actually got baked by reading the archive rather than its file size:
+
+```bash
+uv run python -c "
+from water_timeseries.utils.pmtiles_reader import read_pmtiles_metadata
+md = read_pmtiles_metadata('data/nrt_tiles/nrt_<month>_drainage.pmtiles')
+for layer in md['vector_layers']:
+    print(layer['id'], sorted(layer['fields']))"
+```
+
+Expect `drained`, `drained_points` and — for a month with a full run — `scored`. Tile
+metadata is not proof that a layer's features survived at a given zoom, though; for
+that, decode tiles (see [Background: the centroid handoff](#background-the-centroid-handoff)).
 
 ## 6. Deploying the refresh
 
@@ -351,6 +329,15 @@ it. Two things follow:
 So either copy the month archives next to the base `.pmtiles` on the PVC, or set
 `nrt_pmtiles_dir` to an `http(s)://` or `gs://` prefix and let the browser fetch them
 straight from there.
+
+**Budget for the size.** A month with a `scored` layer is ~0.8-1.3 GB, not the ~35-60 MB
+a drained-only month costs — 820.6 MB for 2026-06 and 1339.7 MB for 2026-07. Two such
+months is more than the shared base archive itself (4.1 GB) is worth thinking about
+next to. The browser only range-requests the tiles it needs, so this is a storage and
+transfer question, not a client-performance one, but a PVC sized for the old archives
+will not take many of these. If it matters, `--poly-max-zoom 12` is already applied
+above; the next lever is not building `scored` for older months you do not need it on
+(just leave their run out of `nrt_run_dir`).
 
 ## No full run for the month
 
