@@ -542,8 +542,8 @@ class NRTBreakpoint(BreakpointMethod):
             ds_in.sel(id_geohash=id_geohash)
             .to_dataframe()
             .drop(columns=["id_geohash"])[water_column]
-            .reset_index(drop=True)
             .dropna()
+            .reset_index(drop=True)
         )
 
         if len(df_in) < min_length:
