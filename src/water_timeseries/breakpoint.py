@@ -783,6 +783,8 @@ class NRTBreakpoint(BreakpointMethod):
         if n_jobs is None:
             cpu_count = os.cpu_count() or 1
             n_jobs = max(1, min(cpu_count, len(valid_ids)))
+        else:
+            n_jobs = max(1, n_jobs)
         predictions = Parallel(n_jobs=n_jobs, verbose=10)(
             delayed(self.predict_nrt_arima)(
                 ds_in=ds_historical_filtered, id_geohash=idx, water_column=dataset.water_column
