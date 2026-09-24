@@ -810,7 +810,7 @@ def build_pmtiles_map(
             # See CENTROID_RING_COLOR. The ring tracks the fill's opacity so a
             # deliberately muted dot does not come back as a hard outline.
             "circle-stroke-color": CENTROID_RING_COLOR,
-            "circle-stroke-opacity": circle_opacity,
+            "circle-stroke-opacity": 1, #circle_opacity,
             "circle-stroke-width": DRAINED_POINT_STROKE_WIDTH if stable_style else BASE_POINT_STROKE_WIDTH,
         },
     }
@@ -905,7 +905,7 @@ def build_pmtiles_map(
                     "filter": STABLE_LAKE_FILTER,
                     "paint": {
                         "circle-color": stable_fill,
-                        "circle-opacity": ["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
+                        "circle-opacity": circle_opacity,#0.5,#["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
                         "circle-radius": BASE_POINT_RADIUS,
                         "circle-stroke-color": CENTROID_RING_COLOR,
                         "circle-stroke-opacity": ["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
@@ -1038,14 +1038,14 @@ def build_pmtiles_map(
             "maxzoom": POINT_POLY_SWITCH_ZOOM,
             "paint": {
                 "circle-color": drained_fill,
-                "circle-opacity": drained_opacity,
+                "circle-opacity": circle_opacity,
                 "circle-radius": DRAINED_POINT_RADIUS,
                 # The same ring as historical mode's drained dots, rather than
                 # this overlay's own darker-fill polygon outline -- see
                 # CENTROID_RING_COLOR. `drained_line` still outlines the
                 # polygons above the switch zoom.
                 "circle-stroke-color": CENTROID_RING_COLOR,
-                "circle-stroke-opacity": drained_opacity,
+                "circle-stroke-opacity": circle_opacity,
                 "circle-stroke-width": DRAINED_POINT_STROKE_WIDTH,
             },
         }
