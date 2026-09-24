@@ -78,7 +78,6 @@ _MODE_REQUIRED_PATH_KEYS = ("vector_file", "pmtiles_file")
 #: ``viz_configuration`` -> mode key, used to name the launch config's mode when
 #: it isn't one of the discovered YAMLs.
 _VIZ_TO_MODE = {
-    "colored_historical": "drainage_year",
     "drainage_year": "drainage_year",
     "nrt_drainage": "nrt_drainage",
 }

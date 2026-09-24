@@ -14,7 +14,6 @@ from folium_pmtiles.vector import PMTilesMapLibreLayer
 from water_timeseries.utils.map_styles.pmtiles import (
     DRAINED_LAKE_FILTER,
     STABLE_LAKE_FILTER,
-    get_style_pmtiles_colored_historical,
     get_style_pmtiles_drainage_year,
     get_style_pmtiles_generic_water,
     get_style_pmtiles_nrt_confidence_featurestate,
@@ -31,7 +30,6 @@ from water_timeseries.utils.pmtiles_build import (
 from water_timeseries.utils.visualization import (
     get_legend_html_date_drainage_year,
     get_legend_html_drained_month,
-    get_legend_html_net_change,
     get_legend_html_nrt_drainage,
 )
 
@@ -464,7 +462,7 @@ def build_pmtiles_map(
     zoom_start: int = 4,
     source_layer: str = "lakes",
     drained_ids: list[str] | None = None,
-    viz_configuration_name: str = "colored_historical",
+    viz_configuration_name: str = "drainage_year",
     tooltip=None,
     min_zoom=4,
     # One level of overzoom past the deepest baked tile: MapLibre scales the
@@ -566,24 +564,7 @@ def build_pmtiles_map(
         "Esri.WorldImagery", name="ESRI World Imagery", min_zoom=min_zoom, max_zoom=max_zoom
     )
 
-    if viz_configuration_name == "colored_historical" and not drained_ids:
-        aliases = {
-            "NetChange_perc": "Net Change (%)",
-            "NetChange_ha": "Net Change (ha)",
-            "Area_start_ha": "Lake Area year 2000 (ha)",
-            "Area_end_ha": "Lake Area year 2020 (ha)",
-            "date_break_year": "Drainage Year",
-        }
-        tooltip = PMTilesMapLibreTooltipWithRounding(
-            column_aliases=aliases, filter_layers=["lakes-fill"], min_zoom=POINT_POLY_SWITCH_ZOOM, max_zoom=max_zoom
-        )
-        fill_color, fill_opacity, line_color, line_width, line_opacity = get_style_pmtiles_colored_historical()
-        legend = get_legend_html_net_change()
-        tile_layer_darkmatter.add_to(m)
-        tile_layer_esriworld.add_to(m)
-        tcvis_tile_layer.add_to(m)
-
-    elif viz_configuration_name == "drainage_year" and not drained_ids:
+    if viz_configuration_name == "drainage_year" and not drained_ids:
         aliases = {
             "id_geohash": "Lake ID",
             "date_break": "Break date [YYYY-MM]",
@@ -626,7 +607,7 @@ def build_pmtiles_map(
             "water_predicted_absolute": "Predicted water area [ha]",
             "water_predicted_ci_absolute": "Predicted water area range [ha]",
             "water_residual_absolute": "Difference of lake area from prediction [ha]",
-            "drainage_confidence": "Confidence of drainage detection [0 (low) to 3 (high)]",
+            "drainage_confidence": "Confidence of drainage detection [1 (low) to 3 (high); -1 = not evaluated]",
             "water_change_ha": "Change of water area [ha]",
             "water_change_perc": "Change of water area [%]",
             "pre_break_median": "Lake area before break [ha]",
@@ -800,7 +781,7 @@ def build_pmtiles_map(
     #
     #   drainage_year  stable 0.05 -> 0.37   drained 0.20 -> 0.58
     #   nrt_drainage   base   0.35 -> 0.70   (overlay stays at 0.85, still the figure)
-    #   colored_historical /generic_water 0.70 -> 0.89
+    #   generic_water  0.70 -> 0.89
     circle_opacity = ["^", fill_opacity, CENTROID_OPACITY_EXPONENT]
 
     # Centroids below the switch zoom, where the base tileset has no polygons
@@ -829,7 +810,7 @@ def build_pmtiles_map(
             # See CENTROID_RING_COLOR. The ring tracks the fill's opacity so a
             # deliberately muted dot does not come back as a hard outline.
             "circle-stroke-color": CENTROID_RING_COLOR,
-            "circle-stroke-opacity": circle_opacity,
+            "circle-stroke-opacity": 1, #circle_opacity,
             "circle-stroke-width": DRAINED_POINT_STROKE_WIDTH if stable_style else BASE_POINT_STROKE_WIDTH,
         },
     }
@@ -924,7 +905,7 @@ def build_pmtiles_map(
                     "filter": STABLE_LAKE_FILTER,
                     "paint": {
                         "circle-color": stable_fill,
-                        "circle-opacity": ["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
+                        "circle-opacity": circle_opacity,#0.5,#["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
                         "circle-radius": BASE_POINT_RADIUS,
                         "circle-stroke-color": CENTROID_RING_COLOR,
                         "circle-stroke-opacity": ["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
@@ -1057,14 +1038,14 @@ def build_pmtiles_map(
             "maxzoom": POINT_POLY_SWITCH_ZOOM,
             "paint": {
                 "circle-color": drained_fill,
-                "circle-opacity": drained_opacity,
+                "circle-opacity": circle_opacity,
                 "circle-radius": DRAINED_POINT_RADIUS,
                 # The same ring as historical mode's drained dots, rather than
                 # this overlay's own darker-fill polygon outline -- see
                 # CENTROID_RING_COLOR. `drained_line` still outlines the
                 # polygons above the switch zoom.
                 "circle-stroke-color": CENTROID_RING_COLOR,
-                "circle-stroke-opacity": drained_opacity,
+                "circle-stroke-opacity": circle_opacity,
                 "circle-stroke-width": DRAINED_POINT_STROKE_WIDTH,
             },
         }

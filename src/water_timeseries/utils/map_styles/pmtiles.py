@@ -1,27 +1,3 @@
-def get_style_pmtiles_colored_historical() -> tuple:
-    # Define default paint values
-    fill_color = [
-        "interpolate",
-        ["linear"],
-        ["get", "NetChange_perc"],
-        -40.0,
-        "#d73027",
-        -20.0,
-        "#f46d43",
-        0.0,
-        "#fee090",
-        20.0,
-        "#74add1",
-        40.0,
-        "#4575b4",
-    ]
-    fill_opacity = 0.7
-    line_color = "#333333"
-    line_width = 0.5
-    line_opacity = 1
-    return fill_color, fill_opacity, line_color, line_width, line_opacity
-
-
 # A lake with no break year is a stable lake. Three shapes mean "no break year":
 # the property is absent (tippecanoe drops nulls when it bakes a tile), or it
 # survived as the string "" or "NaN" from the parquet. All three have to count,

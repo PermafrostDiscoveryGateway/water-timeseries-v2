@@ -74,6 +74,33 @@ def _write_breaks_fixture(path: Path, geohashes: list[str]) -> Path:
 
 
 @pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
+def test_build_pmtiles_nrt_monthly_excludes_non_drained(tmp_path):
+    """Only drainage detections are baked, not every lake the month's run scored.
+
+    Since the precompute drain_threshold default became None, the breaks table
+    carries a row per scored lake; a stable (<NA>) or unevaluable (-1) row must
+    not end up in an overlay whose every feature is styled as drained.
+    """
+    geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
+    breaks_path = tmp_path / "breaks.parquet"
+    pd.DataFrame(
+        {
+            "analysis_month": ["2026-07"] * 3,
+            "id_geohash": geohashes,
+            "water_residual": [-0.5, 0.02, float("nan")],
+            "drainage_confidence": pd.array([2, pd.NA, -1], dtype="Int64"),
+        }
+    ).to_parquet(breaks_path, index=False)
+
+    build_pmtiles_nrt_monthly(breaks_path, TEST_PARQUET, tmp_path / "tiles", keep_geojsonl=True)
+
+    lines = (tmp_path / "tiles" / "nrt_2026-07_drainage.geojsonl").read_text().strip().splitlines()
+    baked = [json.loads(line)["properties"] for line in lines]
+    assert [p["id_geohash"] for p in baked] == [geohashes[0]]
+    assert baked[0]["drainage_confidence"] == 2
+
+
+@pytest.mark.skipif(find_tippecanoe() is None, reason="tippecanoe not installed")
 def test_build_pmtiles_nrt_monthly(tmp_path):
     """One archive per month, holding only that month's drained lakes."""
     geohashes = gpd.read_parquet(TEST_PARQUET)["id_geohash"].astype(str).tolist()[:3]
@@ -247,7 +274,7 @@ def _assert_single_cover(points: dict, fill: dict, line: dict) -> None:
 
 @pytest.mark.parametrize(
     "viz_configuration_name",
-    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+    ["drainage_year", "nrt_drainage", "generic_water"],
 )
 def test_base_lake_centroid_polygon_handoff_has_no_gap(viz_configuration_name):
     """Every viz mode draws the base lakes at every zoom, dots below the switch, polygons above.
@@ -269,7 +296,7 @@ def test_base_lake_centroid_polygon_handoff_has_no_gap(viz_configuration_name):
 
 @pytest.mark.parametrize(
     "viz_configuration_name",
-    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+    ["drainage_year", "nrt_drainage", "generic_water"],
 )
 def test_base_polygons_cover_every_zoom_when_the_archive_has_no_centroids(viz_configuration_name):
     """An archive with no usable centroid layer must not have its polygons gated.
@@ -299,7 +326,7 @@ def test_base_polygons_cover_every_zoom_when_the_archive_has_no_centroids(viz_co
 
 @pytest.mark.parametrize(
     "viz_configuration_name",
-    ["colored_historical", "drainage_year", "nrt_drainage", "generic_water"],
+    ["drainage_year", "nrt_drainage", "generic_water"],
 )
 def test_centroids_are_drawn_more_opaque_than_the_polygons_they_replace(viz_configuration_name):
     """A dot painted at the polygon's fill opacity is invisible.
@@ -473,7 +500,7 @@ def test_modes_without_a_stable_split_keep_one_set_of_lake_layers():
     """Only drainage_year separates stable from drained; the rest style every lake alike."""
     from water_timeseries.map_utils import build_pmtiles_map
 
-    for viz in ("colored_historical", "generic_water", "nrt_drainage"):
+    for viz in ("generic_water", "nrt_drainage"):
         m = build_pmtiles_map(
             "http://localhost:1/lakes.pmtiles",
             viz_configuration_name=viz,
@@ -1227,3 +1254,33 @@ def test_pmtiles_has_layer_reads_it_off_the_archive(tmp_path):
     # An unreadable archive answers "absent" rather than raising: the layer is a
     # hover target, so the cost of guessing wrong that way is a plainer popup.
     assert pmtiles_has_layer(str(tmp_path / "missing.pmtiles"), NRT_SCORED_LAYER) is False
+
+
+def test_write_features_serializes_nullable_confidence(tmp_path):
+    """A <NA> drainage_confidence must become JSON null, not reach json.dumps.
+
+    ``drainage_confidence`` is a nullable Int64 column (<NA> = evaluated, not
+    draining), and pd.NA is neither a float nor `.item()`-able, so the old
+    float-only NaN check let it through to json.dumps, which raises.
+    """
+    from shapely.geometry import box
+
+    from water_timeseries.utils.pmtiles_build import _sanitize_properties, _write_features
+
+    columns = ["id_geohash", "drainage_confidence"]
+    gdf = gpd.GeoDataFrame(
+        {
+            "id_geohash": ["stable", "invalid", "high"],
+            "drainage_confidence": pd.array([pd.NA, -1, 3], dtype="Int64"),
+        },
+        geometry=[box(0, 0, 1, 1), box(1, 1, 2, 2), box(2, 2, 3, 3)],
+        crs="EPSG:4326",
+    )
+
+    poly_path = tmp_path / "features.geojsonl"
+    points_path = tmp_path / "features_points.geojsonl"
+    with poly_path.open("w") as fh_poly, points_path.open("w") as fh_points:
+        _write_features(_sanitize_properties(gdf, columns), columns, fh_poly, fh_points)
+
+    props = [json.loads(line)["properties"] for line in poly_path.read_text().splitlines()]
+    assert [p["drainage_confidence"] for p in props] == [None, -1, 3]

@@ -46,6 +46,7 @@ nav:
   - Getting Started: getting_started.md
   - Examples: examples.md
   - Embedding & Shareable Links: embedding.md
+  - Building Map Tilesets: tile_generation.md
   - NRT Monthly Update: nrt_monthly_update.md
   - API Reference:
     - Overview: api/index.md

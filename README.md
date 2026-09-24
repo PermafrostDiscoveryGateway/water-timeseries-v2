@@ -36,6 +36,11 @@ uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
 uv run water-timeseries dashboard --vector-file lakes.parquet --pmtiles-file tiles/lakes.pmtiles
 ```
 
+That builds the shared base archive. The drained lakes live in separate overlays
+(`build-drained-pmtiles`, `build-nrt-pmtiles`) -- see
+[docs/tile_generation.md](docs/tile_generation.md) for how the three archives fit
+together and how to verify one before it goes live.
+
 Interactive Streamlit dashboard (Folium mode for smaller datasets):
 
 ```bash
