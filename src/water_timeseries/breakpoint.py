@@ -730,6 +730,7 @@ class NRTBreakpoint(BreakpointMethod):
         data_aggregation_period: str = "all",
         object_id: str | None = None,
         keep_nans: bool | None = False,
+        n_jobs: int | None = None,
     ) -> pd.DataFrame:
         """Calculate breakpoints for a single lake object using NRT logic.
 
@@ -749,6 +750,13 @@ class NRTBreakpoint(BreakpointMethod):
             The period of data to consider for the analysis (e.g., "all", "monthly")
         process_nans : bool, optional
             Set True if you want to return historical water stats
+        n_jobs : int, optional
+            Number of parallel workers for the per-lake ARIMA fitting. Default is
+            ``None``, which falls back to the previous behavior of
+            ``min(os.cpu_count(), len(valid_ids))``. Set explicitly (e.g. to a
+            value derived from a Kubernetes CPU request/limit) to avoid
+            over-subscribing CPUs shared with other pods/processes, which can
+            otherwise cause OOM or other resource errors.
         Returns
         -------
         pd.DataFrame
@@ -798,8 +806,11 @@ class NRTBreakpoint(BreakpointMethod):
 
         # loop over each lake and predict next value using ARIMA, then compare to observed value in ds_analysis_filtered
         # predictions = [self.predict_nrt_arima(ds_in=ds_historical_filtered, id_geohash=idx) for idx in tqdm(valid_ids, desc='NRT breakpoints')]
-        cpu_count = os.cpu_count() or 1
-        n_jobs = max(1, min(cpu_count, len(valid_ids)))
+        if n_jobs is None:
+            cpu_count = os.cpu_count() or 1
+            n_jobs = max(1, min(cpu_count, len(valid_ids)))
+        else:
+            n_jobs = max(1, n_jobs)
         predictions = Parallel(n_jobs=n_jobs, verbose=10)(
             delayed(self.predict_nrt_arima)(
                 ds_in=ds_historical_filtered, id_geohash=idx, water_column=dataset.water_column
