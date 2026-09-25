@@ -538,6 +538,13 @@ class NRTBreakpoint(BreakpointMethod):
             pd.Series: _description_
         """
 
+        # dropna() must come before reset_index(drop=True): dropping NaNs first and then
+        # resetting yields a clean, contiguous RangeIndex, which statsmodels recognizes as
+        # a supported index for out-of-sample forecasting. Doing it in the other order (as
+        # this used to) leaves gaps in the integer index whenever the historical series has
+        # any missing values (e.g. cloud-cover gaps), which statsmodels treats as an
+        # unsupported index - newer statsmodels versions (>=0.15) raise a hard
+        # "No supported index is available" ValueError for this instead of only warning.
         df_in = (
             ds_in.sel(id_geohash=id_geohash)
             .to_dataframe()
