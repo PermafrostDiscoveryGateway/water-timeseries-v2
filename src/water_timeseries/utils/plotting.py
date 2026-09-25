@@ -76,7 +76,7 @@ def plot_water_time_series_dw(
     first_break: pd.Timestamp | None,
     plot_variables: list | None = None,
     normalization_factor=None,
-    lake_id: str | None = None,
+    object_id: str | int | None = None,
     save_path: str | Path | None = None,
 ) -> plt.figure:
     """
@@ -104,7 +104,7 @@ def plot_water_time_series_dw(
         The normalization_factor is used to calculate these percentages. If None, only the primary
         y-axis (absolute values) will be shown. Defaults to None.
 
-    lake_id : str, optional
+    object_id : str, optional
         An optional identifier for the lake being plotted, which will be included in the legend title if provided.
 
     save_path : str | Path, optional
@@ -201,8 +201,8 @@ def plot_water_time_series_dw(
 
     plt.legend(loc="upper left", bbox_to_anchor=(1, 1))
 
-    if lake_id is not None:
-        ax1.legend().set_title(f"Lake {lake_id}")
+    if object_id is not None:
+        ax1.legend().set_title(f"Lake {object_id}")
     else:
         ax1.legend().set_title("")
     plt.tight_layout()  # Adjust layout to make room for rotated labels and legend
@@ -221,7 +221,7 @@ def plot_water_time_series_jrc(
     first_break: pd.Timestamp | None,
     plot_variables: list | None = None,
     normalization_factor: bool | None = None,
-    lake_id: str | None = None,
+    object_id: str | int | None = None,
     save_path: str | Path | None = None,
 ) -> plt.figure:
     """
@@ -232,7 +232,7 @@ def plot_water_time_series_jrc(
         first_break (pd.Timestamp | None): The timestamp of the first breakpoint.
         plot_variables (list): The list of variables to plot.
         normalization_factor (bool): The factor for normalizing the data.
-        lake_id (str): An optional identifier for the lake being plotted.
+        object_id (str): An optional identifier for the lake being plotted.
         save_path (str | Path, optional): Path to save the plot as an image file (e.g., .png, .pdf, .jpg).
             If provided, the plot will be saved to the specified path.
 
@@ -310,8 +310,8 @@ def plot_water_time_series_jrc(
     ax1.xaxis.set_minor_locator(mdates.YearLocator())
     ax1.grid(visible=True, which="minor", lw=0.2)
 
-    if lake_id is not None:
-        ax1.legend().set_title(f"Lake {lake_id}")
+    if object_id is not None:
+        ax1.legend().set_title(f"Lake {object_id}")
     else:
         ax1.legend().set_title("")
 
