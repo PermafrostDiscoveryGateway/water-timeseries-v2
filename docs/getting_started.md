@@ -379,12 +379,18 @@ load only the tiles visible in the viewport (MapLibre GL + PMTiles).
 
 **Prerequisites:** [tippecanoe](https://github.com/felt/tippecanoe) on your PATH (`brew install tippecanoe`).
 
-```bash
-# 1a. Build a single .pmtiles archive from your lake parquet
-uv run water-timeseries --vector-file build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles
+The map is served by three archives -- a shared base of every lake polygon, plus a
+drained-lakes overlay per mode. [Building Map Tilesets](tile_generation.md) covers
+what each one carries and why; the short version:
 
-# 1b. Build a single .pmtiles archive from your lake parquet - set visualization style for non-generic layer info e.g. drainage year from dynamic world data
-uv run water-timeseries build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles --viz-configuration drainage_year
+```bash
+# 1a. The shared base archive: every lake polygon, the grey layer under both modes
+uv run water-timeseries build-pmtiles /path/to/lakes.parquet --output-file tiles/lakes.pmtiles
+
+# 1b. The historical drained-lakes overlay, which must land beside it
+uv run water-timeseries build-drained-pmtiles \
+  --vector-file /path/to/lakes.parquet \
+  --pmtiles-file tiles/lakes.pmtiles
 
 # 2a. Local dashboard (starts a small HTTP server with Range support)
 uv run water-timeseries dashboard \
@@ -501,40 +507,27 @@ gif_path = create_timelapse(
 
 ### Dashboard Visualization Configurations
 
-The dashboard supports three visualization configurations for the map viewer, controlled by the `--viz-configuration` parameter:
+The dashboard supports two visualization configurations for the map viewer, controlled by the `--viz-configuration` parameter — one per dashboard mode:
 
 | Configuration | Description |
 |--------------|-------------|
-| `"colored_historical"` | Historical time series with color-coded data (default) |
-| `"drainage_year"` | Data displayed by drainage year |
+| `"drainage_year"` | Data displayed by drainage year (default) |
 | `"nrt_drainage"` | Near-real-time drainage data |
 
 **Example usage:**
 
 ```bash
-# Use colored_historical (default)
-uv run water-timeseries dashboard --viz-configuration colored_historical
-
-# Use drainage_year for viewing data by drainage year
+# Use drainage_year for viewing data by drainage year (default)
 uv run water-timeseries dashboard --viz-configuration drainage_year
 
 # Use nrt_drainage for near-real-time drainage monitoring
 uv run water-timeseries dashboard --viz-configuration nrt_drainage
 ```
 
-When building PMTiles archives, the `--viz-configuration` option determines how data is encoded in the vector tiles:
-
-```bash
-# Build PMTiles with drainage_year visualization
-uv run water-timeseries build-pmtiles /path/to/lakes.parquet \
-    --output-file tiles/lakes_drainage_year.pmtiles \
-    --viz-configuration drainage_year
-
-# Build PMTiles with nrt_drainage visualization
-uv run water-timeseries build-pmtiles /path/to/lakes.parquet \
-    --output-file tiles/lakes_nrt_drainage.pmtiles \
-    --viz-configuration nrt_drainage
-```
+`--viz-configuration` selects how the dashboard *renders* tiles; it no longer
+affects how they are built. Tile archives are mode-agnostic: both modes render
+their lakes from one shared base archive and layer their own drained overlay on
+top. See [Building Map Tilesets](tile_generation.md).
 
 ### Switching Between Historical and Near Real-Time
 
