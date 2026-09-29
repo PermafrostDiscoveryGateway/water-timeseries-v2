@@ -20,7 +20,7 @@
 # columns. Build it with:
 #   uv run water-timeseries build-pmtiles \
 #     data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet \
-#     data/lake_geometry/lakes.pmtiles --shared-geometry
+#     data/lake_geometry/lakes.pmtiles
 # Rebuild it only when the lake geometry itself changes; the per-year and
 # per-month drainage data lives in the overlays and rebuilds independently.
 
@@ -66,12 +66,9 @@ modes:
     # them to fit its tile budget, so zooming out dropped drained lakes along
     # with the stable ones; the overlay is small enough to build with no budget
     # at all and stays complete at every zoom, drawn over the sampled grey.
-    # Rebuild it whenever pmtiles_file is rebuilt (it takes seconds):
-    #   uv run python -c "
-    #   from water_timeseries.utils.pmtiles_build import (
-    #       build_pmtiles_historical_drained, historical_drained_tiles_path)
-    #   build_pmtiles_historical_drained('<vector_file above>',
-    #       historical_drained_tiles_path('<pmtiles_file above>'))"
+    # Rebuild it whenever pmtiles_file is rebuilt (it takes seconds). This reads
+    # vector_file and drained_pmtiles_file straight out of this mode:
+    #   uv run water-timeseries build-drained-pmtiles --config-file <this file>
     # Set drained_pmtiles_file: here to point somewhere else (e.g. a gs:// copy),
     # or to a missing path to fall back to filtering the base archive.
 

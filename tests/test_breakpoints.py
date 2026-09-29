@@ -453,3 +453,122 @@ class TestNrtBreakpointBatch:
                         assert result.loc[idx, "water_observed_absolute"] >= result.loc[idx, "water_observed"], (
                             f"Absolute value should be >= normalized for {idx}"
                         )
+
+
+class TestNrtDrainageConfidence:
+    """Test the drainage_confidence scale produced by NRTBreakpoint."""
+
+    @staticmethod
+    def _score(**overrides) -> pd.DataFrame:
+        """One-row frame with normal (non-draining) values, patched by overrides."""
+        row = {
+            "water_observed": 0.9,
+            "water_residual": 0.0,
+            "water_predicted_lower_90": 0.8,
+            "water_historical_min": 0.3,
+        }
+        row.update(overrides)
+        return NRTBreakpoint()._add_confidence_level(pd.DataFrame([row]))
+
+    def test_no_criterion_met_is_na_not_zero(self):
+        """A lake that was scored and is not draining must not land on 0."""
+        result = self._score()
+        assert pd.isna(result["drainage_confidence"].iloc[0])
+        assert (result["drainage_confidence"] == 0).sum() == 0
+
+    def test_criteria_sum_to_confidence(self):
+        # Cat 1 only.
+        assert self._score(water_residual=-0.5)["drainage_confidence"].iloc[0] == 1
+        # Cat 1 + Cat 2.
+        assert self._score(water_residual=-0.5, water_observed=0.5)["drainage_confidence"].iloc[0] == 2
+        # Cat 1 + Cat 2 + Cat 3.
+        assert self._score(water_residual=-0.5, water_observed=0.1)["drainage_confidence"].iloc[0] == 3
+
+    def test_unevaluable_rows_are_invalid(self):
+        """Missing criteria inputs score -1, not 0 via NaN comparisons."""
+        for missing in ("water_residual", "water_observed", "water_predicted_lower_90", "water_historical_min"):
+            result = self._score(**{missing: float("nan")})
+            assert result["drainage_confidence"].iloc[0] == -1, missing
+
+    def test_missing_column_is_invalid(self):
+        """A frame without a criteria column at all scores -1 rather than raising."""
+        df = pd.DataFrame([{"water_observed": 0.9, "water_residual": -0.5}])
+        result = NRTBreakpoint()._add_confidence_level(df)
+        assert result["drainage_confidence"].iloc[0] == -1
+
+    def test_object_dtype_nan_rows_are_invalid(self):
+        """The all-NaN placeholder frames built for lakes with no prediction."""
+        df = pd.DataFrame(index=["a", "b"], columns=list(NRTBreakpoint().output_columns))
+        result = NRTBreakpoint()._add_confidence_level(df)
+        assert result["drainage_confidence"].tolist() == [-1, -1]
+
+    def test_dtype_is_nullable_int(self):
+        result = self._score()
+        assert str(result["drainage_confidence"].dtype) == "Int64"
+
+    def test_confidence_survives_parquet_roundtrip(self, tmp_path):
+        df = pd.concat(
+            [self._score(), self._score(water_residual=-0.5), self._score(water_observed=float("nan"))],
+            ignore_index=True,
+        )
+        path = tmp_path / "breaks.parquet"
+        df.to_parquet(path, index=False)
+        roundtripped = pd.read_parquet(path)["drainage_confidence"]
+        assert roundtripped.iloc[1] == 1
+        assert roundtripped.iloc[2] == -1
+        assert pd.isna(roundtripped.iloc[0])
+
+
+class TestDrainedMask:
+    """Test which NRT breaks rows count as drainage detections."""
+
+    @staticmethod
+    def _breaks() -> pd.DataFrame:
+        """One row of each shape the breaks table actually mixes."""
+        return pd.DataFrame(
+            {
+                "id_geohash": ["cat1", "cat2_only", "stable", "invalid", "historical_simple", "legacy_nrt"],
+                "water_residual": [-0.5, -0.1, 0.02, float("nan"), float("nan"), -0.4],
+                "drainage_confidence": pd.array([3, 1, pd.NA, -1, pd.NA, pd.NA], dtype="Int64"),
+            }
+        )
+
+    def test_keeps_detections_drops_stable_and_invalid(self):
+        from water_timeseries.utils.nrt_postprocessing import drained_mask
+
+        result = self._breaks().set_index("id_geohash")
+        kept = drained_mask(result)
+        assert kept.loc["cat1"]
+        # A lake below its prediction interval but with a shallow residual is a
+        # real detection; a residual-only filter would drop it.
+        assert kept.loc["cat2_only"]
+        assert not kept.loc["stable"]
+        assert not kept.loc["invalid"]
+
+    def test_keeps_rows_that_were_never_scored(self):
+        """Historical simple-method breaks carry no NRT columns and are detections."""
+        from water_timeseries.utils.nrt_postprocessing import drained_mask
+
+        kept = drained_mask(self._breaks().set_index("id_geohash"))
+        assert kept.loc["historical_simple"]
+        assert kept.loc["legacy_nrt"]
+
+    def test_table_without_confidence_column_is_untouched(self):
+        from water_timeseries.utils.nrt_postprocessing import drained_mask
+
+        df = pd.DataFrame({"id_geohash": ["a", "b"], "water_change_perc": [-65.0, -87.0]})
+        assert drained_mask(df).all()
+
+    def test_empty_table(self):
+        from water_timeseries.utils.nrt_postprocessing import drained_mask
+
+        assert drained_mask(pd.DataFrame(columns=["drainage_confidence"])).empty
+
+    def test_agrees_with_calculate_break_output(self, dw_test_dataset):
+        """The stable lakes NRT now scores <NA> must not survive the mask."""
+        from water_timeseries.utils.nrt_postprocessing import drained_mask
+
+        result = NRTBreakpoint().calculate_break(DWDataset(dw_test_dataset), analysis_date="2024-07")
+        kept = drained_mask(result)
+        assert kept.sum() == (result["drainage_confidence"] >= 1).sum()
+        assert kept.sum() < len(result), "fixture should contain stable lakes to drop"

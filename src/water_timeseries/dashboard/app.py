@@ -173,10 +173,10 @@ def parse_args():
     parser.add_argument(
         "--viz-configuration",
         type=str,
-        default="colored_historical",
+        default="drainage_year",
         help=(
             "Visualization configuration name for the map viewer. "
-            "Options include 'colored_historical' (default) and 'drainage_year'. "
+            "Options are 'drainage_year' (default) and 'nrt_drainage'. "
             "This controls the styling and color scheme of the map layers."
         ),
     )
@@ -369,7 +369,7 @@ def main(
         precomputed_nrt_dir = _resolve_default_nrt_dir()
 
     if viz_configuration is None:
-        viz_configuration = "colored_historical"
+        viz_configuration = "drainage_year"
 
     if pmtiles_url == "":
         pmtiles_url = None

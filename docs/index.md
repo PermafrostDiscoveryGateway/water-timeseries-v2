@@ -255,13 +255,15 @@ uv run water-timeseries plot-timeseries tests/data/lakes_jrc_test.zarr --lake-id
 
 #### Build PMTiles
 
-Convert a lake GeoParquet file to a single `.pmtiles` archive for fast map rendering.
+Build the shared base archive: one `.pmtiles` of every lake polygon, rendered as the
+grey base layer by both view modes. The per-year and per-month drainage data lives in
+separate overlays -- see [Building Map Tilesets](tile_generation.md) for the full
+picture, and `build-drained-pmtiles` / `build-nrt-pmtiles` for the overlays.
 
 | Option | Short | Description | Default |
 | -------- | ------- | ------------- | -------- |
 | `vector_file` | | Path to input GeoParquet file with lake polygons | Required |
 | `output_file` | | Path to output `.pmtiles` file | Required |
-| `--viz-configuration` | | Visualization configuration for the map viewer. Valid options: `"colored_historical"` (historical time series with color-coded data), `"drainage_year"` (data displayed by drainage year), `"nrt_drainage"` (near-real-time drainage data) | `colored_historical` |
 | `--keep-geojsonl` | | Keep intermediate GeoJSONL file after building PMTiles | `False` |
 | `--config-file` | | Path to a YAML or JSON configuration file containing default parameters. CLI arguments take priority over config file values | `None` |
 | `--logfile` | | Path to log file | Auto-generated |
@@ -270,14 +272,11 @@ Convert a lake GeoParquet file to a single `.pmtiles` archive for fast map rende
 **Example usage:**
 
 ```bash
-# Build PMTiles with default visualization (colored_historical)
+# Build the shared base archive
 uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles
 
-# Build PMTiles with drainage_year visualization
-uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes_drainage_year.pmtiles --viz-configuration drainage_year
-
-# Build PMTiles with nrt_drainage visualization
-uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes_nrt_drainage.pmtiles --viz-configuration nrt_drainage
+# Read the paths out of a dashboard config instead
+uv run water-timeseries build-pmtiles --config-file configs/dashboard_panarctic.yaml
 
 # Keep intermediate GeoJSONL file for debugging
 uv run water-timeseries build-pmtiles lakes.parquet tiles/lakes.pmtiles --keep-geojsonl
@@ -339,7 +338,7 @@ The dashboard accepts the following optional arguments:
 | `dw_end_year` | End year for Dynamic World dataset time series | `2025` |
 | `dw_start_month` | Start month (1-12) for Dynamic World dataset time series filtering | `6` (June) |
 | `dw_end_month` | End month (1-12) for Dynamic World dataset time series filtering | `9` (September) |
-| `viz_configuration` | Visualization configuration for the map viewer. Valid options: `"colored_historical"` (historical time series with color-coded data), `"drainage_year"` (data displayed by drainage year), `"nrt_drainage"` (near-real-time drainage data) | `colored_historical` |
+| `viz_configuration` | Visualization configuration for the map viewer. Valid options: `"drainage_year"` (data displayed by drainage year), `"nrt_drainage"` (near-real-time drainage data) | `drainage_year` |
 | `port` | Port to run the dashboard on | `8501` |
 | `logfile` | Path to log file | Auto-generated |
 | `verbose` | Verbosity level (`-v` for DEBUG) | `0` (INFO) |
