@@ -644,7 +644,7 @@ def merge_nrt_confidence(
         raise SystemExit(1)
 
     gcs_prefix = config_dict.get("gcs_prefix") or "pdg-storage-default/workflows_optimization/dashboard_nrt"
-    drain_threshold = float(config_dict.get("drain_threshold", -0.25))
+    drain_threshold = float(config_dict.get("drain_threshold", None))
 
     merge_nrt_confidence_file(
         breaks_file,

@@ -659,7 +659,7 @@ class NRTBreakpoint(BreakpointMethod):
 
         The confidence level is computed by evaluating three criteria that
         indicate abnormal water drainage:
-
+        * **Cat 0** – Stable: no criterion met, the lake is stable
         * **Cat 1** – Residual below threshold: ``water_residual < -0.25``
         * **Cat 2** – Observed water below prediction interval:
         ``water_observed < water_predicted_lower_90``
@@ -672,7 +672,7 @@ class NRTBreakpoint(BreakpointMethod):
         | Score | Meaning                                          |
         |-------|--------------------------------------------------|
         | -1    | Invalid – the criteria could not be evaluated    |
-        | <NA>  | Evaluated, no criterion met: the lake is stable  |
+        | 0     | Evaluated, no criterion met: the lake is stable  |
         | 1     | Low                                              |
         | 2     | Medium                                           |
         | 3     | High                                             |
@@ -716,7 +716,7 @@ class NRTBreakpoint(BreakpointMethod):
         score = pd.concat([cat1, cat2, cat3], axis=1).sum(axis=1)
 
         confidence = pd.Series(pd.NA, index=break_output_df.index, dtype="Int64")
-        drained = evaluable & (score > 0)
+        drained = evaluable & (score >= 0)
         confidence[drained] = score[drained]
         confidence[~evaluable] = CONFIDENCE_INVALID
         break_output_df["drainage_confidence"] = confidence
