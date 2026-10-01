@@ -8,11 +8,14 @@ Dynamic World data, JRC data, and error handling.
 import pathlib
 from unittest import mock
 
+import ee
 import geopandas as gpd
+import pandas as pd
 import pytest
+import requests
 
 from water_timeseries.downloader import EarthEngineDownloader, setup_annual_dates, setup_dates_from_options
-from water_timeseries.utils.earthengine import calc_monthly_dw
+from water_timeseries.utils.earthengine import NoDynamicWorldDataError, calc_monthly_dw, call_with_retry
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
 
 # Path to test data
@@ -433,6 +436,85 @@ class TestCalcMonthlyDw:
                 months=[6, 7, 8, 9],
                 no_download=True,
             )
+
+
+class TestCallWithRetry:
+    """Test retry behavior for transient versus permanent errors."""
+
+    def test_retries_transient_network_error_then_succeeds(self, monkeypatch):
+        monkeypatch.setattr("water_timeseries.utils.earthengine.time.sleep", lambda _s: None)
+        fn = mock.Mock(side_effect=[requests.exceptions.ConnectionError("reset"), 42])
+        assert call_with_retry(fn, attempts=3) == 42
+        assert fn.call_count == 2
+
+    def test_retries_transient_ee_error_then_succeeds(self, monkeypatch):
+        monkeypatch.setattr("water_timeseries.utils.earthengine.time.sleep", lambda _s: None)
+        fn = mock.Mock(side_effect=[ee.EEException("Computation timed out."), "ok"])
+        assert call_with_retry(fn, attempts=3) == "ok"
+        assert fn.call_count == 2
+
+    def test_raises_after_exhausting_attempts(self, monkeypatch):
+        monkeypatch.setattr("water_timeseries.utils.earthengine.time.sleep", lambda _s: None)
+        fn = mock.Mock(side_effect=TimeoutError("slow"))
+        with pytest.raises(TimeoutError):
+            call_with_retry(fn, attempts=3)
+        assert fn.call_count == 3
+
+    def test_permanent_ee_error_is_not_retried(self, monkeypatch):
+        monkeypatch.setattr("water_timeseries.utils.earthengine.time.sleep", lambda _s: None)
+        fn = mock.Mock(side_effect=ee.EEException("User memory limit exceeded."))
+        with pytest.raises(ee.EEException):
+            call_with_retry(fn, attempts=3)
+        assert fn.call_count == 1
+
+
+class TestNoDataVersusError:
+    """Test that confirmed missing data and request failures are reported differently."""
+
+    @pytest.fixture
+    def downloader(self):
+        dl = EarthEngineDownloader(ee_project="test-project", ee_auth=False)
+        dl._setup_gee_reducer = mock.Mock(return_value=(mock.Mock(), {}))
+        return dl
+
+    def test_network_error_propagates_from_chunk(self, downloader):
+        with (
+            mock.patch(
+                "water_timeseries.downloader.calc_monthly_dw",
+                side_effect=requests.exceptions.ConnectionError("network down"),
+            ),
+            pytest.raises(requests.exceptions.ConnectionError),
+        ):
+            downloader._extract_time_series(dates=["2024-06-01"], gdf_chunk=None, name_attribute="id_geohash")
+
+    def test_no_data_returns_empty_frame_for_chunk(self, downloader):
+        with mock.patch("water_timeseries.downloader.calc_monthly_dw", return_value=None):
+            df = downloader._extract_time_series(
+                dates=["2024-06-01", "2024-07-01"], gdf_chunk=None, name_attribute="id_geohash"
+            )
+        assert df.empty
+
+    def test_all_chunks_empty_raises_no_data_error(self, downloader):
+        gdf = gpd.read_parquet(VECTOR_DATASET).iloc[:4]
+        downloader._chunk_gdf = mock.Mock(return_value=[gdf.iloc[:2], gdf.iloc[2:]])
+        downloader._extract_time_series = mock.Mock(return_value=pd.DataFrame())
+        with pytest.raises(NoDynamicWorldDataError):
+            downloader.download_dw_monthly(gdf=gdf, name_attribute="id_geohash", date_list=["2024-06-01"])
+
+    def test_no_data_error_is_backward_compatible_value_error(self, downloader):
+        """Callers matching the old ValueError message (e.g. the Argo NRT pipeline) must keep working."""
+        gdf = gpd.read_parquet(VECTOR_DATASET).iloc[:4]
+        downloader._chunk_gdf = mock.Mock(return_value=[gdf])
+        downloader._extract_time_series = mock.Mock(return_value=pd.DataFrame())
+        with pytest.raises(ValueError, match="No data was extracted"):
+            downloader.download_dw_monthly(gdf=gdf, name_attribute="id_geohash", date_list=["2024-06-01"])
+
+    def test_chunk_error_is_not_reported_as_no_data(self, downloader):
+        gdf = gpd.read_parquet(VECTOR_DATASET).iloc[:4]
+        downloader._chunk_gdf = mock.Mock(return_value=[gdf.iloc[:2], gdf.iloc[2:]])
+        downloader._extract_time_series = mock.Mock(side_effect=ee.EEException("User memory limit exceeded."))
+        with pytest.raises(ee.EEException):
+            downloader.download_dw_monthly(gdf=gdf, name_attribute="id_geohash", date_list=["2024-06-01"])
 
 
 # Run tests
