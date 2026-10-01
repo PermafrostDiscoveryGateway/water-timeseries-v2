@@ -998,6 +998,65 @@ def plot_timeseries(
     )
 
 
+def resolve_lake_subset(
+    vector_file: Path | None,
+    bbox_west: float | None = None,
+    bbox_south: float | None = None,
+    bbox_east: float | None = None,
+    bbox_north: float | None = None,
+) -> list[str] | None:
+    """Resolve the subset of lakes to process for ``breakpoint-analysis-nrt``.
+
+    Behaviour:
+
+    * no bbox boundary and no vector file → ``None`` (all lakes in the dataset).
+    * vector file, no bbox boundary → all ``id_geohash`` values in the file.
+    * vector file and at least one bbox boundary → only lakes whose centroid
+      falls inside the box, using
+      :func:`water_timeseries.utils.spatial.filter_gdf_by_bbox` (the same
+      helper the historical command uses, so the two remain consistent).
+    * bbox boundary given but no vector file → ``SystemExit(1)`` with an error
+      message. Fail fast rather than silently processing the full extent — a
+      full NRT month is a ~30 h ARIMA batch, so the cost of a silently
+      skipped filter is the entire point of adding this flag.
+    """
+    has_bbox = any(v is not None for v in (bbox_west, bbox_south, bbox_east, bbox_north))
+
+    if has_bbox and vector_file is None:
+        logger.error(
+            "--bbox-* requires --vector-file: the box is applied to that file's lake geometries "
+            "(centroid must fall inside the box)."
+        )
+        raise SystemExit(1)
+
+    if vector_file is None:
+        return None
+
+    import geopandas as gpd
+
+    from water_timeseries.utils.spatial import filter_gdf_by_bbox
+
+    gdf = gpd.read_parquet(vector_file)
+    if "id_geohash" not in gdf.columns:
+        logger.error(f"vector_file {vector_file} does not contain an 'id_geohash' column")
+        raise SystemExit(1)
+
+    if has_bbox:
+        logger.info(f"Applying bbox filter: west={bbox_west}, south={bbox_south}, east={bbox_east}, north={bbox_north}")
+        gdf = filter_gdf_by_bbox(
+            gdf,
+            bbox_west=bbox_west,
+            bbox_south=bbox_south,
+            bbox_east=bbox_east,
+            bbox_north=bbox_north,
+            id_column="id_geohash",
+        )
+
+    lake_ids = gdf["id_geohash"].dropna().unique().tolist()
+    logger.info(f"Loaded {len(lake_ids)} lake IDs from vector file: {vector_file}")
+    return lake_ids
+
+
 # Subcommand: NRT monthly pre-computation
 @app.command(group="Analysis")
 def breakpoint_analysis_nrt(
@@ -1013,6 +1072,10 @@ def breakpoint_analysis_nrt(
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
     vector_file: Path | None = None,
+    bbox_west: float | None = None,
+    bbox_south: float | None = None,
+    bbox_east: float | None = None,
+    bbox_north: float | None = None,
     aggregate: bool = True,
     logfile: str | None = None,
     verbose: int = 0,
@@ -1067,6 +1130,18 @@ def breakpoint_analysis_nrt(
     vector_file:
         Optional GeoParquet vector file.  When provided, only the
         ``id_geohash`` values present in that file are processed.
+        Required when any ``--bbox-*`` is given.
+    bbox_west:
+        Western boundary of the bounding box for spatial filtering
+        (minimum longitude).  Applied via the vector file's geometries:
+        only lakes whose centroid falls inside the box are processed.
+        At least one bbox parameter must be set; partial boxes are allowed.
+    bbox_south:
+        Southern boundary of the bounding box (minimum latitude).
+    bbox_east:
+        Eastern boundary of the bounding box (maximum longitude).
+    bbox_north:
+        Northern boundary of the bounding box (maximum latitude).
     aggregate:
         Automatically aggregate the monthly Parquet files in the output
         directory into consolidated files for the dashboard (default True).
@@ -1102,6 +1177,12 @@ def breakpoint_analysis_nrt(
             --analysis-date-end 2024-12 \\
             --output-dir precomputed/nrt \\
             --no-resume
+
+        # Spatial subset: only lakes inside the box (a vector file is required)
+        water-timeseries breakpoint-analysis-nrt downloads/lakes_dw_V2d.nc \\
+            --analysis-date 2024-01 \\
+            --vector-file precomputed/lakes_test.parquet \\
+            --bbox-west 100 --bbox-south 20 --bbox-east 110 --bbox-north 30
     """
     from water_timeseries.scripts.precompute_nrt_monthly import precompute_nrt_monthly
 
@@ -1126,17 +1207,15 @@ def breakpoint_analysis_nrt(
         logger.error("--analysis-date-start and --analysis-date-end must both be provided.")
         raise SystemExit(1)
 
-    # --- Resolve lake IDs from vector file ----------------------------------
-    lake_ids = None
-    if vector_file is not None:
-        import geopandas as gpd
-
-        gdf = gpd.read_parquet(vector_file)
-        if "id_geohash" not in gdf.columns:
-            logger.error(f"vector_file {vector_file} does not contain an 'id_geohash' column")
-            raise SystemExit(1)
-        lake_ids = gdf["id_geohash"].dropna().unique().tolist()
-        logger.info(f"Loaded {len(lake_ids)} lake IDs from vector file: {vector_file}")
+    # --- Resolve lake subset (vector file, optionally bbox-filtered) ------------
+    # resolve_lake_subset also enforces that any --bbox-* requires --vector-file.
+    lake_ids = resolve_lake_subset(
+        vector_file=vector_file,
+        bbox_west=bbox_west,
+        bbox_south=bbox_south,
+        bbox_east=bbox_east,
+        bbox_north=bbox_north,
+    )
 
     shared_kwargs = {
         "dataset_file": dataset_file,
