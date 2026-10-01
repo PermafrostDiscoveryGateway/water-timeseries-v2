@@ -29,9 +29,11 @@ dashboard:
   ## @param dashboard.offlineMode Run the dashboard without outbound network access (disables live Earth Engine calls).
   offlineMode: false
   ## @param dashboard.eeProject Google Earth Engine project ID used for authenticated GEE API calls.
-  eeProject: "pdg-project-406720"
+  eeProject: "pdg-wg-machlearn"
   ## @param dashboard.eeSecretName Name of the Kubernetes secret containing the Earth Engine service account key.
   eeSecretName: "lostlakes-ee-sa-secret"
+  ## @param dashboard.cartoSecretName Name of the Kubernetes secret containing the CartoDB account key.
+  cartoSecretName: "lostlakes-carto-secret"
   ## @param dashboard.configFile Path inside the container to the dashboard YAML config file (typically in a pvc mount).
   configFile: /data/dashboard-config.yaml
   ## @param dashboard.pmtilesFile Explicit path to a .pmtiles file. If empty, the path is read from configFile.
@@ -114,7 +116,7 @@ ingress:
   enabled: true
   ## @param ingress.className The class of the ingress controller to use.
   #className: traefik
-  className: nginx
+  className: traefik
   ## @param ingress.hosts [array] Full ingress host/path subtree (advanced mode).
   ## If provided (non-empty), this takes precedence over `ingress.hostname`.
   ## Example:
@@ -138,7 +140,6 @@ ingress:
   ## If true, and ingress.tls is NOT empty, that takes precedence over the inferred TLS settings.
   tlsEnabled: true
   ## @param ingress.tlsSecretName Secret name used by inferred TLS when `ingress.tls` is empty.
-  tlsSecretName: ingress-nginx-tls-cert  # leave as-is until LetsEncrypt HTTP-01 working in traefik
 
   annotations:
     ## @param ingress.annotations.cert-manager.io/cluster-issuer cert-manager cluster issuer to use for provisioning certificates
@@ -162,4 +163,3 @@ ingress:
     - hosts:
         - lostlakes.arcticdata.io
       secretName: ingress-tls-cert
-
