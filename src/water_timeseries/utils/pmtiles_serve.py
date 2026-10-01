@@ -14,6 +14,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from loguru import logger
 
+from water_timeseries.utils.pmtiles_build import POINT_POLY_SWITCH_ZOOM
+
 _MAP_HTML = Path(__file__).parent.parent / "dashboard" / "static" / "lake_map.html"
 
 
@@ -80,6 +82,15 @@ class _PmtilesHTTPRequestHandler(BaseHTTPRequestHandler):
         pmtiles_name = getattr(self.server, "pmtiles_filename", None)
         if pmtiles_name and not config.get("pmtiles_url"):
             config["pmtiles_url"] = f"{self.server.base_url}/{pmtiles_name}"  # type: ignore[attr-defined]
+
+        # The page gates its circle/polygon layers on this rather than carrying
+        # its own copy of the number the tiles were baked with -- but only when
+        # the config says the archive bakes centroids below it. Callers that
+        # know the archive set that (see pmtiles_viewer._build_map_config); the
+        # default here is the reading that keeps lakes on screen for every
+        # archive built before those centroids existed.
+        config.setdefault("point_poly_switch_zoom", POINT_POLY_SWITCH_ZOOM)
+        config.setdefault("base_has_centroids", False)
 
         template = _MAP_HTML.read_text(encoding="utf-8")
         html = template.replace("__CONFIG_JSON__", json.dumps(config))

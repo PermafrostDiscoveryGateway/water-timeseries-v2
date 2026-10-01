@@ -30,7 +30,11 @@ from water_timeseries.dashboard.share_state import (
 from water_timeseries.dashboard.tutorial_popup import show_help_button, show_tutorial_popup
 from water_timeseries.dataset import DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
-from water_timeseries.map_utils import geohash_to_human_readable_name
+from water_timeseries.map_utils import (
+    geohash_to_human_readable_name,
+    pmtiles_has_layer,
+    resolve_nrt_monthly_tiles_url,
+)
 from water_timeseries.utils.dashboard import (
     check_dataset_availability,
     check_dataset_availability_ds_raw,
@@ -46,12 +50,14 @@ from water_timeseries.utils.earthengine import (
     get_unique_dates_from_xee_ds,
     initialize_earth_engine,
 )
-from water_timeseries.utils.io import load_vector_dataset
+from water_timeseries.utils.io import is_remote_path, load_vector_dataset
 from water_timeseries.utils.map_styling import (
     format_tooltip_columns,
     get_colored_style_function,
     get_default_style_function,
 )
+from water_timeseries.utils.nrt_postprocessing import drained_mask
+from water_timeseries.utils.pmtiles_build import NRT_SCORED_LAYER
 from water_timeseries.utils.visualization import (
     DEFAULT_HOVER_COLUMNS,
     get_legend_html_net_change,
@@ -113,8 +119,9 @@ class MapViewer:
         drained_gdf: gpd.GeoDataFrame | None = None,
         drained_label: str | None = None,
         show_main_layer: bool = True,
-        viz_configuration_name: str | None = "colored_historical",
+        viz_configuration_name: str | None = "drainage_year",
         hide_stable_lakes: bool = False,
+        hidden_nrt_categories: frozenset[str] | None = None,
         logger=None,
     ):
         """Initialize the MapViewer.
@@ -129,7 +136,8 @@ class MapViewer:
             zoom: Initial zoom level for the map.
             map_backend: Which mapping backend to use ("folium" or "pmtiles").
             max_features: Maximum number of features to display (for performance).
-            pmtiles_file: Local ``.pmtiles`` archive (vector tiles; fast for millions of lakes).
+            pmtiles_file: ``.pmtiles`` archive (vector tiles; fast for millions of lakes).
+                Either a local path or a remote ``gs://``/``http(s)://`` URI.
             pmtiles_url: Remote HTTP(S) URL to a ``.pmtiles`` file (e.g. on S3).
             drained_gdf: Optional GeoDataFrame of recently drained lakes to overlay.
             drained_label: Optional label to show in the legend for the drained layer.
@@ -144,7 +152,12 @@ class MapViewer:
         self.map_center = map_center
         self.map_backend = map_backend  # "folium" or "pmtiles"
         self.max_features = max_features  # Limit features for faster loading
-        self.pmtiles_file = Path(pmtiles_file) if pmtiles_file else None
+        # Remote URIs (gs://, http(s)://) must stay strings: Path() collapses the
+        # double slash to ``gs:/`` and downstream resolution then treats it as a
+        # local path. resolve_pmtiles_url() maps the remote form to a URL.
+        self.pmtiles_file: Path | str | None = None
+        if pmtiles_file:
+            self.pmtiles_file = str(pmtiles_file) if is_remote_path(pmtiles_file) else Path(pmtiles_file)
         self.pmtiles_url = pmtiles_url
         self._parquet_path = Path(parquet_path) if parquet_path else None
         self.drained_gdf = drained_gdf
@@ -153,6 +166,21 @@ class MapViewer:
         self.drained_ids: list[str] | None = None
         self.viz_configuration_name = viz_configuration_name
         self.hide_stable_lakes = hide_stable_lakes
+        self.hidden_nrt_categories = frozenset(hidden_nrt_categories) if hidden_nrt_categories else frozenset()
+        # Optional NRT monthly overlay (nrt_drainage viz only), attached by the
+        # dashboard before render(). Preferred: a per-month drained-lakes
+        # tileset URL, whose properties are baked at build time. The per-lake
+        # dicts below are the fallback for deployments without those tilesets;
+        # they travel to the browser inline on every rerun, so they are much
+        # more expensive (see build_pmtiles_map).
+        self.nrt_monthly_tiles_url: str | None = None
+        # Whether that tileset also holds the month's prediction for every lake
+        # it scored, not just the drained ones -- only months with a full NRT
+        # run do (see NRT_SCORED_LAYER).
+        self.nrt_monthly_has_scored: bool = False
+        self.historical_drained_tiles_url: str | None = None
+        self.nrt_confidence_by_id: dict[str, int | None] | None = None
+        self.nrt_tooltip_overrides: dict[str, dict] | None = None
 
         use_pmtiles = map_backend == "pmtiles" or pmtiles_file or pmtiles_url
         if use_pmtiles and map_backend != "pmtiles":
@@ -326,10 +354,14 @@ class MapViewer:
     def _render_pmtiles(
         self,
         # valid_gdf: gpd.GeoDataFrame,
-        viz_configuration_name: str | None = "colored_historical",
+        viz_configuration_name: str | None = "drainage_year",
     ) -> str | None:
         """Render MapLibre map backed by PMTiles (viewport tile loading)."""
-        from water_timeseries.map_utils import build_pmtiles_map, resolve_pmtiles_url
+        from water_timeseries.map_utils import (
+            build_pmtiles_map,
+            pmtiles_has_low_zoom_centroids,
+            resolve_pmtiles_url,
+        )
 
         st.caption("Click a lake to show interactive water area timeseries plots below. \n")
         logger.info("PMTiles map view rendered")
@@ -346,6 +378,16 @@ class MapViewer:
 
         pmtiles_url = resolve_pmtiles_url(pmtiles_source)
         logger.info(f"PMTiles url: {pmtiles_url}")
+
+        # Whether this archive holds centroids below the switch zoom decides
+        # whether the style hands off to them there or keeps drawing polygons;
+        # read it off the archive so a rebuild needs no config change.
+        base_has_centroids = pmtiles_has_low_zoom_centroids(pmtiles_source)
+        if not base_has_centroids:
+            logger.info(
+                "PMTiles archive bakes no usable centroids below the switch zoom; "
+                "drawing base lake polygons at every zoom instead"
+            )
 
         # # Determine center of map (lat, lon)
         # if self.map_center is None:
@@ -371,11 +413,20 @@ class MapViewer:
             tooltip=tooltip,
             hide_stable_lakes=self.hide_stable_lakes,
             drained_label=getattr(self, "drained_label", None),
+            hidden_categories=self.hidden_nrt_categories,
+            nrt_confidence_by_id=self.nrt_confidence_by_id,
+            nrt_tooltip_overrides=self.nrt_tooltip_overrides,
+            nrt_monthly_tiles_url=self.nrt_monthly_tiles_url,
+            nrt_monthly_has_scored=self.nrt_monthly_has_scored,
+            historical_drained_tiles_url=self.historical_drained_tiles_url,
             selected_id=st.session_state.get("selected_geohash"),
             id_column=self.id_column,
+            base_has_centroids=base_has_centroids,
         )
 
-        # Render the map and get click data
+        # Render the map and get click data. This is the streamlit-folium
+        # component call: it serializes `m` to HTML and round-trips it to the
+        # browser iframe.
         map_data = st_folium(
             m,
             width="100%",
@@ -474,7 +525,7 @@ class MapViewer:
         self,
         valid_gdf: gpd.GeoDataFrame,
         layer_column: str | None = None,
-        viz_configuration_name: str | None = "colored_historical",
+        viz_configuration_name: str | None = "drainage_year",
     ) -> str | None:
         """Render using folium with optional layer selection.
 
@@ -494,7 +545,10 @@ class MapViewer:
         else:
             center = [self.map_center.get("lat", 0), self.map_center.get("lon", 0)]
 
-        m = folium.Map(location=center, zoom_start=self.zoom)
+        # folium names its built-in base layer after the lowercased tile string,
+        # so the layer control reads "openstreetmap"; add it by hand to spell it out.
+        m = folium.Map(location=center, zoom_start=self.zoom, tiles=None)
+        folium.TileLayer("OpenStreetMap", name="OpenStreetMap").add_to(m)
 
         # # Add tile layers using utility function
 
@@ -513,33 +567,7 @@ class MapViewer:
 
         tooltip_columns = None
 
-        if viz_configuration_name == "colored_historical":
-            # Create style function based on whether NetChange_perc column exists
-            if "NetChange_perc" in valid_gdf.columns:
-                # add tile layers
-                tile_layer_darkmatter.add_to(m)
-                tile_layer_esriworld.add_to(m)
-                tcvis_tile_layer.add_to(m)
-
-                style_function = get_colored_style_function(
-                    color_column="NetChange_perc",
-                    vmin=-40,
-                    vmax=40,
-                    colormap=plt.cm.RdYlBu,
-                )
-
-                # Format tooltip columns using utility function
-                # Include Area columns for full tooltip display
-                tooltip_columns = [
-                    ("NetChange_perc", "Net Change (%):", "{:.2f}", "%"),
-                    ("NetChange_ha", "Net Change (ha):", "{:.2f}", " ha"),
-                    ("Area_start_ha", "Lake Area year 2000 (ha):", "{:.2f}", " ha"),
-                    ("Area_end_ha", "Lake Area year 2020 (ha):", "{:.2f}", " ha"),
-                ]
-            else:
-                style_function = get_default_style_function()
-
-        elif viz_configuration_name == "drainage_year":
+        if viz_configuration_name == "drainage_year":
             # Create style function based on whether NetChange_perc column exists
             if "water_residual" in valid_gdf.columns:
                 # add tile layers
@@ -561,7 +589,7 @@ class MapViewer:
                 # Include Area columns for full tooltip display
                 tooltip_columns = [
                     ("pre_break_median", "Water area before break [ha]:", "{:.2f}", ""),
-                    ("post_break_median", "Water area before break [ha]:", "{:.2f}", ""),
+                    ("post_break_median", "Water area after break [ha]:", "{:.2f}", ""),
                 ]
             else:
                 style_function = get_default_style_function()
@@ -1166,9 +1194,11 @@ def create_app(
     dw_end_year: int = 2025,
     dw_start_month: int = 6,
     dw_end_month: int = 9,
-    viz_configuration_name: str | None = "colored_historical",
+    viz_configuration_name: str | None = "drainage_year",
     pmtiles_file: str | Path | None = None,
     pmtiles_url: str | None = None,
+    nrt_pmtiles_dir: str | Path | None = None,
+    drained_pmtiles_file: str | Path | None = None,
     logfile: str | None = None,
     modes: list | None = None,
     active_mode: str | None = None,
@@ -1197,6 +1227,11 @@ def create_app(
             views (Historical / Near Real-Time). The sidebar switcher is hidden
             when fewer than two are available.
         active_mode: Key of the mode currently in effect.
+        nrt_pmtiles_dir: Where the per-month NRT drainage tilesets live (local
+            directory, ``http(s)://`` prefix or ``gs://`` prefix), as written by
+            ``build_pmtiles_nrt_monthly``. When a tileset exists for the
+            selected month, the drainage-status overlay is rendered from it
+            instead of pushing per-lake values into the browser.
     """
 
     def _set_center_to_selected():
@@ -1248,9 +1283,7 @@ def create_app(
     show_tutorial_popup(config_name=viz_configuration_name)
 
     # Setup page header
-    if viz_configuration_name == "colored_historical":
-        dashboard_title = "Lost Lakes: Lake Changes 2000-2020"
-    elif viz_configuration_name == "drainage_year":
+    if viz_configuration_name == "drainage_year":
         dashboard_title = "Lost Lakes: Lake Drainage Drainage Analysis: 2017-2025"
     elif viz_configuration_name == "nrt_drainage":
         dashboard_title = "Lost Lakes: Near Real-Time Lake Drainage: 2017-2025"
@@ -1265,8 +1298,24 @@ def create_app(
     - **Click** on a feature to select it and view time series & show latest imagery.
     """)
 
-    # Create sidebar for controls
-    # st.sidebar.header("Settings")
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] div[data-testid="stRadio"] div[role="radiogroup"] {
+            gap: 0.25rem;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"]:has(> div[data-testid="stCheckbox"])
+            + [data-testid="stElementContainer"]:has(> div[data-testid="stCheckbox"]) {
+            margin-top: -0.75rem;
+        }
+        [data-testid="stSidebar"] [data-testid="stElementContainer"]:has(div[data-testid="stCaptionContainer"])
+            + [data-testid="stElementContainer"]:has(> div[data-testid="stCheckbox"]) {
+            margin-top: -0.75rem;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
     with st.sidebar.divider():
         show_help_button(config_name=viz_configuration_name)
 
@@ -1319,6 +1368,16 @@ def create_app(
             st.session_state.selected_geohash = selected_id
             if selected_id not in st.session_state.clicked_features:
                 st.session_state.clicked_features.append(selected_id)
+            # This sync runs after the _set_center_to_selected() check above,
+            # so a fresh page load with ?selected_lake= would otherwise render
+            # the default viewport instead of jumping to the lake.
+            try:
+                qp_lat, qp_lon = pygeohash.decode(selected_id)
+            except ValueError:
+                logger.warning(f"selected_lake query param is not a valid geohash: {selected_id}")
+            else:
+                st.session_state.map_center = {"lat": qp_lat, "lon": qp_lon}
+                st.session_state.zoom_level = 12
 
     # Initialize dataset in session state if not already.
     # The zarr handles and lake polygons are NOT loaded here: first paint only
@@ -1351,10 +1410,149 @@ def create_app(
     precomputed_counts: pd.DataFrame | None = st.session_state.precomputed_nrt_counts
     precomputed_breaks: pd.DataFrame | None = st.session_state.precomputed_nrt_breaks
 
-    # Historical drainage overlay. Hidden entirely in Near Real-Time mode,
-    # which has its own per-month drainage controls.
-    show_drained = False
-    if viz_configuration_name != "nrt_drainage":
+    # The breaks table carries a row per lake the month's run scored, not per
+    # lake that drained, so drop the rows that are not detections once, here,
+    # before anything downstream counts them, lists them, colors them or hovers
+    # them -- every consumer below reads "has a row this month" as "drained this
+    # month". Matches the filter build_pmtiles_nrt_monthly applies when baking a
+    # month's tiles, so the runtime path and the tileset path agree on what
+    # "drained" means. See drained_mask.
+    if precomputed_breaks is not None and not precomputed_breaks.empty:
+        is_drained = drained_mask(precomputed_breaks)
+        if not is_drained.all():
+            logger.info(f"Ignoring {(~is_drained).sum()} non-drained row(s) of {len(precomputed_breaks)} in NRT breaks")
+            precomputed_breaks = precomputed_breaks[is_drained]
+
+    # Monthly drainage-status overlay (NRT mode): pick a month of the most
+    # recent year in the pre-computed breaks and show that month's drained
+    # lakes. Served from the month's own tileset when one was built
+    # (``nrt_pmtiles_dir``); otherwise recolored at runtime from the per-lake
+    # dicts below via MapLibre feature-state.
+    nrt_monthly_tiles_url: str | None = None
+    nrt_monthly_has_scored: bool = False
+    nrt_confidence_by_id: dict[str, int | None] | None = None
+    nrt_tooltip_overrides: dict[str, dict] | None = None
+
+    # Historical mode's equivalent: the ~10k lakes that have a break date, in a
+    # tileset small enough to be built with no tile budget. The base archive
+    # under it has 4M lakes and is sampled to fit one, which used to take
+    # drained lakes off the map along with the rest when zoomed out.
+    historical_drained_tiles_url: str | None = None
+    if viz_configuration_name == "drainage_year" and drained_pmtiles_file:
+        from water_timeseries.map_utils import resolve_pmtiles_url
+
+        try:
+            historical_drained_tiles_url = resolve_pmtiles_url(str(drained_pmtiles_file))
+            logger.info(f"Historical drained-lakes tiles: {historical_drained_tiles_url}")
+        except (FileNotFoundError, OSError) as exc:
+            # Not fatal: without it the drained lakes come out of the base
+            # archive behind a filter, exactly as they did before.
+            logger.warning(f"Historical drained-lakes tileset unavailable ({exc}); using the base archive")
+    if (
+        viz_configuration_name == "nrt_drainage"
+        and precomputed_breaks is not None
+        and not precomputed_breaks.empty
+        and "analysis_month" in precomputed_breaks.columns
+        and "id_geohash" in precomputed_breaks.columns
+    ):
+        # Months come from the per-lake breaks table, NOT precomputed_counts:
+        # the two can cover different month sets, and a month with counts but
+        # no per-lake rows would silently color nothing.
+        available_conf_months = sorted(precomputed_breaks["analysis_month"].dropna().unique().tolist())
+        if available_conf_months:
+            latest_year = available_conf_months[-1][:4]
+            year_months = [m for m in available_conf_months if m.startswith(latest_year)]
+            month_counts = precomputed_breaks["analysis_month"].value_counts()
+
+            st.sidebar.divider()
+            st.sidebar.subheader(f"Drainage Status {latest_year}")
+            selected_conf_month = st.sidebar.radio(
+                "Month",
+                year_months,
+                index=len(year_months) - 1,
+                key="nrt_confidence_month",
+                format_func=lambda m: f"{m}  ·  {int(month_counts.get(m, 0))} drained",
+                help="Colors lakes by their drainage signal for the selected month.",
+            )
+
+            month_rows = precomputed_breaks[precomputed_breaks["analysis_month"] == selected_conf_month]
+            has_confidence = (
+                "drainage_confidence" in month_rows.columns and month_rows["drainage_confidence"].notna().any()
+            )
+
+            # Preferred path: the month has its own drained-lakes tileset, with
+            # confidence baked into the tile properties. Nothing per-lake needs
+            # to be built or shipped to the browser, so skip the dict building
+            # below entirely (it costs ~250ms/rerun at 60k lakes, and lands
+            # another ~6MB in the page for streamlit-folium to serialize).
+            nrt_monthly_tiles_url = resolve_nrt_monthly_tiles_url(nrt_pmtiles_dir, selected_conf_month)
+            if nrt_monthly_tiles_url:
+                # Read off the archive, not configured: a month built before the
+                # scored layer existed, or one with no full NRT run to build it
+                # from, simply does not have it and its non-drained lakes keep
+                # hovering the base tiles.
+                nrt_monthly_has_scored = pmtiles_has_layer(nrt_monthly_tiles_url, NRT_SCORED_LAYER)
+                logger.info(
+                    f"NRT monthly tiles for {selected_conf_month}: {nrt_monthly_tiles_url} "
+                    f"(scored layer: {nrt_monthly_has_scored})"
+                )
+
+            if not nrt_monthly_tiles_url:
+                tooltip_override_cols = [
+                    c
+                    for c in ("water_change_ha", "water_change_perc", "pre_break_median", "post_break_median")
+                    if c in month_rows.columns
+                ]
+                nrt_confidence_by_id = {}
+                nrt_tooltip_overrides = {}
+                for row in month_rows.itertuples(index=False):
+                    gid = str(row.id_geohash)
+                    conf: int | None = None
+                    if has_confidence:
+                        raw_conf = getattr(row, "drainage_confidence", None)
+                        conf = int(raw_conf) if raw_conf is not None and pd.notna(raw_conf) else None
+                    nrt_confidence_by_id[gid] = conf
+                    override: dict = {
+                        "date": selected_conf_month,
+                        "drainage_confidence": conf if conf is not None else "unknown",
+                    }
+                    for col in tooltip_override_cols:
+                        val = getattr(row, col, None)
+                        if val is not None and pd.notna(val):
+                            override[col] = float(val)
+                    nrt_tooltip_overrides[gid] = override
+
+            if not has_confidence:
+                st.sidebar.caption(
+                    "⚠️ No drainage-confidence values are available for these months; "
+                    "drained lakes are shown in grey (confidence unknown)."
+                )
+
+    hidden_nrt_categories: frozenset[str] = frozenset()
+    if viz_configuration_name == "nrt_drainage":
+        st.sidebar.caption("Show lake categories")
+        nrt_category_checkboxes = {
+            "high": st.sidebar.checkbox("High confidence", value=True, key="nrt_show_high"),
+            "medium": st.sidebar.checkbox("Medium confidence", value=True, key="nrt_show_medium"),
+            "low": st.sidebar.checkbox("Low confidence", value=True, key="nrt_show_low"),
+            "stable": st.sidebar.checkbox("Stable", value=True, key="nrt_show_stable"),
+            "no_data": st.sidebar.checkbox("No data", value=True, key="nrt_show_nodata"),
+        }
+        sync_flag_param("hide_high", not nrt_category_checkboxes["high"])
+        sync_flag_param("hide_medium", not nrt_category_checkboxes["medium"])
+        sync_flag_param("hide_low", not nrt_category_checkboxes["low"])
+        sync_flag_param("hide_stable", not nrt_category_checkboxes["stable"])
+        sync_flag_param("hide_nodata", not nrt_category_checkboxes["no_data"])
+        hidden_nrt_categories = frozenset(cat for cat, shown in nrt_category_checkboxes.items() if not shown)
+
+    # Historical drainage heatmap overlay. NRT mode drives its own month
+    # selection (see the drainage-confidence month selector above), so the
+    # historical month × year heatmap is deactivated there entirely.
+    if viz_configuration_name == "nrt_drainage":
+        show_drained = False
+        st.session_state["show_drained_toggle"] = False
+        st.query_params.pop("drained", None)
+    else:
         st.sidebar.divider()
         st.sidebar.subheader("Historical Drainage")
         st.session_state.setdefault("show_drained_toggle", default_activate_historical)
@@ -1369,7 +1567,18 @@ def create_app(
     # Jump to the drainage overview zoom only when the toggle flips on,
     # not on every rerun (would fight a restored or user-panned view).
     drained_just_enabled = show_drained and not st.session_state.get("_prev_show_drained", False)
+    drained_just_disabled = not show_drained and st.session_state.get("_prev_show_drained", False)
     st.session_state["_prev_show_drained"] = show_drained
+    # The drainage overlay is about the drained lakes, so hide the stable ones
+    # with it, then put the toggle back where the user had it once the overlay
+    # goes away. Seeded here rather than in the fragment below so each fires
+    # once on the flip -- the user can still switch stable lakes back on while
+    # the overlay is up.
+    if drained_just_enabled:
+        st.session_state["_hide_stable_before_drained"] = bool(st.session_state.get("toggle_hide_stable_lakes", False))
+        st.session_state["toggle_hide_stable_lakes"] = True
+    elif drained_just_disabled:
+        st.session_state["toggle_hide_stable_lakes"] = bool(st.session_state.pop("_hide_stable_before_drained", False))
     drained_breaks = None
     drained_label = None
 
@@ -1464,7 +1673,6 @@ def create_app(
 
         @st.fragment
         def map_viewer_section():
-
             try:
                 # st.write(f"DEBUG: fragment running, hide_stable_lakes={st.session_state.get('toggle_hide_stable_lakes')}")
                 if drained_just_enabled and drained_breaks is not None and st.session_state.selected_geohash is None:
@@ -1472,7 +1680,7 @@ def create_app(
                     overview_center = st.session_state.map_center
                     set_desired_view(overview_center["lat"], overview_center["lon"], 6)
 
-                if viz_configuration_name in ["drainage_year", "nrt_drainage"]:
+                if viz_configuration_name == "drainage_year":
                     hide_stable_lakes = st.toggle(
                         "Hide stable lakes",
                         key="toggle_hide_stable_lakes",
@@ -1493,7 +1701,13 @@ def create_app(
                     pmtiles_url=pmtiles_url,
                     logger=logger,
                     hide_stable_lakes=hide_stable_lakes,
+                    hidden_nrt_categories=hidden_nrt_categories,
                 )
+                viewer.nrt_monthly_tiles_url = nrt_monthly_tiles_url
+                viewer.nrt_monthly_has_scored = nrt_monthly_has_scored
+                viewer.historical_drained_tiles_url = historical_drained_tiles_url
+                viewer.nrt_confidence_by_id = nrt_confidence_by_id
+                viewer.nrt_tooltip_overrides = nrt_tooltip_overrides
 
                 if show_drained and drained_breaks is not None and not drained_breaks.empty:
                     drained_ids = drained_breaks.index.unique().tolist()
@@ -1575,7 +1789,6 @@ def create_app(
             st.sidebar.selectbox(
                 "Previously clicked lakes:",
                 display_options,
-                index=display_options.index(target_value),
                 label_visibility="collapsed",
                 help="Select a previously clicked lake",
                 format_func=lambda x: (
@@ -1949,23 +2162,64 @@ def create_app(
                 # ── Year selection via checkboxes ─────────────────────────────
                 year_range = list(range(2016, datetime.now(tz=UTC).year + 1))  # 2016..2026
 
-                # Quick actions
-                btn_cols = st.columns([1, 1, 4])
-                if btn_cols[0].button("Select all", key="yt_select_all"):
-                    st.session_state.update({f"yt_year_{y}": True for y in year_range})
-                if btn_cols[1].button("Clear", key="yt_clear_all"):
-                    st.session_state.update({f"yt_year_{y}": False for y in year_range})
+                
+                st.markdown(
+                    """
+                    <style>
+                    div.st-key-yt_controls div[data-testid="stHorizontalBlock"] {
+                        flex-wrap: wrap;
+                        row-gap: 0.4rem;
+                    }
+                    div.st-key-yt_controls div[data-testid="stColumn"] {
+                        flex: 0 0 auto;
+                        width: auto !important;
+                        min-width: fit-content;
+                    }
+                    </style>
+                    """,
+                    unsafe_allow_html=True,
+                )
 
-                # 5-column grid → compact, tightly packed checkboxes
-                cols = st.columns(len(year_range))
-                selected_years = []
-                for i, year in enumerate(year_range):
-                    with cols[i % len(cols)]:
-                        if st.checkbox(str(year), value=False, key=f"yt_year_{year}"):
-                            selected_years.append(year)
+                generated_key = f"yt_generated_years_{current}"
+
+                with st.container(key="yt_controls"):
+                    # Quick actions
+                    btn_cols = st.columns(3, gap="small")
+                    if btn_cols[0].button("Select all", key="yt_select_all"):
+                        st.session_state.update({f"yt_year_{y}": True for y in year_range})
+                    if btn_cols[1].button("Clear", key="yt_clear_all"):
+                        st.session_state.update({f"yt_year_{y}": False for y in year_range})
+
+                    years_selected_now = [
+                        y for y in year_range if st.session_state.get(f"yt_year_{y}", False)
+                    ]
+                    generate_clicked = btn_cols[2].button(
+                        "Generate thumbnails",
+                        key=f"yt_generate_{current}",
+                        disabled=not years_selected_now,
+                    )
+
+                    # Checkboxes reflow into as many per row as fit the width
+                    cols = st.columns(len(year_range), gap="small")
+                    selected_years = []
+                    for i, year in enumerate(year_range):
+                        with cols[i % len(cols)]:
+                            if st.checkbox(str(year), value=False, key=f"yt_year_{year}"):
+                                selected_years.append(year)
 
                 if not selected_years:
                     st.caption("Select at least one year to generate thumbnails.")
+                    return
+
+                if generate_clicked:
+                    st.session_state[generated_key] = sorted(selected_years)
+
+                generated_years = st.session_state.get(generated_key)
+                if generated_years is None:
+                    st.caption("Select your years, then click **Generate thumbnails**.")
+                    return
+                if generated_years != sorted(selected_years):
+                    st.caption("Selection changed — click **Generate thumbnails** to update.")
                     return
 
                 # ── Fixed seasonal window: May 1 – Oct 31 per year ───────────

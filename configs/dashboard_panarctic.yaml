@@ -5,6 +5,24 @@
 # on `default_mode` and the sidebar "View mode" switch reads the other entry
 # out of this same file -- so a deployment that mounts this one config (as helm
 # does at /data/dashboard-config.yaml) gets a working switcher.
+#
+# data/lake_geometry/lakes.pmtiles is the mode-agnostic base archive: geometry, the
+# id, and the area/change columns that describe the lake rather than a month or a
+# mode. Both modes cover the same lake table with the same geometry (same 4,026,306
+# ids, same polygons) and neither styles from a baked property -- the base lakes are
+# flat grey in both -- so one archive can serve both. It carries the area/change
+# columns because a stable lake is in no overlay and the base tile is the only thing
+# it can hover.
+#
+# Both modes read it below. NRT mode can now share it because each month's tileset
+# carries a `scored` layer for every lake its run predicted for, so a non-drained
+# lake hovers that month's own prediction rather than this archive's historical
+# columns. Build it with:
+#   uv run water-timeseries build-pmtiles \
+#     data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet \
+#     data/lake_geometry/lakes.pmtiles
+# Rebuild it only when the lake geometry itself changes; the per-year and
+# per-month drainage data lives in the overlays and rebuilds independently.
 
 ee_project: pdg-project-406720
 
@@ -24,23 +42,77 @@ default_mode: drainage_year
 modes:
   drainage_year:
     label: Historical
+    # Read server-side only (click -> lake id, and the geometry source when the
+    # drained overlay is rebuilt), so it stays per-mode; the browser only ever
+    # sees pmtiles_file.
     vector_file: data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet
-    pmtiles_file: data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.pmtiles
+    # Shared with nrt_drainage -- see the note at the top of this file.
+    pmtiles_file: data/lake_geometry/lakes.pmtiles
     # Historical breaks only (break_method=simple). Kept in its own directory --
     # it previously shared DW_historicalbp_simple_merged_breaks_nogeoms_v4 with
     # NRT mode, which had mixed 2026-06/07 NRT confidence rows into this file.
     precomputed_nrt_dir: data/precomputed_historical
     viz_configuration: drainage_year
+    # The ~10k lakes with a break date, every year in the one archive: a lake
+    # breaks at most once in the record (id_geohash is unique in vector_file), so
+    # unlike the NRT months there is nothing to stratify by year. Kept beside the
+    # shared base archive so the <base>_drained.pmtiles convention
+    # (historical_drained_tiles_path) finds it too, and named here as well --
+    # without one of the two, drainage_year has to filter the base archive on
+    # date_break_year, which the shared archive does not carry, and every lake
+    # comes out grey.
+    drained_pmtiles_file: data/lake_geometry/lakes_drained.pmtiles
+    # The base archive holds all 4M lakes and tippecanoe samples
+    # them to fit its tile budget, so zooming out dropped drained lakes along
+    # with the stable ones; the overlay is small enough to build with no budget
+    # at all and stays complete at every zoom, drawn over the sampled grey.
+    # Rebuild it whenever pmtiles_file is rebuilt (it takes seconds). This reads
+    # vector_file and drained_pmtiles_file straight out of this mode:
+    #   uv run water-timeseries build-drained-pmtiles --config-file <this file>
+    # Set drained_pmtiles_file: here to point somewhere else (e.g. a gs:// copy),
+    # or to a missing path to fall back to filtering the base archive.
 
   nrt_drainage:
     label: Near Real-Time
-    # Full pan-arctic geoms for the completed 2026-06 NRT run. 2026-07 only has
-    # a small local subset (no full geoms/pmtiles built yet) so it isn't wired
-    # in as the active vector/tile source -- point this at the full 2026-07 run
-    # once it's downloaded.
-    vector_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3_repartitioned.parquet
-    pmtiles_file: data/DW_NRT/DW_NRT_2026-06_run2025-06-25/DW_NRT_2026-06_run2025-06-25_allGeoms_v3.pmtiles
+    # Full pan-arctic geoms for the newest completed NRT run, 2026-07
+    # (`run2026-07-31`, published as allGeoms_v2 -- the suffix is stamped
+    # upstream and does not track the month). This is what turns a map click
+    # into a lake id, so it wants to be the newest run; the per-month tilesets
+    # carry the month's values themselves and do not depend on it.
+    vector_file: data/DW_NRT/DW_NRT_2026-07_run2026-07-31/DW_NRT_2026-07_run2026-07-31_allGeoms_v2_repartitioned.parquet
+    # Shared with drainage_year -- see the note at the top of this file. The NRT
+    # run's own geometry is identical to the historical table's, so the base
+    # archive it used to need is no longer built. Hover for a non-drained lake
+    # comes from the month's `scored` layer, not from this archive's historical
+    # columns.
+    pmtiles_file: data/lake_geometry/lakes.pmtiles
     # NRT confidence breaks only, currently 2026-06 (see the 2026-07 note above).
     # Kept out of the historical precomputed dir for the same reason.
     precomputed_nrt_dir: data/precomputed_nrt
     viz_configuration: nrt_drainage
+    # Per-month NRT tilesets. The selected month's archive is layered over
+    # pmtiles_file above, so the month's values are read from baked tile
+    # properties instead of being pushed into the browser per lake on every
+    # rerun. Each archive holds two layers: the month's drained lakes
+    # ("Drainage Status"), and every lake that month's full NRT run scored,
+    # carrying its observed-vs-predicted area, confidence interval and
+    # confidence. The second one is what a NON-drained lake hovers -- without it
+    # such a lake falls through to pmtiles_file, which is mode-agnostic and has
+    # nothing month-specific to show. Rebuild after each new NRT month with:
+    #   uv run water-timeseries build-nrt-pmtiles \
+    #     --config-file configs/dashboard_panarctic.yaml --months <YYYY-MM> \
+    #     --poly-max-zoom 12
+    # May also be an http(s):// or gs:// prefix when the tilesets are hosted.
+    # Months with no tileset fall back to the runtime feature-state path.
+    nrt_pmtiles_dir: data/nrt_tiles
+    # Where the full NRT runs live, as
+    # DW_NRT_<month>_run<date>/DW_NRT_<month>_run<date>_allGeoms_v*_repartitioned.parquet.
+    # Read by build-nrt-pmtiles (not by the dashboard) to bake the scored layer:
+    # a month with no run directory here gets the drained layer alone, which is
+    # all the data that exists for it -- only a full run predicts per lake.
+    # Both months in the breaks table have one locally (2026-06 run2025-06-25 as
+    # allGeoms_v3, 2026-07 run2026-07-31 as allGeoms_v2 -- the version is stamped
+    # upstream and does not track the month). `_subset` files in these
+    # directories are the small local extracts and are deliberately skipped, so
+    # one cannot masquerade as a month's full run.
+    nrt_run_dir: data/DW_NRT

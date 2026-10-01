@@ -82,6 +82,27 @@ def _resolve_default_nrt_dir() -> Path | None:
     return None
 
 
+def _resolve_default_nrt_tiles_dir(pmtiles_file: str | Path | None) -> Path | None:
+    """Return the first directory holding per-month NRT drainage tilesets, if any.
+
+    Looks next to the base ``.pmtiles`` archive first, then the conventional
+    repo locations, so a local run picks the tilesets up without a flag.
+    """
+    from water_timeseries.utils.io import is_remote_path
+
+    candidates = []
+    if pmtiles_file and not is_remote_path(pmtiles_file):
+        # Skipped for remote archives: Path() would mangle the ``gs://`` prefix,
+        # and a remote sibling directory can't be probed for existence here, so
+        # remote tilesets must be passed explicitly via ``--nrt-pmtiles-dir``.
+        candidates.append(Path(pmtiles_file).parent / "nrt_tiles")
+    candidates += [_REPO_ROOT / "precomputed" / "nrt_tiles", Path("data/nrt_tiles"), Path("downloads/nrt_tiles")]
+    for candidate in candidates:
+        if candidate.is_dir() and any(candidate.glob("nrt_*_drainage.pmtiles")):
+            return candidate
+    return None
+
+
 def parse_args():
     """Parse command line arguments for the dashboard."""
     parser = argparse.ArgumentParser(description="Run the Water Timeseries Dashboard")
@@ -152,10 +173,10 @@ def parse_args():
     parser.add_argument(
         "--viz-configuration",
         type=str,
-        default="colored_historical",
+        default="drainage_year",
         help=(
             "Visualization configuration name for the map viewer. "
-            "Options include 'colored_historical' (default) and 'drainage_year'. "
+            "Options are 'drainage_year' (default) and 'nrt_drainage'. "
             "This controls the styling and color scheme of the map layers."
         ),
     )
@@ -176,6 +197,30 @@ def parse_args():
         type=str,
         default=None,
         help="Dashboard config YAML. Its `modes:` block backs the sidebar view-mode switcher.",
+    )
+    parser.add_argument(
+        "--nrt-pmtiles-dir",
+        type=str,
+        default=None,
+        help=(
+            "Location of the per-month NRT drainage tilesets built by "
+            "`water-timeseries build-nrt-pmtiles` (local directory, http(s):// or gs:// prefix). "
+            "When a tileset exists for the selected month, the drainage-status overlay renders "
+            "from it instead of sending per-lake values to the browser. Auto-detected from an "
+            "`nrt_tiles` directory next to the .pmtiles file when present."
+        ),
+    )
+    parser.add_argument(
+        "--drained-pmtiles-file",
+        type=str,
+        default=None,
+        help=(
+            "Historical drained-lakes overlay tileset built by "
+            "`build_pmtiles_historical_drained`. Defaults to `<pmtiles_file>_drained.pmtiles` "
+            "beside the base archive; pass it here when the two do not sit together, as with a "
+            "base archive shared between modes. Without it drainage_year has to filter the base "
+            "archive on `date_break_year`, which a shared base archive does not carry."
+        ),
     )
     parser.add_argument(
         "--logfile",
@@ -204,6 +249,8 @@ def main(
     viz_configuration: str | None = None,
     pmtiles_file: str | Path | None = None,
     pmtiles_url: str | None = None,
+    nrt_pmtiles_dir: str | Path | None = None,
+    drained_pmtiles_file: str | Path | None = None,
     dw_start_year: int | None = None,
     dw_end_year: int | None = None,
     dw_start_month: int | None = None,
@@ -240,6 +287,8 @@ def main(
         "dw_dataset_file": dw_dataset_file,
         "jrc_dataset_file": jrc_dataset_file,
         "precomputed_nrt_dir": precomputed_nrt_dir,
+        "nrt_pmtiles_dir": nrt_pmtiles_dir,
+        "drained_pmtiles_file": drained_pmtiles_file,
         "viz_configuration": viz_configuration,
         "pmtiles_file": pmtiles_file,
         "pmtiles_url": pmtiles_url,
@@ -258,6 +307,12 @@ def main(
     dw_dataset_file = settings["dw_dataset_file"]
     jrc_dataset_file = settings["jrc_dataset_file"]
     precomputed_nrt_dir = settings["precomputed_nrt_dir"]
+    # Each mode names its own monthly tilesets: they are built from that mode's
+    # breaks and geometries, so they can't be shared across modes.
+    nrt_pmtiles_dir = settings["nrt_pmtiles_dir"]
+    # Historical drained-lakes overlay: complete at every zoom, unlike the
+    # sampled base archive underneath it (see build_pmtiles_historical_drained).
+    drained_pmtiles_file = settings["drained_pmtiles_file"]
     viz_configuration = settings["viz_configuration"]
     pmtiles_file = settings["pmtiles_file"]
     pmtiles_url = settings["pmtiles_url"]
@@ -314,10 +369,37 @@ def main(
         precomputed_nrt_dir = _resolve_default_nrt_dir()
 
     if viz_configuration is None:
-        viz_configuration = "colored_historical"
+        viz_configuration = "drainage_year"
 
     if pmtiles_url == "":
         pmtiles_url = None
+
+    if not nrt_pmtiles_dir:
+        nrt_pmtiles_dir = _resolve_default_nrt_tiles_dir(pmtiles_file)
+    if nrt_pmtiles_dir:
+        logger.info(f"NRT monthly drainage tilesets: {nrt_pmtiles_dir}")
+    if not drained_pmtiles_file and pmtiles_file:
+        # By convention it sits next to the base archive, so a rebuilt pair is
+        # picked up with no config change (same idea as the NRT tiles dir above).
+        from water_timeseries.utils.pmtiles_build import historical_drained_tiles_path
+
+        candidate = historical_drained_tiles_path(pmtiles_file)
+        if candidate.is_file():
+            drained_pmtiles_file = candidate
+        elif viz_configuration == "drainage_year":
+            # Without the overlay, drainage_year falls back to filtering the base
+            # archive on `date_break_year` -- which a base archive shared between
+            # modes does not carry, so nothing matches and every lake renders as
+            # a stable grey dot under a "Drainage Year" legend. Say so: the map
+            # still draws, so nothing else here would report it.
+            logger.warning(
+                f"No historical drained-lakes tileset at {candidate}, and none named by "
+                "drained_pmtiles_file. Drained lakes can only be coloured from that overlay when "
+                "the base archive carries geometry alone -- set drained_pmtiles_file, or build the "
+                "overlay beside the base archive (build_pmtiles_historical_drained)."
+            )
+    if drained_pmtiles_file:
+        logger.info(f"Historical drained-lakes tileset: {drained_pmtiles_file}")
 
     create_app(
         data_path=vector_file,
@@ -335,6 +417,8 @@ def main(
         pmtiles_url=pmtiles_url,
         modes=modes,
         active_mode=active_mode,
+        nrt_pmtiles_dir=nrt_pmtiles_dir,
+        drained_pmtiles_file=drained_pmtiles_file,
     )
 
 
@@ -355,6 +439,8 @@ if __name__ == "__main__":
         pmtiles_file=args.pmtiles_file,
         pmtiles_url=args.pmtiles_url,
         config_file=args.config_file,
+        nrt_pmtiles_dir=args.nrt_pmtiles_dir,
+        drained_pmtiles_file=args.drained_pmtiles_file,
         logfile=args.logfile,
         verbose=args.verbose,
     )
