@@ -204,7 +204,7 @@ Read what a finished archive claims about itself:
 ```python
 from water_timeseries.utils.pmtiles_reader import read_pmtiles_header, read_pmtiles_metadata
 
-read_pmtiles_header("data/lake_geometry/lakes.pmtiles")   # zoom range, bounds, tile count
+read_pmtiles_header("data/lake_geometry/lakes.pmtiles")  # zoom range, bounds, tile count
 read_pmtiles_metadata("data/lake_geometry/lakes.pmtiles")  # vector_layers, tilestats, strategies
 ```
 

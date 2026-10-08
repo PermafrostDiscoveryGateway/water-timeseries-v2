@@ -845,7 +845,7 @@ def build_pmtiles_map(
             # See CENTROID_RING_COLOR. The ring tracks the fill's opacity so a
             # deliberately muted dot does not come back as a hard outline.
             "circle-stroke-color": CENTROID_RING_COLOR,
-            "circle-stroke-opacity": 1, #circle_opacity,
+            "circle-stroke-opacity": 1,  # circle_opacity,
             "circle-stroke-width": DRAINED_POINT_STROKE_WIDTH if stable_style else BASE_POINT_STROKE_WIDTH,
         },
     }
@@ -940,7 +940,7 @@ def build_pmtiles_map(
                     "filter": STABLE_LAKE_FILTER,
                     "paint": {
                         "circle-color": stable_fill,
-                        "circle-opacity": circle_opacity,#0.5,#["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
+                        "circle-opacity": circle_opacity,  # 0.5,#["^", stable_opacity, CENTROID_OPACITY_EXPONENT],
                         "circle-radius": BASE_POINT_RADIUS,
                         "circle-stroke-color": CENTROID_RING_COLOR,
                         "circle-stroke-opacity": ["^", stable_opacity, CENTROID_OPACITY_EXPONENT],

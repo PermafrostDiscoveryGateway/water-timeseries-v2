@@ -91,14 +91,11 @@ geohash = dataset.object_ids_[0]
 # Static matplotlib plot
 fig = dataset.plot_timeseries(
     id_geohash=geohash,
-    breakpoints=None  # Optional: see breakpoints section below
+    breakpoints=None,  # Optional: see breakpoints section below
 )
 
 # Interactive Plotly plot (returns go.Figure)
-fig_interactive = dataset.plot_timeseries_interactive(
-    id_geohash=geohash,
-    breakpoints=None
-)
+fig_interactive = dataset.plot_timeseries_interactive(id_geohash=geohash, breakpoints=None)
 ```
 
 ### JRCDataset.plot_timeseries() / plot_timeseries_interactive()
@@ -115,15 +112,10 @@ dataset = JRCDataset(ds)
 geohash = dataset.object_ids_[0]
 
 # Static matplotlib plot
-fig = dataset.plot_timeseries(
-    id_geohash=geohash,
-    breakpoints=None
-)
+fig = dataset.plot_timeseries(id_geohash=geohash, breakpoints=None)
 
 # Interactive Plotly plot
-fig_interactive = dataset.plot_timeseries_interactive(
-    id_geohash=geohash
-)
+fig_interactive = dataset.plot_timeseries_interactive(id_geohash=geohash)
 ```
 
 ### Parameters
@@ -161,14 +153,11 @@ bp = SimpleBreakpoint()
 # Static plot with breakpoint
 fig = dataset.plot_timeseries(
     id_geohash=geohash,
-    breakpoints=bp  # Pass the BreakpointMethod, not the result!
+    breakpoints=bp,  # Pass the BreakpointMethod, not the result!
 )
 
 # Interactive plot with breakpoint
-fig_interactive = dataset.plot_timeseries_interactive(
-    id_geohash=geohash,
-    breakpoints=bp
-)
+fig_interactive = dataset.plot_timeseries_interactive(id_geohash=geohash, breakpoints=bp)
 ```
 
 ### With Specific Date
@@ -177,23 +166,15 @@ Alternatively, you can pass a specific date or list of dates:
 
 ```python
 # Single date (string)
-fig = dataset.plot_timeseries(
-    id_geohash=geohash,
-    breakpoints="2023-06-15"
-)
+fig = dataset.plot_timeseries(id_geohash=geohash, breakpoints="2023-06-15")
 
 # Single date (pd.Timestamp)
 import pandas as pd
-fig = dataset.plot_timeseries(
-    id_geohash=geohash,
-    breakpoints=pd.Timestamp("2023-06-15")
-)
+
+fig = dataset.plot_timeseries(id_geohash=geohash, breakpoints=pd.Timestamp("2023-06-15"))
 
 # List of dates (only first is used)
-fig = dataset.plot_timeseries(
-    id_geohash=geohash,
-    breakpoints=["2023-06-15", "2020-09-01"]
-)
+fig = dataset.plot_timeseries(id_geohash=geohash, breakpoints=["2023-06-15", "2020-09-01"])
 ```
 
 ### With Custom plot_variables
@@ -202,16 +183,10 @@ You can customize which variables are displayed using the `plot_variables` param
 
 ```python
 # DWDataset: plot only water and bare (exclude vegetation and snow_and_ice)
-fig = dataset.plot_timeseries_interactive(
-    id_geohash=geohash,
-    plot_variables=["water", "bare"]
-)
+fig = dataset.plot_timeseries_interactive(id_geohash=geohash, plot_variables=["water", "bare"])
 
 # JRCDataset: plot only permanent water
-fig = dataset.plot_timeseries_interactive(
-    id_geohash=geohash,
-    plot_variables=["area_water_permanent"]
-)
+fig = dataset.plot_timeseries_interactive(id_geohash=geohash, plot_variables=["area_water_permanent"])
 ```
 
 ### Visual Output

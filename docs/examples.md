@@ -172,13 +172,13 @@ from water_timeseries.dataset import DWDataset
 import xarray as xr
 
 # Load a small test dataset
-xr_ds = xr.open_zarr('tests/data/lakes_dw_test.zarr')
+xr_ds = xr.open_zarr("tests/data/lakes_dw_test.zarr")
 # Wrap in the dataset class
 ds = DWDataset(xr_ds)
 
 # Simple method – one lake
 simple = SimpleBreakpoint()
-print(simple.calculate_break(ds, 'b7uefy0bvcrc'))
+print(simple.calculate_break(ds, "b7uefy0bvcrc"))
 
 # Beast method – batch processing
 beast = BeastBreakpoint()
@@ -347,6 +347,7 @@ fig = ds.plot_timeseries(geohash, breakpoints="2023-06-15")
 
 # Single date (pd.Timestamp)
 import pandas as pd
+
 fig = ds.plot_timeseries(geohash, breakpoints=pd.Timestamp("2023-06-15"))
 
 # List of dates (only first date is used)
@@ -446,8 +447,5 @@ from water_timeseries.dashboard.map_viewer import create_app
 create_app()
 
 # Custom paths
-create_app(
-    data_path="/path/to/lakes.parquet",
-    zarr_path="/path/to/timeseries.zarr"
-)
+create_app(data_path="/path/to/lakes.parquet", zarr_path="/path/to/timeseries.zarr")
 ```

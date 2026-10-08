@@ -38,10 +38,7 @@ def _build_gdf(n: int = N_ROWS) -> gpd.GeoDataFrame:
     n = len(ids)
     lons = np_rng.uniform(-165, -140, n)
     lats = np_rng.uniform(60, 70, n)
-    geoms = [
-        Polygon([(x, y), (x + 0.001, y), (x + 0.001, y + 0.001), (x, y + 0.001)])
-        for x, y in zip(lons, lats)
-    ]
+    geoms = [Polygon([(x, y), (x + 0.001, y), (x + 0.001, y + 0.001), (x, y + 0.001)]) for x, y in zip(lons, lats)]
     gdf = gpd.GeoDataFrame(
         {
             "id_geohash": ids,

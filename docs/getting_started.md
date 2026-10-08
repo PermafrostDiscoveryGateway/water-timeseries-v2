@@ -612,10 +612,7 @@ Or programmatically with Python:
 from water_timeseries.dashboard.map_viewer import create_app
 
 # Create dashboard with custom paths
-create_app(
-    data_path="/path/to/your/lakes.parquet",
-    zarr_path="/path/to/your/data.zarr"
-)
+create_app(data_path="/path/to/your/lakes.parquet", zarr_path="/path/to/your/data.zarr")
 ```
 
 ### Running Tests
