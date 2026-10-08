@@ -644,7 +644,7 @@ def merge_nrt_confidence(
         raise SystemExit(1)
 
     gcs_prefix = config_dict.get("gcs_prefix") or "pdg-storage-default/workflows_optimization/dashboard_nrt"
-    drain_threshold = float(config_dict.get("drain_threshold", -0.25))
+    drain_threshold = float(config_dict.get("drain_threshold", None))
 
     merge_nrt_confidence_file(
         breaks_file,
@@ -1067,7 +1067,7 @@ def breakpoint_analysis_nrt(
     output_file: Path | None = None,
     output_dir: Path | None = None,
     no_resume: bool = False,
-    drain_threshold: float = -0.25,
+    drain_threshold: float | None = None,
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,

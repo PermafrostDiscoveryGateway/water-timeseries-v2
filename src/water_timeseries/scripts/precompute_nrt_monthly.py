@@ -160,7 +160,7 @@ def precompute_nrt_monthly(
     dataset_file: str | Path,
     output_file: str | Path,
     analysis_date: str,
-    drain_threshold: float = -0.25,
+    drain_threshold: float | None = None,
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
@@ -276,7 +276,10 @@ def precompute_nrt_monthly(
         drained_df = pd.DataFrame()
         drained_count = 0
     else:
-        drained_df = month_breaks.query("water_residual < @drain_threshold").copy()
+        if drain_threshold is not None:
+            drained_df = month_breaks.query("water_residual < @drain_threshold").copy()
+        else:
+            drained_df = month_breaks.copy()
         drained_count = len(drained_df)
 
     if drained_count > 0:

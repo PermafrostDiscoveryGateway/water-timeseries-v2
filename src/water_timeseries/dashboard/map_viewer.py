@@ -1089,7 +1089,12 @@ def _load_precomputed_nrt(
                 breaks_df = breaks_df.reset_index()
 
             if "analysis_month" in breaks_df.columns:
-                counts_df = breaks_df.groupby("analysis_month").size().reset_index(name="drained_lake_count")
+                counts_df = (
+                    breaks_df.query("drainage_confidence > 0")
+                    .groupby("analysis_month")
+                    .size()
+                    .reset_index(name="drained_lake_count")
+                )
 
             return counts_df, breaks_df
         except Exception as e:  # noqa: BLE001
@@ -2162,7 +2167,6 @@ def create_app(
                 # ── Year selection via checkboxes ─────────────────────────────
                 year_range = list(range(2016, datetime.now(tz=UTC).year + 1))  # 2016..2026
 
-                
                 st.markdown(
                     """
                     <style>
@@ -2190,9 +2194,7 @@ def create_app(
                     if btn_cols[1].button("Clear", key="yt_clear_all"):
                         st.session_state.update({f"yt_year_{y}": False for y in year_range})
 
-                    years_selected_now = [
-                        y for y in year_range if st.session_state.get(f"yt_year_{y}", False)
-                    ]
+                    years_selected_now = [y for y in year_range if st.session_state.get(f"yt_year_{y}", False)]
                     generate_clicked = btn_cols[2].button(
                         "Generate thumbnails",
                         key=f"yt_generate_{current}",

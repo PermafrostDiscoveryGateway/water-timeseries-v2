@@ -57,8 +57,8 @@ def main() -> None:
 
     om, rm = pq.read_metadata(orig), pq.read_metadata(repart)
     print("\n--- File layout ---")
-    print(f"ORIGINAL      : {om.num_rows:,} rows, {om.num_row_groups} row groups, {orig.stat().st_size/1e9:.2f} GB")
-    print(f"REPARTITIONED : {rm.num_rows:,} rows, {rm.num_row_groups} row groups, {repart.stat().st_size/1e9:.2f} GB")
+    print(f"ORIGINAL      : {om.num_rows:,} rows, {om.num_row_groups} row groups, {orig.stat().st_size / 1e9:.2f} GB")
+    print(f"REPARTITIONED : {rm.num_rows:,} rows, {rm.num_row_groups} row groups, {repart.stat().st_size / 1e9:.2f} GB")
 
     ids = pq.read_table(repart, columns=["id_geohash"]).column("id_geohash").to_pylist()
     rng = random.Random(args.seed)
@@ -71,9 +71,9 @@ def main() -> None:
     print(f"ORIGINAL      : {np.mean([x[0] for x in o]):.1f} / {om.num_row_groups}")
     print(f"REPARTITIONED : {np.mean([x[0] for x in r]):.2f} / {rm.num_row_groups}")
     print("\n--- Bytes fetched / read (drives cold-read latency) ---")
-    print(f"ORIGINAL      : {o_b/1e6:,.1f} MB")
-    print(f"REPARTITIONED : {r_b/1e6:,.3f} MB")
-    print(f"REDUCTION     : {o_b/r_b:,.0f}x fewer bytes per lake read")
+    print(f"ORIGINAL      : {o_b / 1e6:,.1f} MB")
+    print(f"REPARTITIONED : {r_b / 1e6:,.3f} MB")
+    print(f"REDUCTION     : {o_b / r_b:,.0f}x fewer bytes per lake read")
 
     print("\n--- Wall-clock (warm) ---")
     n_o = min(5, args.n)
@@ -85,9 +85,9 @@ def main() -> None:
     for i in sample:
         gpd.read_parquet(repart, filters=[("id_geohash", "==", i)])
     r_t = (time.perf_counter() - t0) / len(sample)
-    print(f"ORIGINAL      : {o_t*1000:,.0f} ms/read (avg of {n_o})")
-    print(f"REPARTITIONED : {r_t*1000:,.1f} ms/read (avg of {len(sample)})")
-    print(f"SPEEDUP       : {o_t/r_t:,.0f}x")
+    print(f"ORIGINAL      : {o_t * 1000:,.0f} ms/read (avg of {n_o})")
+    print(f"REPARTITIONED : {r_t * 1000:,.1f} ms/read (avg of {len(sample)})")
+    print(f"SPEEDUP       : {o_t / r_t:,.0f}x")
 
 
 if __name__ == "__main__":
