@@ -160,7 +160,7 @@ def precompute_nrt_monthly(
     dataset_file: str | Path,
     output_file: str | Path,
     analysis_date: str,
-    drain_threshold: float = None,
+    drain_threshold: float | None = None,
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,

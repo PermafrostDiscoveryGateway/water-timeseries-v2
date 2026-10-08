@@ -1067,7 +1067,7 @@ def breakpoint_analysis_nrt(
     output_file: Path | None = None,
     output_dir: Path | None = None,
     no_resume: bool = False,
-    drain_threshold: float = None,
+    drain_threshold: float | None = None,
     data_aggregation_period: str = "all",
     lake_chunk_size: int = 5000,
     n_jobs: int = 4,
