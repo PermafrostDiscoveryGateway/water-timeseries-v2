@@ -25,12 +25,20 @@ from water_timeseries.utils.earthengine import (
     call_with_retry,
     create_dw_classes_mask,
     drop_z_from_gdf,
+    dw_acquisitions,
+    month_slices,
+    season_windows,
     setup_annual_dates,
     setup_dates_from_options,
     setup_monthly_dates,
 )
 from water_timeseries.utils.io import load_vector_dataset, save_xarray_dataset
 from water_timeseries.utils.spatial import chunk_gdf_simple, chunk_gdf_spatial_kmeans, filter_gdf_by_bbox
+
+# Typical number of Dynamic World acquisitions per month in an Arctic May-Sep season
+# (measured: 42 acquisitions over the 2022 season on Alaska test lakes). Used only to size
+# download chunks and to log the projected volume before the first Earth Engine call.
+EST_ACQUISITIONS_PER_MONTH = 7
 
 # Re-export for backward compatibility
 __all__ = [
@@ -359,6 +367,69 @@ class EarthEngineDownloader:
         # Return DataFrame with multi-index
         return df_out  # .set_index([name_attribute, "date"])
 
+    def _polygon_areas_ha(self, gdf, name_attribute: str = "id_geohash") -> dict:
+        """Geodesic polygon areas in hectares, keyed by ``name_attribute``.
+
+        EPSG:6933 is an equal-area projection; measuring in a conformal or stereographic
+        projection instead (e.g. EPSG:3995) inflates area by roughly 3 % at Arctic
+        latitudes, which would make any small max_nodata tolerance reject every observation.
+
+        Args:
+            gdf: GeoDataFrame with one row per polygon.
+            name_attribute: Column holding the polygon identifier.
+
+        Returns:
+            dict: ``{id: area_ha}``.
+        """
+        areas_ha = gdf.to_crs(6933).geometry.area / 1e4
+        if areas_ha.isna().any():
+            self._log_warning(f"{int(areas_ha.isna().sum())} polygon(s) have no valid geometry; their coverage is undefined")
+        return dict(zip(gdf[name_attribute].values, areas_ha.values, strict=True))
+
+    def _extract_acquisitions(
+        self,
+        windows: list[tuple[str, str]],
+        gdf_chunk,
+        name_attribute: str,
+        scale: float = 10,
+    ) -> pd.DataFrame:
+        """Extract per-acquisition class areas for one chunk over several date windows.
+
+        Processes one calendar month per Earth Engine request, so no single request carries
+        a whole season of images.
+
+        Args:
+            windows: List of ``(start, end)`` date-range pairs; the end is exclusive.
+            gdf_chunk: GeoDataFrame chunk to extract data for.
+            name_attribute: Column name used as the feature index.
+            scale: Pixel scale in meters.
+
+        Returns:
+            pd.DataFrame: One row per (polygon, acquisition); empty if nothing was found.
+        """
+        fc, reducer_dict = self._setup_gee_reducer(gdf_chunk, name_attribute, scale=scale)
+
+        frames = []
+        for window_start, window_end in windows:
+            for slice_start, slice_end in month_slices(window_start, window_end):
+                collection = dw_acquisitions(fc, slice_start, slice_end, scale=scale)
+                n_images = call_with_retry(collection.size().getInfo)
+                if n_images == 0:
+                    self._log_info(f"No Dynamic World acquisitions between {slice_start} and {slice_end}")
+                    continue
+                self._log_info(f"{slice_start}..{slice_end}: {n_images} acquisitions")
+
+                image_collection = collection.map(create_dw_classes_mask)
+                fc_out = image_collection.getTimeSeriesByRegions(**reducer_dict)
+                df = call_with_retry(geemap.ee_to_df, fc_out)
+                if df is None or df.empty:
+                    continue
+                frames.append(df)
+
+        if not frames:
+            return pd.DataFrame()
+        return pd.concat(frames, ignore_index=True)
+
     def _extract_jrc_time_series(
         self, gdf_chunk, name_attribute: str, years: list[int], scale: float = 30
     ) -> pd.DataFrame:
@@ -630,6 +701,248 @@ class EarthEngineDownloader:
         # Save to file if requested
         if save_to_file is not None:
             # Determine output_dir for relative paths
+            save_path = Path(save_to_file).absolute()
+            save_xarray_dataset(ds=ds, save_path=save_path, logger=self.logger)
+
+        return ds
+
+    def download_dw_daily(
+        self,
+        vector_dataset: str | Path | None = None,
+        gdf: gpd.GeoDataFrame | None = None,
+        name_attribute: str = "id_geohash",
+        years: list[int] | None = None,
+        start_date: str = "05-01",
+        end_date: str = "09-30",
+        max_nodata: float = 0.02,
+        bbox_west: float = -180,
+        bbox_east: float = 180,
+        bbox_north: float = 90,
+        bbox_south: float = -90,
+        id_list: list | None = None,
+        scale: float = 10,
+        max_total_requests: int = 500,
+        n_parallel: int = 1,
+        chunk_method: str = "simple",
+        no_download: bool = False,
+        save_to_file: str | None = None,
+    ) -> xr.Dataset:
+        """Download Dynamic World land cover areas per acquisition (unaggregated).
+
+        Returns one row per Dynamic World acquisition (Sentinel-2 overpass) inside a
+        recurring within-year window, instead of the monthly mode composite produced by
+        ``download_dw_monthly``. This is **not** a gap-filled daily series: only dates with
+        an actually classified acquisition appear, so missing dates are cloud/coverage gaps.
+
+        Observations are masked when more than ``max_nodata`` of the polygon has no data,
+        and acquisitions with no classified pixels at all are dropped (a fully masked image
+        means "no observation", not "zero water area").
+
+        The result has the same variables and dimension names as the monthly product, so it
+        can be handed to :class:`water_timeseries.dataset.DWDataset` and its plotting methods
+        unchanged. Note that with ``mask_data=False`` snow-covered acquisitions keep their
+        ``water = 0`` values; the default ``DWDataset`` masking removes them.
+
+        Either provide `vector_dataset` OR `gdf`. These options are mutually exclusive.
+
+        Args:
+            vector_dataset: Path to the input vector dataset (Parquet format).
+            gdf: Optional GeoDataFrame to use directly instead of loading from a path.
+            name_attribute: Column name in the vector dataset to use for grouping.
+            years: Years to process. Default: 2016 up to the current year.
+            start_date: Within-year window start as ``'MM-DD'``, inclusive (default: '05-01').
+            end_date: Within-year window end as ``'MM-DD'``, inclusive (default: '09-30').
+            max_nodata: Mask an observation when more than this fraction of the polygon has
+                no data (default: 0.02, i.e. 2 %). Use 1.0 to keep everything.
+            bbox_west: Western boundary for spatial filtering (default: -180).
+            bbox_east: Eastern boundary for spatial filtering (default: 180).
+            bbox_north: Northern boundary for spatial filtering (default: 90).
+            bbox_south: Southern boundary for spatial filtering (default: -90).
+            id_list: Optional list of IDs to filter by (values from name_attribute column).
+            scale: Pixel scale in meters (default: 10).
+            max_total_requests: Maximum number of (feature, acquisition) requests per chunk.
+            n_parallel: Number of parallel workers for processing chunks (default: 1).
+            chunk_method: Method for chunking the data: "simple" or "spatial_kmeans".
+            no_download: If True, only log the download parameters without downloading.
+            save_to_file: Optional path to save the dataset ('.zarr' or '.nc').
+
+        Returns:
+            xr.Dataset: Class areas in hectares indexed by (name_attribute, date), with
+                ``date`` on the acquisition day.
+
+        Raises:
+            ValueError: If both or neither of vector_dataset/gdf is given, if max_nodata is
+                outside 0..1, or if the season window is malformed.
+            KeyError: If name_attribute is not present in the vector dataset.
+            NoDynamicWorldDataError: If Earth Engine returned no usable observation, or every
+                observation was masked by the no-data tolerance.
+            ee.EEException, requests.exceptions.RequestException, ...: If an Earth Engine or
+                network request fails after retrying transient errors.
+
+        Example:
+            >>> downloader = EarthEngineDownloader()
+            >>> ds = downloader.download_dw_daily(
+            ...     vector_dataset="tests/data/lake_polygons.parquet",
+            ...     years=[2022, 2023],
+            ...     start_date="05-01",
+            ...     end_date="09-30",
+            ...     max_nodata=0.02,
+            ... )
+        """
+        # check mutually exclusive vector_dataset versus gdf
+        if vector_dataset is None and gdf is None:
+            raise ValueError("Either vector_dataset or gdf must be provided")
+        elif vector_dataset is not None and gdf is not None:
+            raise ValueError("Only one of vector_dataset or gdf should be provided, not both")
+
+        if not 0 <= max_nodata <= 1:
+            raise ValueError(
+                f"max_nodata must be between 0 and 1 (share of the polygon allowed to be no-data), got {max_nodata}"
+            )
+
+        if no_download:
+            self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
+
+        years = self._validate_years_dw(years)
+        windows = season_windows(years, start_date=start_date, end_date=end_date)
+        if not windows:
+            raise ValueError("No valid years to download - check the years argument.")
+
+        # Read vector data using the reusable function
+        if vector_dataset is not None:
+            self._log_info(f"Loading vector dataset from: {vector_dataset}")
+            gdf = load_vector_dataset(vector_dataset, logger=self.logger)
+        else:
+            gdf = gdf.copy()
+
+        if name_attribute not in gdf.columns:
+            raise KeyError(f"The designated column '{name_attribute}' is not present in the vector dataset.")
+
+        self._log_info(f"Initial dataset has {len(gdf)} features")
+        gdf = self._apply_id_filter(gdf, id_list, name_attribute)
+
+        if bbox_west > bbox_east or bbox_south > bbox_north:
+            raise ValueError(
+                f"Invalid bbox parameters: west={bbox_west}, east={bbox_east}, south={bbox_south}, north={bbox_north}. "
+                "Ensure that west <= east and south <= north."
+            )
+
+        if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]) and not (
+            bbox_west == -180 and bbox_east == 180 and bbox_north == 90 and bbox_south == -90
+        ):
+            n_before_bbox_filter = len(gdf)
+            self._log_info(
+                f"Applying bbox filter: west={bbox_west}, south={bbox_south}, east={bbox_east}, north={bbox_north}"
+            )
+            gdf = filter_gdf_by_bbox(
+                gdf,
+                bbox_west=bbox_west,
+                bbox_south=bbox_south,
+                bbox_east=bbox_east,
+                bbox_north=bbox_north,
+            )
+            self._log_info(
+                f"After bbox filter: {len(gdf)} features (removed {n_before_bbox_filter - len(gdf)})"
+            )
+        else:
+            self._log_info("No spatial bbox filtering applied (using default global bounds)")
+
+        n_features = len(gdf)
+        self._log_info(f"Processing {n_features} features")
+
+        months_per_season = len(month_slices(windows[0][0], windows[0][1]))
+        est_acquisitions = max(1, len(windows) * months_per_season * EST_ACQUISITIONS_PER_MONTH)
+        self._log_info(
+            f"Season window {start_date}..{end_date} for {len(windows)} year(s); "
+            f"~{est_acquisitions} acquisitions per polygon (estimate), "
+            f"~{n_features * est_acquisitions} (polygon, acquisition) requests"
+        )
+
+        areas = self._polygon_areas_ha(gdf, name_attribute)
+        gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=est_acquisitions, chunk_method=chunk_method)
+
+        if no_download:
+            self._log_info(f"Would process {len(gdf)} features with {len(gdf_chunks)} chunks")
+            self._log_info("=== END NO DOWNLOAD MODE ===")
+            return None
+
+        n_parallel_effective = min(n_parallel, len(gdf_chunks))
+        self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
+
+        df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
+            joblib.delayed(self._extract_acquisitions)(
+                windows=windows, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
+            )
+            for chunk in tqdm(gdf_chunks, desc="Downloading DW acquisitions", unit="chunk")
+        )
+        df_out_list = [df for df in df_out_list if df is not None and not df.empty]
+
+        if not df_out_list:
+            raise NoDynamicWorldDataError(
+                f"No data was extracted from any chunk: Earth Engine returned no Dynamic World data "
+                f"for any of the {len(gdf_chunks)} chunks and {est_acquisitions} requested acquisitions."
+            )
+
+        df = pd.concat(df_out_list, ignore_index=True)
+        df["date"] = pd.to_datetime(df["date"]).dt.normalize()
+        df = df.drop(columns=["reducer"], errors="ignore")
+
+        # Coverage per observation, relative to the polygon's own area.
+        # skipna=False keeps a partially-NaN row NaN so it is dropped below instead of
+        # being mistaken for a genuine zero-area observation.
+        df["area_data"] = df[dw_bandnames].sum(axis=1, skipna=False)
+        df["area_ha"] = df[name_attribute].map(areas)
+        df["coverage"] = (df["area_data"] / df["area_ha"]).clip(upper=1.0)
+
+        n_rows = len(df)
+        df = df[df["area_data"] > 0]
+        if n_rows - len(df):
+            self._log_info(
+                f"Dropped {n_rows - len(df)} acquisition(s) with no classified pixels "
+                "(no observation, not a zero water area)"
+            )
+
+        n_rows = len(df)
+        df = df.sort_values("coverage").drop_duplicates([name_attribute, "date"], keep="last")
+        if n_rows - len(df):
+            self._log_info(
+                f"Collapsed {n_rows - len(df)} duplicate (polygon, date) pair(s), keeping the higher-coverage acquisition"
+            )
+
+        n_rows = len(df)
+        df = df[df["coverage"] >= 1 - max_nodata]
+        self._log_info(f"Masked {n_rows - len(df)} acquisition(s) with more than {max_nodata:.1%} no-data")
+
+        if df.empty:
+            raise NoDynamicWorldDataError(
+                "No data was extracted: every acquisition was fully masked or exceeded the "
+                f"max_nodata tolerance of {max_nodata:.1%}."
+            )
+
+        ds = (
+            df.drop(columns=["area_data", "area_ha", "coverage"])
+            .set_index([name_attribute, "date"])
+            .to_xarray()
+        )
+        ds["date"] = pd.to_datetime(ds["date"])
+
+        per_polygon = ds["water"].notnull().sum("date").to_pandas()
+        self._log_info(
+            f"Download complete: {len(ds.coords[name_attribute])} polygons, "
+            f"{len(ds.coords['date'])} acquisitions, {int(ds['water'].notnull().sum())} observations "
+            f"(per polygon: min {int(per_polygon.min())}, median {per_polygon.median():.0f}, max {int(per_polygon.max())})"
+        )
+        if float(per_polygon.median()) < 5:
+            self._log_warning(
+                "Median observations per polygon is below 5 - that is a cloud/coverage limit, not a download failure"
+            )
+
+        ds = annotate_xr_dataset_dw(ds, input_vector_file=vector_dataset, temporal_resolution="per_acquisition")
+        ds.attrs["season_window"] = f"{start_date}..{end_date}"
+        ds.attrs["max_nodata"] = float(max_nodata)
+        ds.attrs["n_acquisitions"] = len(ds.coords["date"])
+
+        if save_to_file is not None:
             save_path = Path(save_to_file).absolute()
             save_xarray_dataset(ds=ds, save_path=save_path, logger=self.logger)
 

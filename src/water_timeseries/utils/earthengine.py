@@ -654,6 +654,139 @@ def setup_dates_from_options(
         return setup_monthly_dates(years=years, months=months)
 
 
+def _parse_mmdd(value: str, name: str) -> pd.Timestamp:
+    """Parse a ``MM-DD`` season-window bound, rejecting anything year-bound.
+
+    Args:
+        value: The bound, e.g. ``"05-01"``.
+        name: Parameter name, used in error messages.
+
+    Returns:
+        The bound as a 2000-anchored Timestamp (only month/day are meaningful).
+
+    Raises:
+        ValueError: If the value is not a valid ``MM-DD`` string.
+    """
+    text = str(value).strip()
+    if len(text) != 5 or text[2] != "-":
+        raise ValueError(
+            f"{name} must be a within-year window bound in 'MM-DD' format (e.g. '05-01'), got {value!r}. "
+            "Provide 'MM-DD' rather than a full date so the same window applies to every year."
+        )
+    try:
+        return pd.Timestamp(f"2000-{text}")
+    except ValueError as exc:
+        raise ValueError(f"{name} is not a valid 'MM-DD' date: {value!r}") from exc
+
+
+def season_windows(
+    years: list[int],
+    start_date: str = "05-01",
+    end_date: str = "09-30",
+) -> list[tuple[str, str]]:
+    """Build one start/end date-range pair per year from a recurring ``MM-DD`` window.
+
+    The end bound is inclusive for the caller, so it is advanced by one day here because
+    ``ee.ImageCollection.filterDate`` is exclusive of its end date.
+
+    Args:
+        years: Years to build windows for (e.g. ``[2017, 2018]``).
+        start_date: Within-year start as ``'MM-DD'``, inclusive (default: ``'05-01'``).
+        end_date: Within-year end as ``'MM-DD'``, inclusive (default: ``'09-30'``).
+
+    Returns:
+        List of ``(start, end)`` ``'YYYY-MM-DD'`` pairs, one per year.
+
+    Raises:
+        ValueError: On a malformed ``'MM-DD'`` bound, or a window that would wrap past the
+            new year (start later in the year than end).
+
+    Example:
+        >>> season_windows([2017], "06-01", "09-15")
+        [('2017-06-01', '2017-09-16')]
+    """
+    _parse_mmdd(start_date, "start_date")
+    end = _parse_mmdd(end_date, "end_date")
+    if end < _parse_mmdd(start_date, "start_date"):
+        raise ValueError(
+            f"Season window {start_date}..{end_date} would wrap past the new year. "
+            "Provide a start_date earlier in the year than end_date."
+        )
+
+    windows = []
+    for year in years:
+        inclusive_end = pd.Timestamp(f"{year}-{end_date}")
+        windows.append((f"{year}-{start_date}", (inclusive_end + pd.Timedelta(days=1)).strftime("%Y-%m-%d")))
+    return windows
+
+
+def month_slices(window_start: str, window_end: str) -> list[tuple[str, str]]:
+    """Split a half-open date range into calendar-month slices, clamped to the range.
+
+    Each slice becomes one Earth Engine request, which bounds the number of images per
+    ``getTimeSeriesByRegions`` call to a single month of acquisitions.
+
+    Args:
+        window_start: Inclusive start, ``'YYYY-MM-DD'``.
+        window_end: Exclusive end, ``'YYYY-MM-DD'``.
+
+    Returns:
+        List of ``(slice_start, slice_end)`` pairs covering ``[window_start, window_end)``.
+
+    Example:
+        >>> month_slices("2017-05-01", "2017-07-01")
+        [('2017-05-01', '2017-06-01'), ('2017-06-01', '2017-07-01')]
+    """
+    start = pd.Timestamp(window_start)
+    end = pd.Timestamp(window_end)
+    if end <= start:
+        raise ValueError(f"window_end ({window_end}) must be after window_start ({window_start})")
+
+    slices = []
+    cursor = start
+    while cursor < end:
+        month_end = pd.Timestamp(year=cursor.year, month=cursor.month, day=1) + pd.DateOffset(months=1)
+        slice_end = min(month_end, end)
+        slices.append((cursor.strftime("%Y-%m-%d"), slice_end.strftime("%Y-%m-%d")))
+        cursor = slice_end
+    return slices
+
+
+def dw_acquisitions(
+    polygons: ee.FeatureCollection,
+    start_date: str,
+    end_date: str,
+    crs: str = "EPSG:3572",
+    scale: float = 10,
+) -> ee.ImageCollection:
+    """Every Dynamic World acquisition in a date range, without temporal compositing.
+
+    Unlike :func:`calc_monthly_dw`, the collection is not reduced with ``Reducer.mode()``:
+    one image is returned per Sentinel-2 overpass, so downstream class areas describe a
+    single acquisition rather than a monthly composite. Each image keeps its own
+    ``system:time_start``, which becomes the ``date`` value of the extracted series.
+
+    The label band is renamed to ``label_mode`` because :func:`create_dw_classes_mask`
+    expects the band name produced by the mode reducer.
+
+    Args:
+        polygons: Region of interest, used to filter the collection.
+        start_date: Start date ``'YYYY-MM-DD'`` (inclusive).
+        end_date: End date ``'YYYY-MM-DD'`` (exclusive).
+        crs: Coordinate reference system for the default projection (default: EPSG:3572).
+        scale: Pixel scale in meters (default: 10).
+
+    Returns:
+        ee.ImageCollection: Single-band (``label_mode``) images, one per acquisition.
+    """
+    collection = (
+        ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1").filterBounds(polygons).filterDate(start_date, end_date)
+    )
+    return collection.map(
+        lambda image: image.select("label").rename("label_mode").setDefaultProjection(crs=crs, scale=scale)
+    )
+
+
 def setup_annual_dates(years: list[int] | None = None, date_list: list[str] | None = None) -> list[str]:
     """Generate a list of annual dates from the given years or date_list.
 
