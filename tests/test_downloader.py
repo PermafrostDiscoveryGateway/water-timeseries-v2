@@ -15,7 +15,14 @@ import pytest
 import requests
 
 from water_timeseries.downloader import EarthEngineDownloader, setup_annual_dates, setup_dates_from_options
-from water_timeseries.utils.earthengine import NoDynamicWorldDataError, calc_monthly_dw, call_with_retry
+from water_timeseries.utils.data import dw_bandnames, dw_coverage_stats
+from water_timeseries.utils.earthengine import (
+    NoDynamicWorldDataError,
+    calc_monthly_dw,
+    call_with_retry,
+    month_slices,
+    season_windows,
+)
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
 
 # Path to test data
@@ -515,6 +522,212 @@ class TestNoDataVersusError:
         downloader._extract_time_series = mock.Mock(side_effect=ee.EEException("User memory limit exceeded."))
         with pytest.raises(ee.EEException):
             downloader.download_dw_monthly(gdf=gdf, name_attribute="id_geohash", date_list=["2024-06-01"])
+
+
+class TestSeasonWindows:
+    """Pure date-window derivation for the per-acquisition downloader (no Earth Engine)."""
+
+    def test_default_window_bumps_end_by_one_day(self):
+        """filterDate is exclusive, so an inclusive 09-30 end must become Oct 1."""
+        assert season_windows([2017, 2018]) == [("2017-05-01", "2017-10-01"), ("2018-05-01", "2018-10-01")]
+
+    def test_custom_window(self):
+        assert season_windows([2019], start_date="06-15", end_date="09-01") == [("2019-06-15", "2019-09-02")]
+
+    def test_single_day_window(self):
+        assert season_windows([2019], start_date="07-01", end_date="07-01") == [("2019-07-01", "2019-07-02")]
+
+    def test_full_iso_date_rejected(self):
+        with pytest.raises(ValueError, match="MM-DD"):
+            season_windows([2019], start_date="2019-05-01", end_date="09-30")
+
+    def test_wrapping_window_rejected(self):
+        with pytest.raises(ValueError, match="wrap"):
+            season_windows([2019], start_date="09-30", end_date="05-01")
+
+    def test_month_slices_full_season(self):
+        assert month_slices("2017-05-01", "2017-10-01") == [
+            ("2017-05-01", "2017-06-01"),
+            ("2017-06-01", "2017-07-01"),
+            ("2017-07-01", "2017-08-01"),
+            ("2017-08-01", "2017-09-01"),
+            ("2017-09-01", "2017-10-01"),
+        ]
+
+    def test_month_slices_clamp_partial_months(self):
+        assert month_slices("2017-05-15", "2017-07-10") == [
+            ("2017-05-15", "2017-06-01"),
+            ("2017-06-01", "2017-07-01"),
+            ("2017-07-01", "2017-07-10"),
+        ]
+
+
+LAKE_AREA_HA = 10.0
+
+
+def _acq_frame(entries) -> pd.DataFrame:
+    """Build a frame shaped like ``geemap.ee_to_df`` output.
+
+    ``entries`` is a list of ``(id_geohash, date, coverage)``; class areas are sized so that
+    their sum equals ``coverage * LAKE_AREA_HA``, which is what coverage is computed from.
+    """
+    rows = []
+    for lake, day, coverage in entries:
+        rec = {"id_geohash": lake, "date": pd.Timestamp(day)}
+        for var in dw_bandnames:
+            rec[var] = 0.0
+        rec["water"] = LAKE_AREA_HA * coverage * 0.5
+        rec["bare"] = LAKE_AREA_HA * coverage * 0.5
+        rows.append(rec)
+    return pd.DataFrame(rows)
+
+
+class TestDwDaily:
+    """Per-acquisition downloader: mocked Earth Engine, no network."""
+
+    @pytest.fixture
+    def downloader(self):
+        from shapely.geometry import box
+
+        dl = EarthEngineDownloader(ee_project="test-project", ee_auth=False)
+        dl._polygon_areas_ha = mock.Mock(return_value={"lakeA": LAKE_AREA_HA, "lakeB": LAKE_AREA_HA})
+        dl.gdf = gpd.GeoDataFrame(
+            {"id_geohash": ["lakeA", "lakeB"]},
+            geometry=[box(0, 0, 0.01, 0.01), box(0.02, 0, 0.03, 0.01)],
+            crs="EPSG:4326",
+        )
+        return dl
+
+    def test_both_inputs_raises(self, downloader):
+        with pytest.raises(ValueError, match="Only one of vector_dataset or gdf should be provided"):
+            downloader.download_dw_daily(vector_dataset=VECTOR_DATASET, gdf=downloader.gdf, years=[2020])
+
+    def test_no_input_raises(self, downloader):
+        with pytest.raises(ValueError, match="Either vector_dataset or gdf must be provided"):
+            downloader.download_dw_daily(years=[2020])
+
+    def test_missing_name_attribute_raises(self, downloader):
+        with pytest.raises(KeyError, match="not present in the vector dataset"):
+            downloader.download_dw_daily(gdf=downloader.gdf, name_attribute="nope", years=[2020])
+
+    def test_no_download_returns_none_without_querying_ee(self, downloader):
+        with mock.patch(
+            "water_timeseries.downloader.dw_acquisitions", side_effect=AssertionError("must not query EE")
+        ):
+            result = downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], no_download=True)
+        assert result is None
+
+    def test_empty_acquisitions_raises_no_data(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(return_value=pd.DataFrame())
+        with pytest.raises(NoDynamicWorldDataError, match="No data was extracted"):
+            downloader.download_dw_daily(gdf=downloader.gdf, years=[2020])
+
+    def test_connection_error_propagates(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(
+            side_effect=requests.exceptions.ConnectionError("network down")
+        )
+        with pytest.raises(requests.exceptions.ConnectionError):
+            downloader.download_dw_daily(gdf=downloader.gdf, years=[2020])
+
+    def test_output_schema_and_attrs(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=_acq_frame([("lakeA", "2020-06-05", 1.0), ("lakeA", "2020-07-05", 1.0)])
+        )
+        ds = downloader.download_dw_daily(gdf=downloader.gdf, years=[2020])
+        assert set(ds.data_vars) == set(dw_bandnames)
+        assert list(ds.dims) == ["id_geohash", "date"]
+        assert ds.attrs["temporal_resolution"] == "per_acquisition"
+        assert ds.attrs["season_window"] == "05-01..09-30"
+        assert ds.attrs["max_nodata"] == pytest.approx(0.02)
+
+    def test_zero_coverage_rows_are_dropped_not_written_as_zero(self, downloader):
+        """A fully masked acquisition is 'no observation', never '0 ha of water'."""
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=_acq_frame(
+                [("lakeA", "2020-06-05", 0.0), ("lakeA", "2020-07-05", 1.0), ("lakeB", "2020-07-05", 1.0)]
+            )
+        )
+        ds = downloader.download_dw_daily(gdf=downloader.gdf, years=[2020])
+        assert ds["water"].sel(id_geohash="lakeA").notnull().sum() == 1
+        assert float(ds["water"].min()) > 0
+
+    def test_duplicate_day_keeps_higher_coverage(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=_acq_frame([("lakeA", "2020-06-05", 0.90), ("lakeA", "2020-06-05", 1.0)])
+        )
+        ds = downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], max_nodata=0.5)
+        assert ds.sizes["date"] == 1
+        assert float(ds["water"].max()) == pytest.approx(LAKE_AREA_HA * 0.5)  # the full-coverage row
+
+    def test_max_nodata_filters_observations(self, downloader):
+        frame = _acq_frame(
+            [("lakeA", "2020-06-05", 0.90), ("lakeA", "2020-07-05", 1.0), ("lakeA", "2020-08-05", 0.99)]
+        )
+        downloader._extract_acquisitions = mock.Mock(return_value=frame)
+        strict = downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], max_nodata=0.02)
+        loose = downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], max_nodata=0.20)
+        assert strict.sizes["date"] == 2  # 1.0 and 0.99 (>= 98 %) kept, 0.90 dropped
+        assert loose.sizes["date"] == 3
+
+    def test_all_rows_filtered_raises_no_data(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(return_value=_acq_frame([("lakeA", "2020-06-05", 0.5)]))
+        with pytest.raises(NoDynamicWorldDataError, match="No data was extracted"):
+            downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], max_nodata=0.02)
+
+    def test_invalid_max_nodata_raises(self, downloader):
+        with pytest.raises(ValueError, match="max_nodata"):
+            downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], max_nodata=1.5)
+
+    def test_result_wraps_in_dwdateset_and_plots(self, downloader):
+        """The downloaded object must drop straight into DWDataset and its plotter."""
+        from water_timeseries.dataset import DWDataset
+
+        entries = [(lake, day, 1.0) for lake in ("lakeA", "lakeB") for day in pd.date_range("2020-06-01", "2020-09-01", freq="7D")]
+        downloader._extract_acquisitions = mock.Mock(return_value=_acq_frame(entries))
+        ds = downloader.download_dw_daily(gdf=downloader.gdf, years=[2020])
+
+        dataset = DWDataset(ds)
+        assert dataset.object_ids_ == ["lakeA", "lakeB"]
+        fig = dataset.plot_timeseries("lakeA")
+        assert fig is not None
+
+
+class TestDwCoverageStats:
+    """Per-polygon coverage summary derived from an existing dataset (no geometry)."""
+
+    @pytest.fixture
+    def ds(self):
+        import numpy as np
+        import xarray as xr
+
+        dates = pd.to_datetime(["2020-06-01", "2020-07-01", "2020-08-01"])
+        data = {var: (("id_geohash", "date"), np.zeros((2, 3))) for var in dw_bandnames}
+        ds = xr.Dataset(data, coords={"id_geohash": ["a", "b"], "date": dates})
+        ds["water"] = (("id_geohash", "date"), [[1.0, 2.0, np.nan], [2.0, 2.0, 2.0]])
+        return ds
+
+    def test_per_lake_stats(self, ds):
+        stats = dw_coverage_stats(ds)
+        assert list(stats.index) == ["a", "b"]
+        assert stats.loc["a", "n_obs"] == 2
+        assert stats.loc["a", "coverage_median"] == pytest.approx(0.75)
+        assert stats.loc["a", "first_date"] == pd.Timestamp("2020-06-01")
+        assert stats.loc["a", "last_date"] == pd.Timestamp("2020-07-01")
+        assert stats.loc["b", "n_obs"] == 3
+        assert stats.loc["b", "coverage_median"] == pytest.approx(1.0)
+        assert stats.loc["b", "last_date"] == pd.Timestamp("2020-08-01")
+
+    def test_all_nan_lake_reported_as_no_observations(self):
+        import numpy as np
+        import xarray as xr
+
+        dates = pd.to_datetime(["2020-06-01", "2020-07-01"])
+        data = {var: (("id_geohash", "date"), np.zeros((1, 2))) for var in dw_bandnames}
+        ds = xr.Dataset(data, coords={"id_geohash": ["empty"], "date": dates})
+        ds["water"] = (("id_geohash", "date"), [[np.nan, np.nan]])
+        stats = dw_coverage_stats(ds)
+        assert stats.loc["empty", "n_obs"] == 0
+        assert pd.isna(stats.loc["empty", "coverage_median"])
 
 
 # Run tests
