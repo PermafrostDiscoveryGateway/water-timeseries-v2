@@ -1,4 +1,4 @@
-"# Downloader Module
+# Downloader Module
 
 ::: water_timeseries.downloader
     options:
