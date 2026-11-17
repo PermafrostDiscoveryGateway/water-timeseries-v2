@@ -204,6 +204,37 @@ def dw_coverage_stats(ds: xr.Dataset) -> pd.DataFrame:
     return stats
 
 
+def detect_temporal_resolution(ds: xr.Dataset) -> str:
+    """Return ``'monthly'`` or ``'per_acquisition'`` for a Dynamic World style dataset.
+
+    The downloader records the answer, so it is read rather than guessed:
+    ``download_dw_monthly`` writes ``temporal_resolution='monthly'`` and
+    ``download_dw_daily`` writes ``'per_acquisition'``. Datasets produced elsewhere fall
+    back to the calendar: dates that all land on the 1st and are at least ~25 days apart
+    are treated as monthly composites.
+
+    Args:
+        ds: Dataset with a ``date`` coordinate.
+
+    Returns:
+        str: ``'monthly'`` or ``'per_acquisition'``.
+    """
+    declared = ds.attrs.get("temporal_resolution")
+    if declared in ("monthly", "per_acquisition"):
+        return declared
+
+    if "date" not in ds.coords:
+        return "monthly"
+
+    dates = pd.DatetimeIndex(pd.to_datetime(ds["date"].values))
+    on_month_start = bool((dates.day == 1).all())
+    if len(dates) < 2:
+        return "monthly" if on_month_start else "per_acquisition"
+
+    median_gap_days = float(pd.Series(dates).diff().dt.days.median())
+    return "monthly" if on_month_start and median_gap_days >= 25 else "per_acquisition"
+
+
 def find_data_gaps(dataset: xr.Dataset, variable: str = "water", id_geohash_subset=None):
     """
     Identifies lakes with significant data gaps.

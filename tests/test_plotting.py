@@ -1,6 +1,7 @@
 """Tests for plotting functionality."""
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import plotly.graph_objects as go
 
 from water_timeseries.breakpoint import SimpleBreakpoint
@@ -182,3 +183,76 @@ class TestJRCDatasetPlotting:
         fig = ds.plot_timeseries_interactive(geohash, breakpoints=bp)
         assert fig is not None
         assert isinstance(fig, go.Figure)
+
+
+class TestTemporalResolutionDetection:
+    """Hover date format must follow the dataset's temporal resolution."""
+
+    def _dw(self, dates, attrs=None):
+        import numpy as np
+        import xarray as xr
+
+        from water_timeseries.utils.data import dw_bandnames
+
+        data = {var: (("id_geohash", "date"), np.full((1, len(dates)), 1.0)) for var in dw_bandnames}
+        ds = xr.Dataset(data, coords={"id_geohash": ["lake"], "date": pd.to_datetime(dates)})
+        if attrs:
+            ds.attrs.update(attrs)
+        return ds
+
+    def test_declared_attribute_wins(self):
+        """The downloader's attribute is trusted over the calendar."""
+        from water_timeseries.utils.data import detect_temporal_resolution
+
+        monthly = self._dw(["2020-06-01", "2020-07-01"], {"temporal_resolution": "monthly"})
+        daily = self._dw(["2020-06-05", "2020-06-11"], {"temporal_resolution": "per_acquisition"})
+        assert detect_temporal_resolution(monthly) == "monthly"
+        assert detect_temporal_resolution(daily) == "per_acquisition"
+
+    def test_falls_back_to_calendar_without_attribute(self):
+        from water_timeseries.utils.data import detect_temporal_resolution
+
+        assert detect_temporal_resolution(self._dw(["2020-06-01", "2020-07-01"])) == "monthly"
+        assert detect_temporal_resolution(self._dw(["2020-06-05", "2020-06-11"])) == "per_acquisition"
+
+    def test_attribute_overrides_a_daily_calendar(self):
+        """A daily series that happens to land on month starts stays per-acquisition."""
+        from water_timeseries.utils.data import detect_temporal_resolution
+
+        ds = self._dw(["2020-06-01", "2020-07-01"], {"temporal_resolution": "per_acquisition"})
+        assert detect_temporal_resolution(ds) == "per_acquisition"
+
+    def test_plot_hover_uses_full_date_for_per_acquisition(self):
+        ds = DWDataset(
+            self._dw(
+                ["2020-06-05", "2020-06-11", "2020-07-02"],
+                {"temporal_resolution": "per_acquisition"},
+            )
+        )
+        fig = ds.plot_timeseries_interactive("lake")
+        assert fig.layout.xaxis.hoverformat == "%Y-%m-%d"
+
+    def test_plot_hover_uses_month_for_monthly(self):
+        ds = DWDataset(
+            self._dw(["2020-06-01", "2020-07-01", "2020-08-01"], {"temporal_resolution": "monthly"})
+        )
+        fig = ds.plot_timeseries_interactive("lake")
+        assert fig.layout.xaxis.hoverformat == "%Y-%m"
+
+    def test_plotter_accepts_the_format_parameter(self):
+        """The plotter itself must honour the new argument, not only the dataset wrapper."""
+        import pandas as pd
+        import plotly.graph_objects as go
+
+        from water_timeseries.utils.plotting_dynamic import plot_water_time_series_dw_interactive
+
+        frame = pd.DataFrame(
+            {
+                "date": pd.to_datetime(["2020-06-05", "2020-06-11"]),
+                "variable": ["water", "water"],
+                "value": [1.0, 2.0],
+            }
+        )
+        fig = plot_water_time_series_dw_interactive(frame, hover_date_format="%d.%m.%Y")
+        assert isinstance(fig, go.Figure)
+        assert fig.layout.xaxis.hoverformat == "%d.%m.%Y"
