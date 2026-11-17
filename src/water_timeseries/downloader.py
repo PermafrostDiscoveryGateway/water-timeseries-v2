@@ -27,10 +27,12 @@ from water_timeseries.utils.earthengine import (
     drop_z_from_gdf,
     dw_acquisitions,
     month_slices,
+    month_windows,
     season_windows,
     setup_annual_dates,
     setup_dates_from_options,
     setup_monthly_dates,
+    windows_from_date_list,
 )
 from water_timeseries.utils.io import load_vector_dataset, save_xarray_dataset
 from water_timeseries.utils.spatial import chunk_gdf_simple, chunk_gdf_spatial_kmeans, filter_gdf_by_bbox
@@ -712,8 +714,10 @@ class EarthEngineDownloader:
         gdf: gpd.GeoDataFrame | None = None,
         name_attribute: str = "id_geohash",
         years: list[int] | None = None,
-        start_date: str = "05-01",
-        end_date: str = "09-30",
+        months: list[int] | None = None,
+        date_list: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
         max_nodata: float = 0.02,
         bbox_west: float = -180,
         bbox_east: float = 180,
@@ -729,10 +733,16 @@ class EarthEngineDownloader:
     ) -> xr.Dataset:
         """Download Dynamic World land cover areas per acquisition (unaggregated).
 
-        Returns one row per Dynamic World acquisition (Sentinel-2 overpass) inside a
-        recurring within-year window, instead of the monthly mode composite produced by
+        Returns one row per Dynamic World acquisition (Sentinel-2 overpass) inside the selected
+        date windows, instead of the monthly mode composite produced by
         ``download_dw_monthly``. This is **not** a gap-filled daily series: only dates with
         an actually classified acquisition appear, so missing dates are cloud/coverage gaps.
+
+        The date selection accepts the same ``months`` / ``date_list`` arguments as
+        ``download_dw_monthly``, so that call can be pointed at per-acquisition data by
+        changing the method name only. Alternatively give a recurring within-year window with
+        ``start_date`` / ``end_date`` (``MM-DD``), which is the only option for an arbitrary
+        period such as "01-05 to 15-09".
 
         Observations are masked when more than ``max_nodata`` of the polygon has no data,
         and acquisitions with no classified pixels at all are dropped (a fully masked image
@@ -750,7 +760,14 @@ class EarthEngineDownloader:
             gdf: Optional GeoDataFrame to use directly instead of loading from a path.
             name_attribute: Column name in the vector dataset to use for grouping.
             years: Years to process. Default: 2016 up to the current year.
-            start_date: Within-year window start as ``'MM-DD'``, inclusive (default: '05-01').
+            months: Month numbers (1-12) to download, like ``download_dw_monthly``. Each month
+                becomes its own window, so ``[6, 7, 8, 9]`` means June through September.
+                Mutually exclusive with ``date_list`` and with ``start_date``/``end_date``.
+            date_list: Month strings in ``'YYYY-MM'`` format (e.g. ``['2020-06']``), like
+                ``download_dw_monthly``. Mutually exclusive with ``months``.
+            start_date: Within-year window start as ``'MM-DD'``, inclusive (default: '05-01'
+                when neither ``months`` nor ``date_list`` is given). Mutually exclusive with
+                ``months`` / ``date_list``.
             end_date: Within-year window end as ``'MM-DD'``, inclusive (default: '09-30').
             max_nodata: Mask an observation when more than this fraction of the polygon has
                 no data (default: 0.02, i.e. 2 %). Use 1.0 to keep everything.
@@ -804,9 +821,31 @@ class EarthEngineDownloader:
             self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
 
         years = self._validate_years_dw(years)
-        windows = season_windows(years, start_date=start_date, end_date=end_date)
+
+        # Date selection: monthly-style (months / date_list) or a within-year MM-DD window.
+        # The monthly-style arguments exist so a download_dw_monthly call can be pointed at
+        # per-acquisition data by changing the method name only.
+        if months is not None and date_list is not None:
+            raise ValueError("Provide either 'months' or 'date_list', not both.")
+        if (months is not None or date_list is not None) and (start_date is not None or end_date is not None):
+            raise ValueError(
+                "Provide either 'months'/'date_list' or 'start_date'/'end_date', not both - "
+                "they select the same thing in two different ways."
+            )
+        if date_list is not None:
+            windows = windows_from_date_list(date_list)
+            window_label = f"date_list({len(date_list)} month(s))"
+        elif months is not None:
+            windows = month_windows(years, months)
+            window_label = "months(" + ",".join(str(int(m)) for m in months) + ")"
+        else:
+            start_date = start_date or "05-01"
+            end_date = end_date or "09-30"
+            windows = season_windows(years, start_date=start_date, end_date=end_date)
+            window_label = f"{start_date}..{end_date}"
+
         if not windows:
-            raise ValueError("No valid years to download - check the years argument.")
+            raise ValueError("No valid date windows to download - check years, months and date_list.")
 
         # Read vector data using the reusable function
         if vector_dataset is not None:
@@ -850,10 +889,10 @@ class EarthEngineDownloader:
         n_features = len(gdf)
         self._log_info(f"Processing {n_features} features")
 
-        months_per_season = len(month_slices(windows[0][0], windows[0][1]))
-        est_total_acquisitions = max(1, len(windows) * months_per_season * EST_ACQUISITIONS_PER_MONTH)
+        n_month_slices = sum(len(month_slices(start, end)) for start, end in windows)
+        est_total_acquisitions = max(1, n_month_slices * EST_ACQUISITIONS_PER_MONTH)
         self._log_info(
-            f"Season window {start_date}..{end_date} for {len(windows)} year(s); "
+            f"Date selection {window_label}: {len(years)} year(s), {len(windows)} window(s); "
             f"~{est_total_acquisitions} acquisitions per polygon (estimate), "
             f"~{n_features * est_total_acquisitions} (polygon, acquisition) requests"
         )
@@ -943,7 +982,7 @@ class EarthEngineDownloader:
             )
 
         ds = annotate_xr_dataset_dw(ds, input_vector_file=vector_dataset, temporal_resolution="per_acquisition")
-        ds.attrs["season_window"] = f"{start_date}..{end_date}"
+        ds.attrs["season_window"] = window_label
         ds.attrs["max_nodata"] = float(max_nodata)
         ds.attrs["n_acquisitions"] = len(ds.coords["date"])
 

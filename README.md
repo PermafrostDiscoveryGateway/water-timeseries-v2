@@ -228,6 +228,16 @@ An observation is masked when more than `max_nodata` of the polygon has no data,
 fully masked acquisitions are dropped entirely - "no observation" is not the same thing
 as a zero water area. Pass `max_nodata=1.0` to keep every acquisition.
 
+`months` and `date_list` behave exactly as in `download_dw_monthly`, so an existing monthly
+call can be pointed at per-acquisition data by changing the method name only:
+
+```python
+ds = dl.download_dw_daily(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    years=[2024], months=[6, 7, 8, 9],  # same arguments as download_dw_monthly
+)
+```
+
 The result carries the same variables and dimension names as the monthly product, so
 `DWDataset` and its plotting methods work unchanged:
 

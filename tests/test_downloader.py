@@ -26,7 +26,9 @@ from water_timeseries.utils.earthengine import (
     calc_monthly_dw,
     call_with_retry,
     month_slices,
+    month_windows,
     season_windows,
+    windows_from_date_list,
 )
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
 
@@ -566,6 +568,34 @@ class TestSeasonWindows:
             ("2017-07-01", "2017-07-10"),
         ]
 
+    def test_month_windows_contiguous(self):
+        assert month_windows([2020], [6, 7]) == [("2020-06-01", "2020-07-01"), ("2020-07-01", "2020-08-01")]
+
+    def test_month_windows_non_contiguous_stays_separate(self):
+        """[6, 9] must not become one span that silently includes July and August."""
+        assert month_windows([2020], [6, 9]) == [("2020-06-01", "2020-07-01"), ("2020-09-01", "2020-10-01")]
+
+    def test_month_windows_multiple_years(self):
+        assert month_windows([2019, 2020], [9]) == [("2019-09-01", "2019-10-01"), ("2020-09-01", "2020-10-01")]
+
+    def test_month_windows_rejects_out_of_range_month(self):
+        with pytest.raises(ValueError, match="between 1 and 12"):
+            month_windows([2020], [0])
+
+    def test_month_windows_rejects_empty(self):
+        with pytest.raises(ValueError, match="non-empty"):
+            month_windows([2020], [])
+
+    def test_windows_from_date_list(self):
+        assert windows_from_date_list(["2020-06", "2020-08"]) == [
+            ("2020-06-01", "2020-07-01"),
+            ("2020-08-01", "2020-09-01"),
+        ]
+
+    def test_windows_from_date_list_rejects_full_date(self):
+        with pytest.raises(ValueError, match="YYYY-MM"):
+            windows_from_date_list(["2020-06-15"])
+
 
 LAKE_AREA_HA = 10.0
 
@@ -682,6 +712,34 @@ class TestDwDaily:
     def test_invalid_max_nodata_raises(self, downloader):
         with pytest.raises(ValueError, match="max_nodata"):
             downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], max_nodata=1.5)
+
+    def test_months_argument_mirrors_monthly_call(self, downloader):
+        """A download_dw_monthly call must work by changing the method name only."""
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=_acq_frame([("lakeA", "2020-06-05", 1.0)])
+        )
+        ds = downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], months=[6, 7, 8, 9])
+        windows = downloader._extract_acquisitions.call_args.kwargs["windows"]
+        assert windows[0] == ("2020-06-01", "2020-07-01")
+        assert len(windows) == 4
+        assert ds.attrs["season_window"] == "months(6,7,8,9)"
+
+    def test_date_list_argument_mirrors_monthly_call(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=_acq_frame([("lakeA", "2020-06-05", 1.0)])
+        )
+        ds = downloader.download_dw_daily(gdf=downloader.gdf, date_list=["2020-06", "2020-08"])
+        windows = downloader._extract_acquisitions.call_args.kwargs["windows"]
+        assert windows == [("2020-06-01", "2020-07-01"), ("2020-08-01", "2020-09-01")]
+        assert ds.attrs["season_window"].startswith("date_list")
+
+    def test_months_and_window_are_mutually_exclusive(self, downloader):
+        with pytest.raises(ValueError, match="not both"):
+            downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], months=[6], start_date="06-01")
+
+    def test_months_and_date_list_are_mutually_exclusive(self, downloader):
+        with pytest.raises(ValueError, match="not both"):
+            downloader.download_dw_daily(gdf=downloader.gdf, months=[6], date_list=["2020-06"])
 
     def test_chunk_sizing_uses_one_month_of_images(self, downloader):
         """Chunks must be sized by one reduce call's worth of images, not the whole request.

@@ -720,6 +720,89 @@ def season_windows(
     return windows
 
 
+def _validate_months(months) -> list[int]:
+    """Validate a month list for :func:`month_windows` and the downloader's ``months`` arg.
+
+    Args:
+        months: Iterable of month numbers.
+
+    Returns:
+        List[int]: The validated month numbers.
+
+    Raises:
+        ValueError: If the list is empty or contains anything but integers 1-12.
+    """
+    if months is None or len(months) == 0:
+        raise ValueError("months must be a non-empty list of month numbers (1-12)")
+    cleaned = []
+    for month in months:
+        if not isinstance(month, (int, np.integer)) or not 1 <= int(month) <= 12:
+            raise ValueError(f"months must contain integers between 1 and 12, got {month!r}")
+        cleaned.append(int(month))
+    return cleaned
+
+
+def month_windows(years: list[int], months: list[int]) -> list[tuple[str, str]]:
+    """Build one end-exclusive month window per (year, month) pair.
+
+    Mirrors the ``months`` argument of ``download_dw_monthly`` so a monthly-style call can be
+    pointed at per-acquisition data by changing the method name only. A non-contiguous month
+    list yields separate windows rather than one span, which would pull in the months between.
+
+    Args:
+        years: Years to build windows for.
+        months: Month numbers (1-12).
+
+    Returns:
+        List of ``(start, end)`` ``'YYYY-MM-DD'`` pairs; the end is exclusive.
+
+    Raises:
+        ValueError: If ``months`` is empty or contains a value outside 1-12.
+
+    Example:
+        >>> month_windows([2020], [6, 9])
+        [('2020-06-01', '2020-07-01'), ('2020-09-01', '2020-10-01')]
+    """
+    cleaned = _validate_months(months)
+    windows = []
+    for year in years:
+        for month in cleaned:
+            start = pd.Timestamp(f"{year}-{month:02d}-01")
+            windows.append((start.strftime("%Y-%m-%d"), (start + pd.DateOffset(months=1)).strftime("%Y-%m-%d")))
+    return windows
+
+
+def windows_from_date_list(date_list: list[str]) -> list[tuple[str, str]]:
+    """Build one end-exclusive month window per ``'YYYY-MM'`` entry.
+
+    Mirrors the ``date_list`` argument of ``download_dw_monthly``.
+
+    Args:
+        date_list: Month strings in ``'YYYY-MM'`` format (e.g. ``['2020-06']``).
+
+    Returns:
+        List of ``(start, end)`` ``'YYYY-MM-DD'`` pairs; the end is exclusive.
+
+    Raises:
+        ValueError: If an entry is not a valid ``'YYYY-MM'`` month.
+
+    Example:
+        >>> windows_from_date_list(["2020-06"])
+        [('2020-06-01', '2020-07-01')]
+    """
+    windows = []
+    for entry in date_list:
+        text = str(entry).strip()
+        if len(text) != 7 or text[4] != "-":
+            raise ValueError(f"date_list entries must be 'YYYY-MM' (e.g. '2020-06'), got {entry!r}")
+        try:
+            start = pd.Timestamp(f"{text}-01")
+        except ValueError as exc:
+            raise ValueError(f"date_list entry is not a valid month: {entry!r}") from exc
+        windows.append((start.strftime("%Y-%m-%d"), (start + pd.DateOffset(months=1)).strftime("%Y-%m-%d")))
+    return windows
+
+
 def month_slices(window_start: str, window_end: str) -> list[tuple[str, str]]:
     """Split a half-open date range into calendar-month slices, clamped to the range.
 
