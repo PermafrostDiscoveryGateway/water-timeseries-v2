@@ -920,12 +920,22 @@ class EarthEngineDownloader:
             gdf, max_total_requests, n_dates=EST_ACQUISITIONS_PER_MONTH, chunk_method=chunk_method
         )
 
+        n_parallel_effective = min(n_parallel, len(gdf_chunks))
+        if n_parallel_effective < n_parallel:
+            target_chunks = max(1, n_parallel * 2)
+            target_features = -(-n_features // target_chunks)  # ceil division
+            suggested_budget = max(1, target_features * EST_ACQUISITIONS_PER_MONTH)
+            self._log_warning(
+                f"Only {len(gdf_chunks)} chunk(s) for {n_parallel} workers, so "
+                f"{n_parallel - n_parallel_effective} will idle. max_total_requests={suggested_budget} "
+                f"would split these {n_features} features into about {target_chunks} chunks."
+            )
+
         if no_download:
             self._log_info(f"Would process {len(gdf)} features with {len(gdf_chunks)} chunks")
             self._log_info("=== END NO DOWNLOAD MODE ===")
             return None
 
-        n_parallel_effective = min(n_parallel, len(gdf_chunks))
         self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
 
         df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(

@@ -754,6 +754,53 @@ class TestDwDaily:
             downloader.download_dw_daily(gdf=downloader.gdf, years=[2019, 2020, 2021])
         assert spy.call_args.kwargs["n_dates"] == EST_ACQUISITIONS_PER_MONTH
 
+    def test_warns_when_workers_exceed_chunks(self, downloader):
+        """Asking for more workers than chunks must say so, with the number to fix it."""
+
+        class Recorder:
+            def __init__(self):
+                self.warnings = []
+
+            def info(self, message):
+                pass
+
+            def warning(self, message):
+                self.warnings.append(message)
+
+            def error(self, message):
+                pass
+
+        downloader.logger = Recorder()
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=_acq_frame([("lakeA", "2020-06-05", 1.0)])
+        )
+        downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], n_parallel=6)
+
+        assert any("will idle" in message for message in downloader.logger.warnings), downloader.logger.warnings
+        assert any("max_total_requests=" in message for message in downloader.logger.warnings)
+
+    def test_no_warning_when_workers_fit_chunks(self, downloader):
+        class Recorder:
+            def __init__(self):
+                self.warnings = []
+
+            def info(self, message):
+                pass
+
+            def warning(self, message):
+                self.warnings.append(message)
+
+            def error(self, message):
+                pass
+
+        downloader.logger = Recorder()
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=_acq_frame([("lakeA", "2020-06-05", 1.0)])
+        )
+        downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], n_parallel=1)
+
+        assert not any("will idle" in message for message in downloader.logger.warnings)
+
     def test_result_wraps_in_dwdateset_and_plots(self, downloader):
         """The downloaded object must drop straight into DWDataset and its plotter."""
         from water_timeseries.dataset import DWDataset
