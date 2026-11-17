@@ -796,6 +796,19 @@ class EarthEngineDownloader:
             ee.EEException, requests.exceptions.RequestException, ...: If an Earth Engine or
                 network request fails after retrying transient errors.
 
+        Performance:
+            Chunks are the unit of parallelism: ``n_parallel`` workers can only run as many
+            chunks at once, so provide more chunks than workers. ``max_total_requests`` sets
+            the chunk size (features x one month of images); lowering it produces more,
+            smaller chunks. Measured on 118 lakes, 11 seasons, 05-01..09-30: defaults
+            (``max_total_requests=500``, ``n_parallel=1``) took 7 m 54 s; with
+            ``max_total_requests=150`` and ``n_parallel=6`` the same download took 1 m 58 s,
+            with identical dates and rows. Neither setting changes the data materially
+            (values agree to ~1e-10 ha), but a fixed ``max_total_requests`` with
+            ``n_parallel=1`` is the only bit-reproducible configuration. For very large lake
+            sets keep ``max_total_requests`` near its default: chunks beyond what the workers
+            can run only add per-request overhead.
+
         Example:
             >>> downloader = EarthEngineDownloader()
             >>> ds = downloader.download_dw_daily(
@@ -804,6 +817,8 @@ class EarthEngineDownloader:
             ...     start_date="05-01",
             ...     end_date="09-30",
             ...     max_nodata=0.02,
+            ...     max_total_requests=150,
+            ...     n_parallel=6,
             ... )
         """
         # check mutually exclusive vector_dataset versus gdf

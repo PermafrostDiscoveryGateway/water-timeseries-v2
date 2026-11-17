@@ -266,6 +266,30 @@ plot_water_time_series_dw(long, first_break=None, lake_id="b7g4rf3n3x43")
 Per-polygon observation counts and coverage are logged during the download and available
 afterwards via `water_timeseries.utils.data.dw_coverage_stats(ds)`.
 
+#### Download speed
+
+Chunks are the unit of parallelism, so the worker count is capped by how many chunks the
+lake set splits into. For a few hundred lakes the defaults leave the pool idle; this
+setting was measured at **7m54s → 1m58s** on 118 lakes, 11 seasons (identical dates and
+rows):
+
+```python
+ds = dl.download_dw_daily(
+    vector_dataset="lakes_200.parquet",
+    years=list(range(2016, 2027)),
+    start_date="05-01", end_date="09-30",   # or months=[5, 6, 7, 8, 9, 10]
+    max_nodata=0.02,
+    max_total_requests=150,   # chunk size: smaller -> more chunks -> more usable workers
+    n_parallel=6,             # keep chunks >= workers
+    save_to_file="dw_daily.zarr",
+)
+```
+
+For very large lake sets (thousands) leave `max_total_requests` near its default — chunks
+beyond what the workers can run only add per-request overhead. Values are unchanged to
+~1e-10 ha across settings, but only a fixed `max_total_requests` with `n_parallel=1` is
+bit-reproducible.
+
 ### Command Line Interface
 
 ```bash
