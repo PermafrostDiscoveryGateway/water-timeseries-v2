@@ -51,5 +51,6 @@ nav:
   - API Reference:
     - Overview: api/index.md
     - Dataset: api/dataset.md
+    - Downloader: api/downloader.md
     - Breakpoint: api/breakpoint.md
     - Utils: api/utils.md

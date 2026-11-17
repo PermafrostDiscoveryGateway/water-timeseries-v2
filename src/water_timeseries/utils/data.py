@@ -82,13 +82,20 @@ def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str | None
     return ds
 
 
-def annotate_xr_dataset_dw(ds: xr.Dataset, input_vector_file: Path | str | None = None) -> xr.Dataset:
+def annotate_xr_dataset_dw(
+    ds: xr.Dataset,
+    input_vector_file: Path | str | None = None,
+    temporal_resolution: str = "monthly",
+) -> xr.Dataset:
     """
     Annotates an xarray Dataset with units, description, author, and contact information.
 
     Parameters:
     ds (xarray.Dataset): The dataset to be annotated.
     input_vector_file (str|Path, optional): The path to the accompanying vector dataset. Defaults to None.
+    temporal_resolution (str, optional): Either "monthly" (one row per month, the mode composite
+        produced by download_dw_monthly) or "per_acquisition" (one row per Dynamic World
+        acquisition, produced by download_dw_daily). Defaults to "monthly".
 
     Returns:
     xarray.Dataset: The annotated dataset.
@@ -99,9 +106,15 @@ def annotate_xr_dataset_dw(ds: xr.Dataset, input_vector_file: Path | str | None 
         ds[var].attrs["units"] = "ha"
 
     # dataset annotations
-    ds.attrs["description"] = (
-        'This datasets provides the monthly area of the dynamic world classes (water, trees, grass, flooded_vegetation, crops, shrub_and_scrub, built, bare, snow_and_ice) for selected lake polygons. The areas were calculated from the Dynamic World V1 dataset through Google Earth Engine. Lake polygons were calculated by Ingmar Nitze through the Permafrost Discovery Gateway Project. "id_geohash" is the lake_id, which needs be joined to the accompanying polygon vector dataset'
-    )
+    if temporal_resolution == "per_acquisition":
+        ds.attrs["description"] = (
+            'This datasets provides the per-acquisition area of the dynamic world classes (water, trees, grass, flooded_vegetation, crops, shrub_and_scrub, built, bare, snow_and_ice) for selected lake polygons. One row per Dynamic World acquisition (Sentinel-2 overpass), not a gap-filled daily series: dates without data are cloud/coverage gaps. The areas were calculated from the Dynamic World V1 dataset through Google Earth Engine. Lake polygons were calculated by Ingmar Nitze through the Permafrost Discovery Gateway Project. "id_geohash" is the lake_id, which needs be joined to the accompanying polygon vector dataset'
+        )
+    else:
+        ds.attrs["description"] = (
+            'This datasets provides the monthly area of the dynamic world classes (water, trees, grass, flooded_vegetation, crops, shrub_and_scrub, built, bare, snow_and_ice) for selected lake polygons. The areas were calculated from the Dynamic World V1 dataset through Google Earth Engine. Lake polygons were calculated by Ingmar Nitze through the Permafrost Discovery Gateway Project. "id_geohash" is the lake_id, which needs be joined to the accompanying polygon vector dataset'
+        )
+    ds.attrs["temporal_resolution"] = temporal_resolution
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
@@ -131,6 +144,64 @@ jrc_bandnames = [
     "area_water_seasonal",
     "area_water_permanent",
 ]
+
+
+def dw_coverage_stats(ds: xr.Dataset) -> pd.DataFrame:
+    """Per-polygon observation count and coverage of a Dynamic World dataset.
+
+    Coverage answers "how much of this polygon actually had a classification in that
+    observation". Here it is normalised against the largest observation of the same
+    polygon in the dataset, because an xarray dataset carries no polygon geometry.
+
+    :meth:`water_timeseries.downloader.EarthEngineDownloader.download_dw_daily` normalises
+    against the polygon's geodesic area instead, which is the absolute number. The two
+    differ by a few percent wherever no acquisition is fully clear -- treat the
+    downloader's logged coverage as authoritative and use this helper for a quick picture.
+
+    Args:
+        ds: Dataset with the Dynamic World class variables and a ``date`` dimension.
+
+    Returns:
+        DataFrame indexed by ``id_geohash`` with columns ``n_obs``,
+        ``coverage_median``, ``coverage_p10``, ``first_date`` and ``last_date``.
+
+    Raises:
+        ValueError: If the dataset contains none of the class variables.
+    """
+    variables = [var for var in dw_bandnames if var in ds.data_vars]
+    if not variables:
+        raise ValueError(f"Dataset contains none of the Dynamic World class variables: {dw_bandnames}")
+
+    # skipna=False: the nine class areas are filled (or masked) together, so a NaN in any
+    # of them means the observation is missing. Summing with skipna=True would turn a
+    # fully masked acquisition into "0 ha of everything", which reads as total drainage.
+    area_data = ds[variables].to_array().sum("variable", skipna=False)
+    max_area = area_data.max("date", skipna=True)
+    coverage = (area_data / max_area.where(max_area > 0)).clip(min=0, max=1)
+    valid = area_data.notnull()
+
+    # Build with an explicit index: to_pandas() can return an Index flagged
+    # _no_setting_name (it descends from a MultiIndex level), on which pandas refuses
+    # ``index.name = ...``. An explicit Index also guarantees the row order.
+    index = pd.Index(ds["id_geohash"].to_numpy(), name="id_geohash")
+    if valid.dims != ("id_geohash", "date"):
+        valid = valid.transpose("id_geohash", "date")
+    valid_np = valid.to_numpy()
+    dates = pd.to_datetime(ds["date"].to_numpy())
+    first_date = [dates[row].min() if row.any() else pd.NaT for row in valid_np]
+    last_date = [dates[row].max() if row.any() else pd.NaT for row in valid_np]
+
+    stats = pd.DataFrame(
+        {
+            "n_obs": valid.sum("date").to_numpy(),
+            "coverage_median": coverage.median("date", skipna=True).to_numpy(),
+            "coverage_p10": coverage.quantile(0.1, dim="date").to_numpy(),
+            "first_date": first_date,
+            "last_date": last_date,
+        },
+        index=index,
+    )
+    return stats
 
 
 def find_data_gaps(dataset: xr.Dataset, variable: str = "water", id_geohash_subset=None):

@@ -205,6 +205,91 @@ ds = dl.download_dw_monthly(
 )
 ```
 
+### Download per-acquisition (unaggregated) data
+
+`download_dw_daily` returns one row per Dynamic World acquisition inside a within-year
+window, instead of the monthly mode composite. It is **not** a gap-filled daily series:
+a lake gets roughly 20-50 observations per May-September season, and dates that are
+missing are cloud/coverage gaps rather than download failures.
+
+```python
+ds = dl.download_dw_daily(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    name_attribute="id_geohash",
+    years=[2022, 2023],
+    start_date="05-01",  # 'MM-DD', inclusive, applied to every year
+    end_date="09-30",    # 'MM-DD', inclusive
+    max_nodata=0.02,     # mask observations with more than 2 % of the polygon missing
+    id_list=["b7g4rf3n3x43"],
+)
+```
+
+An observation is masked when more than `max_nodata` of the polygon has no data, and
+fully masked acquisitions are dropped entirely - "no observation" is not the same thing
+as a zero water area. Pass `max_nodata=1.0` to keep every acquisition.
+
+`months` and `date_list` behave exactly as in `download_dw_monthly`, so an existing monthly
+call can be pointed at per-acquisition data by changing the method name only:
+
+```python
+ds = dl.download_dw_daily(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    years=[2024], months=[6, 7, 8, 9],  # same arguments as download_dw_monthly
+)
+```
+
+The result carries the same variables and dimension names as the monthly product, so
+`DWDataset` and its plotting methods work unchanged:
+
+```python
+from water_timeseries.dataset import DWDataset
+from water_timeseries.utils.plotting import plot_water_time_series_dw
+
+dataset = DWDataset(ds)  # default masking additionally drops snow/ice-covered rows
+fig = dataset.plot_timeseries("b7g4rf3n3x43", save_path="lake_daily.png")
+
+# long format for plot_water_time_series_dw: melt to numeric 'value' and rename
+# flooded_vegetation -> vegetation so the wetland line is drawn
+long = (
+    dataset.ds_normalized[["water", "flooded_vegetation", "snow_and_ice"]]
+    .sel(id_geohash="b7g4rf3n3x43")
+    .to_dataframe()
+    .reset_index()
+    .drop(columns=["id_geohash"])
+    .melt(id_vars="date", var_name="variable", value_name="value")
+)
+long["value"] = pd.to_numeric(long["value"])
+long["variable"] = long["variable"].replace({"flooded_vegetation": "vegetation"})
+plot_water_time_series_dw(long, first_break=None, lake_id="b7g4rf3n3x43")
+```
+
+Per-polygon observation counts and coverage are logged during the download and available
+afterwards via `water_timeseries.utils.data.dw_coverage_stats(ds)`.
+
+#### Download speed
+
+Chunks are the unit of parallelism, so the worker count is capped by how many chunks the
+lake set splits into. For a few hundred lakes the defaults leave the pool idle; this
+setting was measured at **7m54s → 1m58s** on 118 lakes, 11 seasons (identical dates and
+rows):
+
+```python
+ds = dl.download_dw_daily(
+    vector_dataset="lakes_200.parquet",
+    years=list(range(2016, 2027)),
+    start_date="05-01", end_date="09-30",   # or months=[5, 6, 7, 8, 9, 10]
+    max_nodata=0.02,
+    max_total_requests=150,   # chunk size: smaller -> more chunks -> more usable workers
+    n_parallel=6,             # keep chunks >= workers
+    save_to_file="dw_daily.zarr",
+)
+```
+
+For very large lake sets (thousands) leave `max_total_requests` near its default — chunks
+beyond what the workers can run only add per-request overhead. Values are unchanged to
+~1e-10 ha across settings, but only a fixed `max_total_requests` with `n_parallel=1` is
+bit-reproducible.
+
 ### Command Line Interface
 
 ```bash
