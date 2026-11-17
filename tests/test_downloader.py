@@ -14,7 +14,12 @@ import pandas as pd
 import pytest
 import requests
 
-from water_timeseries.downloader import EarthEngineDownloader, setup_annual_dates, setup_dates_from_options
+from water_timeseries.downloader import (
+    EST_ACQUISITIONS_PER_MONTH,
+    EarthEngineDownloader,
+    setup_annual_dates,
+    setup_dates_from_options,
+)
 from water_timeseries.utils.data import dw_bandnames, dw_coverage_stats
 from water_timeseries.utils.earthengine import (
     NoDynamicWorldDataError,
@@ -677,6 +682,19 @@ class TestDwDaily:
     def test_invalid_max_nodata_raises(self, downloader):
         with pytest.raises(ValueError, match="max_nodata"):
             downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], max_nodata=1.5)
+
+    def test_chunk_sizing_uses_one_month_of_images(self, downloader):
+        """Chunks must be sized by one reduce call's worth of images, not the whole request.
+
+        Sizing by the multi-year total collapses a long request to one polygon per chunk and
+        multiplies Earth Engine calls by the number of years.
+        """
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=_acq_frame([("lakeA", "2019-06-05", 1.0)])
+        )
+        with mock.patch.object(downloader, "_chunk_gdf", wraps=downloader._chunk_gdf) as spy:
+            downloader.download_dw_daily(gdf=downloader.gdf, years=[2019, 2020, 2021])
+        assert spy.call_args.kwargs["n_dates"] == EST_ACQUISITIONS_PER_MONTH
 
     def test_result_wraps_in_dwdateset_and_plots(self, downloader):
         """The downloaded object must drop straight into DWDataset and its plotter."""

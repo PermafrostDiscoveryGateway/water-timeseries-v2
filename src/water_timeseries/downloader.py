@@ -851,15 +851,20 @@ class EarthEngineDownloader:
         self._log_info(f"Processing {n_features} features")
 
         months_per_season = len(month_slices(windows[0][0], windows[0][1]))
-        est_acquisitions = max(1, len(windows) * months_per_season * EST_ACQUISITIONS_PER_MONTH)
+        est_total_acquisitions = max(1, len(windows) * months_per_season * EST_ACQUISITIONS_PER_MONTH)
         self._log_info(
             f"Season window {start_date}..{end_date} for {len(windows)} year(s); "
-            f"~{est_acquisitions} acquisitions per polygon (estimate), "
-            f"~{n_features * est_acquisitions} (polygon, acquisition) requests"
+            f"~{est_total_acquisitions} acquisitions per polygon (estimate), "
+            f"~{n_features * est_total_acquisitions} (polygon, acquisition) requests"
         )
 
         areas = self._polygon_areas_ha(gdf, name_attribute)
-        gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=est_acquisitions, chunk_method=chunk_method)
+        # Each reduce call carries one month of acquisitions, not the whole request, so the
+        # chunk budget is sized by that. Sizing by the multi-year total would collapse chunks
+        # to a single polygon and multiply the number of Earth Engine calls by the year count.
+        gdf_chunks = self._chunk_gdf(
+            gdf, max_total_requests, n_dates=EST_ACQUISITIONS_PER_MONTH, chunk_method=chunk_method
+        )
 
         if no_download:
             self._log_info(f"Would process {len(gdf)} features with {len(gdf_chunks)} chunks")
@@ -880,7 +885,7 @@ class EarthEngineDownloader:
         if not df_out_list:
             raise NoDynamicWorldDataError(
                 f"No data was extracted from any chunk: Earth Engine returned no Dynamic World data "
-                f"for any of the {len(gdf_chunks)} chunks and {est_acquisitions} requested acquisitions."
+                f"for any of the {len(gdf_chunks)} chunks and {est_total_acquisitions} requested acquisitions."
             )
 
         df = pd.concat(df_out_list, ignore_index=True)
