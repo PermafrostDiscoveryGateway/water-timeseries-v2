@@ -382,7 +382,17 @@ class EarthEngineDownloader:
 
         Returns:
             dict: ``{id: area_ha}``.
+
+        Raises:
+            ValueError: If the GeoDataFrame has no CRS, since polygon area cannot be measured
+                without one (coverage is relative to it).
         """
+        if gdf.crs is None:
+            raise ValueError(
+                "The GeoDataFrame has no CRS, so its polygon area cannot be measured. Set one "
+                "(e.g. gdf = gdf.set_crs(4326)) - per-acquisition coverage is computed relative to "
+                "the polygon area, which the monthly downloader does not need."
+            )
         areas_ha = gdf.to_crs(6933).geometry.area / 1e4
         if areas_ha.isna().any():
             self._log_warning(f"{int(areas_ha.isna().sum())} polygon(s) have no valid geometry; their coverage is undefined")

@@ -754,6 +754,24 @@ class TestDwDaily:
             downloader.download_dw_daily(gdf=downloader.gdf, years=[2019, 2020, 2021])
         assert spy.call_args.kwargs["n_dates"] == EST_ACQUISITIONS_PER_MONTH
 
+    def test_gdf_without_crs_raises_a_clear_error(self, downloader):
+        """Coverage is relative to the polygon area, so a CRS-less gdf must say so.
+
+        The fixture mocks ``_polygon_areas_ha``, so call the real method through the class.
+        """
+        no_crs = downloader.gdf.set_crs(None, allow_override=True)
+        with pytest.raises(ValueError, match="no CRS"):
+            EarthEngineDownloader._polygon_areas_ha(downloader, no_crs, "id_geohash")
+
+    def test_gdf_input_is_accepted_like_vector_dataset(self, downloader):
+        """Passing gdf= must work the same way as vector_dataset= (the fixture mocks areas)."""
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=_acq_frame([("lakeA", "2020-06-05", 1.0)])
+        )
+        ds = downloader.download_dw_daily(gdf=downloader.gdf, years=[2020], months=[6])
+        assert set(ds.data_vars) == set(dw_bandnames)
+        assert "accompanying vector dataset" not in ds.attrs  # no path to record
+
     def test_warns_when_workers_exceed_chunks(self, downloader):
         """Asking for more workers than chunks must say so, with the number to fix it."""
 
