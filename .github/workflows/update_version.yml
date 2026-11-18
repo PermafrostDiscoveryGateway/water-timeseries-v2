@@ -222,4 +222,7 @@ jobs:
             mkdocs-material
 
       - name: Publish documentation
-        run: uv run mike deploy --push --update-aliases ${{ needs.update-version.outputs.VERSION }} latest
+        # mike is declared in the [docs] extra, so it must be requested explicitly:
+        # plain `uv run` only syncs the project's base dependencies, which is why this
+        # step used to fail with "Failed to spawn: mike".
+        run: uv run --extra docs mike deploy --push --update-aliases ${{ needs.update-version.outputs.VERSION }} latest
