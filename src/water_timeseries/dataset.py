@@ -17,7 +17,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import xarray as xr
 
-from water_timeseries.utils.data import dw_bandnames, jrc_bandnames
+from water_timeseries.utils.data import detect_temporal_resolution, dw_bandnames, jrc_bandnames
 from water_timeseries.utils.earthengine import create_timelapse
 from water_timeseries.utils.plotting import (
     plot_water_time_series_dw,
@@ -535,6 +535,9 @@ class DWDataset(LakeDataset):
         df_plot = prepare_data_for_plot_dw(df, group_vegetation=True)
         normalization_factor = df["area_data"].max()
 
+        # Per-acquisition series need the day in the hover; monthly composites do not.
+        hover_date_format = "%Y-%m" if detect_temporal_resolution(self.ds) == "monthly" else "%Y-%m-%d"
+
         bp = None
         if breakpoints is not None:
             if self._is_breakpoint_method(breakpoints):
@@ -551,6 +554,7 @@ class DWDataset(LakeDataset):
             normalization_factor=normalization_factor,
             lake_id=id_geohash,
             save_path=save_path,
+            hover_date_format=hover_date_format,
         )
 
         return figure

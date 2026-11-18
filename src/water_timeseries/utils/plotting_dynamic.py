@@ -37,6 +37,7 @@ def plot_water_time_series_dw_interactive(
     height: int = 500,
     width: int | None = None,
     save_path: str | Path | None = None,
+    hover_date_format: str = "%Y-%m",
 ) -> go.Figure:
     """
     Create an interactive time series plot for Dynamic World data using Plotly.
@@ -56,12 +57,17 @@ def plot_water_time_series_dw_interactive(
         width: Plot width in pixels (optional).
         save_path: Optional path to save the plot as HTML file. If provided,
             the plot will be saved as an interactive HTML file.
+        hover_date_format: strftime pattern for the date in the hover header
+            (``hovermode="x unified"``). Defaults to ``"%Y-%m"``, which suits monthly
+            composites; pass ``"%Y-%m-%d"`` for per-acquisition series where the day
+            matters. ``DWDataset.plot_timeseries_interactive`` chooses it automatically.
 
     Returns:
         plotly.graph_objects.Figure: Interactive Plotly figure.
 
     Example:
         >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123")
+        >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123", hover_date_format="%Y-%m-%d")
         >>> st.plotly_chart(fig)
         >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123", save_path="output.html")
         >>> fig = plot_water_time_series_dw_interactive(df, lake_id="abc123", plot_variables=["water", "bare"])
@@ -181,7 +187,7 @@ def plot_water_time_series_dw_interactive(
         dtick="M12",  # Tick every 12 months
         ticklabelmode="period",  # Labels in the middle of the period
         tickformat="%Y",
-        hoverformat="%Y-%m",  # Show YYYY-MM on hover
+        hoverformat=hover_date_format,  # full acquisition date for per-acquisition data
         showgrid=True,
         gridwidth=1,
         gridcolor="#cccccc",
