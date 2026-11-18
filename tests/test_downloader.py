@@ -872,7 +872,7 @@ class TestDwCoverageStats:
 
 
 class TestMonthlySnowFreeAggregation:
-    """aggregation='snow_free': scene-level snow filter, median per (polygon, month)."""
+    """aggregation='snow_free_median': scene-level snow filter, median per (polygon, month)."""
 
     @pytest.fixture
     def downloader(self):
@@ -908,7 +908,7 @@ class TestMonthlySnowFreeAggregation:
             )
         )
         ds = downloader.download_dw_monthly(
-            gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free"
+            gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free_median"
         )
         assert ds.sizes["date"] == 1
         assert float(ds["water"].isel(date=0, id_geohash=0)) == pytest.approx(15.0)  # median(10, 20)
@@ -923,7 +923,7 @@ class TestMonthlySnowFreeAggregation:
             )
         )
         ds = downloader.download_dw_monthly(
-            gdf=downloader.gdf, years=[2020], months=[6, 7], aggregation="snow_free"
+            gdf=downloader.gdf, years=[2020], months=[6, 7], aggregation="snow_free_median"
         )
         months = pd.to_datetime(ds["date"].values).month.tolist()
         assert months == [7]
@@ -935,7 +935,7 @@ class TestMonthlySnowFreeAggregation:
         )
         with pytest.raises(NoDynamicWorldDataError, match="none of the"):
             downloader.download_dw_monthly(
-                gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free"
+                gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free_median"
             )
 
     def test_attrs_record_the_method(self, downloader):
@@ -943,9 +943,9 @@ class TestMonthlySnowFreeAggregation:
             return_value=self._scenes([("lakeA", "2020-06-10", 12.0, 0.0)])
         )
         ds = downloader.download_dw_monthly(
-            gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free", max_snow_fraction=0.1
+            gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free_median", max_snow_fraction=0.1
         )
-        assert ds.attrs["aggregation"] == "snow_free"
+        assert ds.attrs["aggregation"] == "snow_free_median"
         assert ds.attrs["max_snow_fraction"] == pytest.approx(0.10)
 
     def test_mode_is_still_the_default_and_unchanged(self, downloader):
@@ -964,7 +964,7 @@ class TestMonthlySnowFreeAggregation:
     def test_invalid_max_snow_fraction_raises(self, downloader):
         with pytest.raises(ValueError, match="max_snow_fraction"):
             downloader.download_dw_monthly(
-                gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free", max_snow_fraction=1.5
+                gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free_median", max_snow_fraction=1.5
             )
 
 

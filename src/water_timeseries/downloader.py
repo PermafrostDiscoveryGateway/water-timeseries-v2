@@ -659,11 +659,11 @@ class EarthEngineDownloader:
                 extension: '.zarr' for Zarr format, '.nc' for NetCDF format. If a relative
                 path is provided, it will be saved in the output directory (default: None).
             aggregation: `"mode"` (default) for the historical mode-composite product, or
-                `"snow_free"` to aggregate only acquisitions that are snow-free within the
+                `"snow_free_median"` to aggregate only acquisitions that are snow-free within the
                 polygon (scenes with `snow_and_ice / area_data > max_snow_fraction` are
                 discarded, the rest are combined by median). Documented under "Aggregation
                 methods" below.
-            max_snow_fraction: With `aggregation="snow_free"`, the share of a polygon that may
+            max_snow_fraction: With `aggregation="snow_free_median"`, the share of a polygon that may
                 be snow/ice for the acquisition to count as snow-free (default: 0.05, matching
                 `DWDataset._mask_invalid`). Ignored by `"mode"`.
 
@@ -677,7 +677,7 @@ class EarthEngineDownloader:
             In a snow-covered month the modal class is ``snow_and_ice``, so such a month
             comes back as ``water = 0`` even where the lake opened up mid-month.
 
-            ``aggregation="snow_free"`` instead extracts every acquisition of the month and
+            ``aggregation="snow_free_median"`` instead extracts every acquisition of the month and
             keeps only those that are snow-free *within each polygon*, then reports the
             **median** class areas over the surviving acquisitions. A scene is snow-free when
             ``snow_and_ice / area_data <= max_snow_fraction`` (default 0.05, the same
@@ -691,9 +691,9 @@ class EarthEngineDownloader:
                 vector dataset.
             ValueError: If neither (years and months) nor date_list is provided,
                 or if both are provided, or if ``aggregation`` is not one of
-                ``"mode"`` / ``"snow_free"``.
+                ``"mode"`` / ``"snow_free_median"``.
             NoDynamicWorldDataError: If Earth Engine confirms there is no Dynamic World
-                data for any chunk and date requested, or (with ``aggregation="snow_free"``)
+                data for any chunk and date requested, or (with ``aggregation="snow_free_median"``)
                 if no requested month contains a snow-free acquisition.
             ee.EEException, requests.exceptions.RequestException, ...: If an Earth Engine
                 or network request fails after retrying transient errors.
@@ -704,8 +704,8 @@ class EarthEngineDownloader:
         elif vector_dataset is not None and gdf is not None:
             raise ValueError("Only one of vector_dataset or gdf should be provided, not both")
 
-        if aggregation not in ("mode", "snow_free"):
-            raise ValueError(f"aggregation must be 'mode' or 'snow_free', got {aggregation!r}")
+        if aggregation not in ("mode", "snow_free_median"):
+            raise ValueError(f"aggregation must be 'mode' or 'snow_free_median', got {aggregation!r}")
         if not 0 <= max_snow_fraction <= 1:
             raise ValueError(
                 f"max_snow_fraction must be between 0 and 1 (share of the polygon allowed to be "
@@ -794,9 +794,9 @@ class EarthEngineDownloader:
         # Process chunks with joblib (sequential if n_parallel=1, parallel otherwise)
         self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
 
-        if aggregation == "snow_free":
+        if aggregation == "snow_free_median":
             self._log_info(
-                "Aggregation 'snow_free': extracting every acquisition and keeping only those with "
+                "Aggregation 'snow_free_median': extracting every acquisition and keeping only those with "
                 f"<= {max_snow_fraction:.0%} snow/ice within the polygon"
             )
             df_out = self._monthly_snow_free_frame(
@@ -835,7 +835,7 @@ class EarthEngineDownloader:
         n_dates = len(ds.coords["date"])
         self._log_info(f"Download complete: {n_items} items, {n_dates} dates collected")
 
-        # Remove the 'reducer' variable if present (the snow_free path has dropped it already)
+        # Remove the 'reducer' variable if present (the snow_free_median path has dropped it already)
         ds = ds.drop_vars("reducer", errors="ignore")
 
         # force date to pd.datetime format
@@ -844,7 +844,7 @@ class EarthEngineDownloader:
         # Annotate dataset with metadata
         ds = annotate_xr_dataset_dw(ds, input_vector_file=vector_dataset)
         ds.attrs["aggregation"] = aggregation
-        if aggregation == "snow_free":
+        if aggregation == "snow_free_median":
             ds.attrs["max_snow_fraction"] = float(max_snow_fraction)
 
         # Save to file if requested

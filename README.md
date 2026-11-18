@@ -213,7 +213,7 @@ selected with `aggregation=`:
 | method | what it does | when to use |
 |---|---|---|
 | **`"mode"`** (default) | builds one mode composite of the month (`ee.Reducer.mode()` on the label band) and reports its class areas | keeping comparability with existing monthly archives and the NRT pipeline |
-| **`"snow_free"`** | extracts every acquisition of the month, **discards each scene whose snow/ice share of the polygon exceeds `max_snow_fraction`**, and reports the **median** class areas of the survivors | snow-affected lakes - the recommended method in the Arctic |
+| **`"snow_free_median"`** | extracts every acquisition of the month, **discards each scene whose snow/ice share of the polygon exceeds `max_snow_fraction`**, and reports the **median** class areas of the survivors | snow-affected lakes - the recommended method in the Arctic |
 
 The mode composite has a known artefact: in a month that is snow-covered for most of its
 days, the modal class is `snow_and_ice`, so the month is reported as **`water = 0 ha`** even
@@ -230,22 +230,22 @@ ds_snow = dl.download_dw_monthly(
     vector_dataset,
     years=[2020],
     months=[6, 7, 8, 9],
-    aggregation="snow_free",
+    aggregation="snow_free_median",
     max_snow_fraction=0.05,   # default: the same threshold DWDataset._mask_invalid uses
 )
 ```
 
 Differences to be aware of:
 
-- **A month with no snow-free acquisition is absent** from `"snow_free"` output rather than
+- **A month with no snow-free acquisition is absent** from `"snow_free_median"` output rather than
   reported as zero. For a lake that is snow-covered for the whole of May, that means no May
   row - which is the honest answer, and it removes the false "drainage" signal.
 - The aggregation statistic is a **median** over the surviving scenes, not a modal label
   map. Only class areas are published, so the dataset shape is unchanged.
-- `"snow_free"` costs roughly what `download_dw_daily` costs, because it reuses that
+- `"snow_free_median"` costs roughly what `download_dw_daily` costs, because it reuses that
   extraction path. `"mode"` remains the cheaper one.
 - The dataset records which method produced it: `ds.attrs["aggregation"]`
-  (`"mode"` / `"snow_free"`), plus `ds.attrs["max_snow_fraction"]` for the snow-free case.
+  (`"mode"` / `"snow_free_median"`), plus `ds.attrs["max_snow_fraction"]` for the snow-free case.
 
 ### Download per-acquisition (unaggregated) data
 
