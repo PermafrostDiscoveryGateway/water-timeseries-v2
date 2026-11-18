@@ -871,6 +871,103 @@ class TestDwCoverageStats:
         assert pd.isna(stats.loc["empty", "coverage_median"])
 
 
+class TestMonthlyIceFreeAggregation:
+    """aggregation='ice_free': scene-level ice filter, median per (polygon, month)."""
+
+    @pytest.fixture
+    def downloader(self):
+        from shapely.geometry import box
+
+        dl = EarthEngineDownloader(ee_project="test-project", ee_auth=False)
+        dl.gdf = gpd.GeoDataFrame(
+            {"id_geohash": ["lakeA"]}, geometry=[box(0, 0, 0.01, 0.01)], crs="EPSG:4326"
+        )
+        return dl
+
+    @staticmethod
+    def _scenes(entries) -> pd.DataFrame:
+        """Frame shaped like ee_to_df: ``(lake, date, water_ha, snow_ha)`` per acquisition."""
+        rows = []
+        for lake, day, water, snow in entries:
+            rec = {"id_geohash": lake, "date": pd.Timestamp(day)}
+            for var in dw_bandnames:
+                rec[var] = 0.0
+            rec["water"] = water
+            rec["snow_and_ice"] = snow
+            rows.append(rec)
+        return pd.DataFrame(rows)
+
+    def test_icy_scenes_are_discarded_and_survivors_median(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=self._scenes(
+                [
+                    ("lakeA", "2020-06-05", 10.0, 0.0),  # ice-free
+                    ("lakeA", "2020-06-12", 20.0, 0.5),  # ice-free (2.4 % of 20.5 ha)
+                    ("lakeA", "2020-06-20", 0.0, 100.0),  # fully ice: discarded
+                ]
+            )
+        )
+        ds = downloader.download_dw_monthly(
+            gdf=downloader.gdf, years=[2020], months=[6], aggregation="ice_free"
+        )
+        assert ds.sizes["date"] == 1
+        assert float(ds["water"].isel(date=0, id_geohash=0)) == pytest.approx(15.0)  # median(10, 20)
+
+    def test_month_without_ice_free_scene_is_absent_not_zero(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=self._scenes(
+                [
+                    ("lakeA", "2020-06-10", 0.0, 50.0),  # June: all ice
+                    ("lakeA", "2020-07-10", 12.0, 0.0),  # July: ice-free
+                ]
+            )
+        )
+        ds = downloader.download_dw_monthly(
+            gdf=downloader.gdf, years=[2020], months=[6, 7], aggregation="ice_free"
+        )
+        months = pd.to_datetime(ds["date"].values).month.tolist()
+        assert months == [7]
+        assert float(ds["water"].min()) > 0
+
+    def test_all_scenes_icy_raises(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=self._scenes([("lakeA", "2020-06-10", 0.0, 50.0)])
+        )
+        with pytest.raises(NoDynamicWorldDataError, match="none of the"):
+            downloader.download_dw_monthly(
+                gdf=downloader.gdf, years=[2020], months=[6], aggregation="ice_free"
+            )
+
+    def test_attrs_record_the_method(self, downloader):
+        downloader._extract_acquisitions = mock.Mock(
+            return_value=self._scenes([("lakeA", "2020-06-10", 12.0, 0.0)])
+        )
+        ds = downloader.download_dw_monthly(
+            gdf=downloader.gdf, years=[2020], months=[6], aggregation="ice_free", max_snow_fraction=0.1
+        )
+        assert ds.attrs["aggregation"] == "ice_free"
+        assert ds.attrs["max_snow_fraction"] == pytest.approx(0.10)
+
+    def test_mode_is_still_the_default_and_unchanged(self, downloader):
+        downloader._extract_time_series = mock.Mock(
+            return_value=self._scenes([("lakeA", "2020-06-01", 12.0, 0.0)])
+        )
+        downloader._extract_acquisitions = mock.Mock(side_effect=AssertionError("must not be used"))
+        ds = downloader.download_dw_monthly(gdf=downloader.gdf, years=[2020], months=[6])
+        assert ds.attrs["aggregation"] == "mode"
+        assert "max_snow_fraction" not in ds.attrs
+
+    def test_invalid_aggregation_raises(self, downloader):
+        with pytest.raises(ValueError, match="aggregation must be"):
+            downloader.download_dw_monthly(gdf=downloader.gdf, years=[2020], months=[6], aggregation="median")
+
+    def test_invalid_max_snow_fraction_raises(self, downloader):
+        with pytest.raises(ValueError, match="max_snow_fraction"):
+            downloader.download_dw_monthly(
+                gdf=downloader.gdf, years=[2020], months=[6], aggregation="ice_free", max_snow_fraction=1.5
+            )
+
+
 # Run tests
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
