@@ -205,58 +205,43 @@ ds = dl.download_dw_monthly(
 )
 ```
 
-### Monthly aggregation methods
+### Snow-free scene filtering
 
-`download_dw_monthly` separates the **statistic** from the **scene filter**:
+`download_dw_monthly` builds one mode composite per month (`ee.Reducer.mode()` on the label
+band) and reports its class areas. That has a known artefact: in a month that is
+snow-covered for most of its days the modal class is `snow_and_ice`, so the month is reported
+as **`water = 0 ha`** even where the lake opened up late in the month.
 
-| `aggregation` | `snow_free` | what you get |
-|---|---|---|
-| **`"mode"`** (default) | `False` | historical product: one mode composite of the month (`ee.Reducer.mode()` on the label band) and its class areas. Cheapest, and comparable with existing archives. |
-| `"mode"` | `True` | the same modal composite, but built **per polygon from that polygon's own snow-free scenes** - one composite per distinct snow-free scene set inside a chunk (usually one or two). This is the "normal monthly product, minus the snowy scenes" option. |
-| `"median"` | `False` | every acquisition of the month is extracted and the **median class areas** are reported - a baseline that includes snow-covered scenes. |
-| `"median"` | `True` | same, but scenes are filtered per polygon by `max_snow_fraction` and the survivors are combined by median. Cheaper per month than the mode variant, but it reports a median area rather than a modal label map. |
+`snow_free=True` filters the acquisitions **per polygon** before compositing:
 
-The mode composite has a known artefact: in a month that is snow-covered for most of its
-days the modal class is `snow_and_ice`, so the month is reported as **`water = 0 ha`** even
-where the lake opened up late in the month. Turning on `snow_free` removes those scenes
-instead, and because the test is applied per polygon, every lake keeps only *its own*
-snow-free acquisitions - spring melt and autumn refreeze alike.
+- a scene counts as snow-free for a lake when `snow_and_ice / valid_area` — the snow/ice share
+  of that lake's *observed* surface — is at or below `max_snow_fraction` (default **0.05**, the
+  same threshold `DWDataset._mask_invalid` uses, so ice is included);
+- polygons are grouped by the acquisitions that are snow-free for them, and one mode composite
+  is built per distinct set — so each lake is composited from *its own* snow-free scenes;
+- a month with no snow-free acquisition for a lake is **absent** for that lake rather than
+  reported as zero — the honest answer, and it removes the false "drainage" signal.
 
 ```python
 # historical behaviour, default
 ds_mode = dl.download_dw_monthly(vector_dataset, years=[2020], months=[6, 7, 8, 9])
 
 # modal composite per lake over its own snow-free scenes (recommended for Arctic lakes)
-ds_mode_snowfree = dl.download_dw_monthly(
+ds_snowfree = dl.download_dw_monthly(
     vector_dataset,
     years=[2020],
     months=[5, 6, 7, 8, 9],
-    aggregation="mode",
     snow_free=True,
     max_snow_fraction=0.05,   # default: the same threshold DWDataset._mask_invalid uses
 )
-
-# median of the surviving per-acquisition class areas instead
-ds_median_snowfree = dl.download_dw_monthly(
-    vector_dataset, years=[2020], months=[5, 6, 7, 8, 9],
-    aggregation="median", snow_free=True,
-)
 ```
 
-The threshold applies to the Dynamic World `snow_and_ice` class, so ice is included. A month
-with no usable acquisition is **absent** from `snow_free` output rather than reported as
-zero; for a lake that is snow-covered for the whole of May that means no May row - the honest
-answer, and it removes the false "drainage" signal.
+Cost: one survey request plus one mode composite per distinct snow-free scene set per
+(chunk, month) — usually one or two sets inside a spatially coherent chunk. The plain
+product remains the cheaper option.
 
-Other differences to be aware of:
-
-- The median statistic is not a modal label map. Only class areas are published, so the
-  dataset shape is unchanged, but values move (June-September medians shift by ~2-3 ha).
-- `aggregation="median"` costs roughly what `download_dw_daily` costs, because it reuses that
-  extraction path. `"mode"` remains the cheaper one.
-- The dataset records what produced it: `ds.attrs["aggregation"]`
-  (`"mode"` / `"median"`), `ds.attrs["snow_free"]`, and `ds.attrs["max_snow_fraction"]` when the
-  filter was on.
+The dataset records the setting: `ds.attrs["snow_free"]` (bool) and
+`ds.attrs["max_snow_fraction"]` when the filter is on.
 
 ### Download per-acquisition (unaggregated) data
 
