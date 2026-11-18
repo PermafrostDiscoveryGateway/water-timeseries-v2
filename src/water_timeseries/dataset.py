@@ -143,6 +143,46 @@ class LakeDataset:
         self._normalize_ds()
         self._mask_invalid()
 
+    def _resolve_object_id(self, object_id, id_geohash=None) -> str | int:
+        """Resolve the object identifier from the new `object_id` kwarg.
+
+        Accepts either the new `object_id` keyword or the legacy `id_geohash`
+        keyword (for backward compatibility). Both forms point to the same value:
+        an entry from :attr:`object_ids_` — a coordinate value on the dataset's
+        identifier dimension (whatever name `self.id_field` happens to carry).
+
+        Only one of the two keywords may be provided. When `id_geohash` is used
+        a :class:`FutureWarning` is emitted to encourage migration to
+        `object_id`, which is stable regardless of the column name.
+
+        Args:
+            object_id: value passed via the new keyword (may be ``None``).
+            id_geohash: value passed via the legacy keyword (may be ``None``).
+
+        Returns:
+            The resolved object identifier (str or int, matching the caller's value).
+
+        Raises:
+            TypeError: If both `object_id` and `id_geohash` are provided.
+            ValueError: If neither is provided (the identifier is required).
+        """
+        if object_id is not None and id_geohash is not None:
+            raise TypeError(
+                "Please provide exactly one of `object_id` or `id_geohash`. "
+                "`object_id` is the preferred, forward-compatible name."
+            )
+        if id_geohash is not None:
+            warnings.warn(
+                "The `id_geohash` keyword is deprecated. Please use `object_id` instead. "
+                "`id_geohash` will be removed in a future release.",
+                FutureWarning,
+                stacklevel=3,
+            )
+            return id_geohash
+        if object_id is None:
+            raise ValueError("At least one of `object_id` or `id_geohash` must be provided.")
+        return object_id
+
     def _check_id_field(self) -> None:
         """Check that the identifier field exists in this instance's ds.
 
@@ -563,10 +603,12 @@ class DWDataset(LakeDataset):
 
     def plot_timeseries(
         self,
-        id_geohash: str,
+        object_id: str | int | None = None,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
-        plot_variables: list | None = None,
+        plot_variables: list[str | None] | None = None,
         save_path: str | Path | None = None,
+        *,
+        id_geohash: str | int | None = None,
     ) -> plt.Figure:
         """Plot the time series for a specific lake using matplotlib.
 
@@ -606,7 +648,7 @@ class DWDataset(LakeDataset):
         See Also:
             plot_timeseries_interactive: For an interactive Plotly-based version.
         """
-        object_id = id_geohash
+        object_id = self._resolve_object_id(object_id=object_id, id_geohash=id_geohash)
         df = (self.ds.sel({self.id_field: object_id}).load().to_dataframe()).dropna()
         df_plot = prepare_data_for_plot_dw(df, group_vegetation=True)
 
@@ -617,7 +659,7 @@ class DWDataset(LakeDataset):
             plot_variables=plot_variables,
             normalization_factor=df["area_data"].max(),
             first_break=bp,
-            lake_id=object_id,
+            object_id=object_id,
             save_path=save_path,
         )
 
@@ -625,10 +667,12 @@ class DWDataset(LakeDataset):
 
     def plot_timeseries_interactive(
         self,
-        id_geohash: str,
+        object_id: str | int | None = None,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
-        plot_variables: list | None = None,
+        plot_variables: list[str | None] | None = None,
         save_path: str | Path | None = None,
+        *,
+        id_geohash: str | int | None = None,
     ) -> go.Figure:
         """Plot the interactive time series for a specific lake using Plotly.
 
@@ -664,7 +708,7 @@ class DWDataset(LakeDataset):
             >>> fig = dataset.plot_timeseries_interactive("1132035748")
             >>> fig.show()  # Open in browser or save as HTML
         """
-        object_id = id_geohash
+        object_id = self._resolve_object_id(object_id=object_id, id_geohash=id_geohash)
         # Select rows for the given lake identifier using self.id_field.
         # This works whether self.id_field == "id_geohash", "lake_id", or any other name.
         df = (self.ds.sel({self.id_field: object_id}).load().to_dataframe()).dropna()
@@ -873,10 +917,12 @@ class JRCDataset(LakeDataset):
 
     def plot_timeseries(
         self,
-        id_geohash: str,
+        object_id: str | int | None = None,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
-        plot_variables: list | None = None,
+        plot_variables: list[str | None] | None = None,
         save_path: str | Path | None = None,
+        *,
+        id_geohash: str | int | None = None,
     ) -> plt.Figure:
         """Plot the time series for a specific lake using matplotlib.
 
@@ -924,7 +970,7 @@ class JRCDataset(LakeDataset):
         See Also:
             plot_timeseries_interactive: For an interactive Plotly-based version.
         """
-        object_id = id_geohash
+        object_id = self._resolve_object_id(object_id=object_id, id_geohash=id_geohash)
         df = (self.ds.sel({self.id_field: object_id}).load().to_dataframe()).dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
 
@@ -939,7 +985,7 @@ class JRCDataset(LakeDataset):
             first_break=bp,
             plot_variables=plot_variables,
             normalization_factor=normalization_factor,
-            lake_id=object_id,
+            object_id=object_id,
             save_path=save_path,
         )
 
@@ -947,10 +993,12 @@ class JRCDataset(LakeDataset):
 
     def plot_timeseries_interactive(
         self,
-        id_geohash: str,
+        object_id: str | int | None = None,
         breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
-        plot_variables: list | None = None,
+        plot_variables: list[str | None] | None = None,
         save_path: str | Path | None = None,
+        *,
+        id_geohash: str | int | None = None,
     ) -> go.Figure:
         """Plot the interactive time series for a specific lake using Plotly.
 
@@ -983,7 +1031,7 @@ class JRCDataset(LakeDataset):
         Example:
             >>> fig = dataset.jrc.plot_timeseries_interactive("1132035748")
         """
-        object_id = id_geohash
+        object_id = self._resolve_object_id(object_id=object_id, id_geohash=id_geohash)
         df = (self.ds.sel({self.id_field: object_id}).load().to_dataframe()).dropna().reset_index(drop=False)
         normalization_factor = df["area_data"].max()
 
