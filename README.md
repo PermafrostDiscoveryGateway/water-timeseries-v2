@@ -205,6 +205,44 @@ ds = dl.download_dw_monthly(
 )
 ```
 
+### Snow-free scene filtering
+
+`download_dw_monthly` builds one mode composite per month (`ee.Reducer.mode()` on the label
+band) and reports its class areas. That has a known artefact: in a month that is
+snow-covered for most of its days the modal class is `snow_and_ice`, so the month is reported
+as **`water = 0 ha`** even where the lake opened up late in the month.
+
+`snow_free=True` filters the acquisitions **per polygon** before compositing:
+
+- a scene counts as snow-free for a lake when `snow_and_ice / valid_area` — the snow/ice share
+  of that lake's *observed* surface — is at or below `max_snow_fraction` (default **0.05**, the
+  same threshold `DWDataset._mask_invalid` uses, so ice is included);
+- polygons are grouped by the acquisitions that are snow-free for them, and one mode composite
+  is built per distinct set — so each lake is composited from *its own* snow-free scenes;
+- a month with no snow-free acquisition for a lake is **absent** for that lake rather than
+  reported as zero — the honest answer, and it removes the false "drainage" signal.
+
+```python
+# historical behaviour, default
+ds_mode = dl.download_dw_monthly(vector_dataset, years=[2020], months=[6, 7, 8, 9])
+
+# modal composite per lake over its own snow-free scenes (recommended for Arctic lakes)
+ds_snowfree = dl.download_dw_monthly(
+    vector_dataset,
+    years=[2020],
+    months=[5, 6, 7, 8, 9],
+    snow_free=True,
+    max_snow_fraction=0.05,   # default: the same threshold DWDataset._mask_invalid uses
+)
+```
+
+Cost: one survey request plus one mode composite per distinct snow-free scene set per
+(chunk, month) — usually one or two sets inside a spatially coherent chunk. The plain
+product remains the cheaper option.
+
+The dataset records the setting: `ds.attrs["snow_free"]` (bool) and
+`ds.attrs["max_snow_fraction"]` when the filter is on.
+
 ### Download per-acquisition (unaggregated) data
 
 `download_dw_daily` returns one row per Dynamic World acquisition inside a within-year

@@ -26,6 +26,8 @@ from water_timeseries.utils.earthengine import (
     create_dw_classes_mask,
     drop_z_from_gdf,
     dw_acquisitions,
+    dw_mode_composite,
+    dw_snow_valid_areas,
     month_slices,
     month_windows,
     season_windows,
@@ -442,6 +444,123 @@ class EarthEngineDownloader:
             return pd.DataFrame()
         return pd.concat(frames, ignore_index=True)
 
+    @staticmethod
+    def _snow_free_groups(
+        survey: pd.DataFrame, name_attribute: str, max_snow_fraction: float
+    ) -> dict[tuple, list]:
+        """Group polygon ids by the acquisitions that are snow-free for them.
+
+        Args:
+            survey: One row per (polygon, acquisition) with ``snow_area`` and ``valid_area``
+                in hectares.
+            name_attribute: Column holding the polygon identifier.
+            max_snow_fraction: Allowed snow/ice share of the observed surface.
+
+        Returns:
+            dict: ``{tuple_of_time_starts_ms: [polygon ids]}``. Polygons with no snow-free
+                acquisition in the month are omitted, so their month is absent rather than 0.
+        """
+        fraction = survey["snow_area"] / survey["valid_area"]
+        kept = survey[fraction <= max_snow_fraction]
+        groups: dict[tuple, list] = {}
+        for polygon_id, rows in kept.groupby(name_attribute):
+            key = tuple(sorted(int(value) for value in rows["date"]))
+            groups.setdefault(key, []).append(polygon_id)
+        return groups
+
+    def _monthly_mode_snow_free_frame(
+        self,
+        dates: list[str],
+        gdf_chunks: list,
+        name_attribute: str,
+        scale: float,
+        n_parallel: int,
+        max_snow_fraction: float,
+    ) -> pd.DataFrame:
+        """Mode composite per month over each polygon's own snow-free acquisitions.
+
+        For every (chunk, month) an extra pass measures the snow/ice share of each polygon in
+        each acquisition. Polygons are then grouped by the set of acquisitions that are
+        snow-free for *them*, and one mode composite is built per distinct set - so a lake
+        whose breakup happens mid-month is composited from its own snow-free scenes only,
+        while a lake still frozen in the same month drops out entirely.
+
+        Args:
+            dates: Month-start dates to aggregate (``'YYYY-MM-01'``).
+            gdf_chunks: Polygons already split into chunks.
+            name_attribute: Column name used as the polygon identifier.
+            scale: Pixel scale in meters.
+            n_parallel: Number of chunk workers.
+            max_snow_fraction: Allowed snow/ice share of the observed surface for a scene to
+                count as snow-free.
+
+        Returns:
+            pd.DataFrame: One row per ``(name_attribute, date)`` with the nine class areas,
+                ``date`` being the month start.
+
+        Raises:
+            NoDynamicWorldDataError: If Earth Engine returned no acquisitions, or if no polygon
+                had a snow-free acquisition in any requested month.
+        """
+
+        def per_chunk(chunk: gpd.GeoDataFrame) -> pd.DataFrame:
+            fc = geemap.gdf_to_ee(drop_z_from_gdf(chunk[:]))
+            frames = []
+            for date in dates:
+                window_start = pd.Timestamp(date).strftime("%Y-%m-%d")
+                window_end = (pd.Timestamp(date) + pd.DateOffset(months=1)).strftime("%Y-%m-%d")
+
+                survey_collection = dw_snow_valid_areas(fc, window_start, window_end, scale=scale)
+                survey_fc = survey_collection.getTimeSeriesByRegions(
+                    reducer=ee.Reducer.sum(),
+                    collection=fc.select(name_attribute),
+                    bands=["snow_area", "valid_area"],
+                    crs="EPSG:3572",
+                    scale=scale,
+                    dateFormat="ms",
+                )
+                survey = call_with_retry(geemap.ee_to_df, survey_fc)
+                if survey is None or survey.empty:
+                    self._log_info(f"{window_start}: no acquisitions")
+                    continue
+
+                groups = self._snow_free_groups(survey, name_attribute, max_snow_fraction)
+                polygons_kept = sum(len(ids) for ids in groups.values())
+                self._log_info(
+                    f"{window_start}: {len(groups)} snow-free scene set(s) covering {polygons_kept} polygon(s)"
+                )
+
+                for timestamps, ids in groups.items():
+                    composite = dw_mode_composite(fc, window_start, window_end, list(timestamps), scale=scale)
+                    classes = create_dw_classes_mask(composite)
+                    group_fc = fc.filter(ee.Filter.inList(name_attribute, ids)).select(name_attribute)
+                    fc_out = ee.ImageCollection([classes]).getTimeSeriesByRegions(
+                        reducer=ee.Reducer.sum(),
+                        collection=group_fc,
+                        bands=self.dw_bandnames,
+                        crs="EPSG:3572",
+                        scale=scale,
+                    )
+                    frame = call_with_retry(geemap.ee_to_df, fc_out)
+                    if frame is not None and not frame.empty:
+                        frames.append(frame)
+
+            if not frames:
+                return pd.DataFrame()
+            return pd.concat(frames, ignore_index=True)
+
+        frames = joblib.Parallel(n_jobs=n_parallel, prefer="threads")(
+            joblib.delayed(per_chunk)(chunk)
+            for chunk in tqdm(gdf_chunks, desc="Downloading DW chunks (snow-free mode)", unit="chunk")
+        )
+        frames = [frame for frame in frames if frame is not None and not frame.empty]
+        if not frames:
+            raise NoDynamicWorldDataError(
+                f"No data was extracted: no polygon had a snow-free acquisition (<= "
+                f"{max_snow_fraction:.0%} snow/ice) in any of the {len(dates)} months requested."
+            )
+        return pd.concat(frames, ignore_index=True)
+
     def _extract_jrc_time_series(
         self, gdf_chunk, name_attribute: str, years: list[int], scale: float = 30
     ) -> pd.DataFrame:
@@ -539,6 +658,8 @@ class EarthEngineDownloader:
         chunk_method: str = "simple",
         no_download: bool = False,
         save_to_file: str | None = None,
+        snow_free: bool = False,
+        max_snow_fraction: float = 0.05,
     ) -> xr.Dataset:
         """Download monthly Dynamic World land cover data for specified periods.
 
@@ -572,18 +693,46 @@ class EarthEngineDownloader:
                 dataset will be saved to this path. The format is determined by the file
                 extension: '.zarr' for Zarr format, '.nc' for NetCDF format. If a relative
                 path is provided, it will be saved in the output directory (default: None).
+            snow_free: Keep only acquisitions that are snow-free within the polygon before
+                compositing (default: False). Each scene is judged per polygon, so every lake
+                is composited from its own snow-free acquisitions; a lake whose month has no
+                such acquisition is absent from it rather than reported as zero. Must be a
+                bool, not a string.
+            max_snow_fraction: With `snow_free=True`, the share of the *observed* polygon
+                surface that may be snow/ice for the acquisition to count as snow-free
+                (default: 0.05, matching `DWDataset._mask_invalid`).
 
         Returns:
             xr.Dataset: Xarray dataset with land cover areas indexed by name
                 attribute and date.
 
+        Snow-free scene filtering:
+            By default one mode composite of the month is built with ``ee.Reducer.mode()`` and
+            its class areas are reported. In a snow-covered month the modal class is
+            ``snow_and_ice``, so such a month comes back as ``water = 0`` even where the lake
+            opened up mid-month.
+
+            With ``snow_free=True`` the acquisitions are filtered first, **per polygon**: a
+            scene counts as snow-free for a polygon when
+            ``snow_and_ice / valid_area <= max_snow_fraction`` (default 0.05, the same
+            threshold ``DWDataset._mask_invalid`` uses, so ice is included). Polygons are
+            grouped by the acquisitions that are snow-free for them and one mode composite is
+            built per distinct set, so each lake is composited from its own snow-free scenes.
+            A month with no snow-free acquisition for a polygon is **absent** for that polygon
+            rather than reported as zero - the fix for the ``0 ha`` artefacts.
+
+            Cost: one survey request plus one mode composite per distinct scene set per
+            (chunk, month) - usually one or two sets inside a spatially coherent chunk.
+
         Raises:
             KeyError: If the specified name_attribute column is not found in the
                 vector dataset.
+            TypeError: If ``snow_free`` is not a bool.
             ValueError: If neither (years and months) nor date_list is provided,
                 or if both are provided.
             NoDynamicWorldDataError: If Earth Engine confirms there is no Dynamic World
-                data for any chunk and date requested.
+                data for any chunk and date requested, or (with ``snow_free=True``)
+                if no requested month contains a snow-free acquisition.
             ee.EEException, requests.exceptions.RequestException, ...: If an Earth Engine
                 or network request fails after retrying transient errors.
         """
@@ -592,6 +741,14 @@ class EarthEngineDownloader:
             raise ValueError("Either vector_dataset or gdf must be provided")
         elif vector_dataset is not None and gdf is not None:
             raise ValueError("Only one of vector_dataset or gdf should be provided, not both")
+
+        if not isinstance(snow_free, bool):
+            raise TypeError(f"snow_free must be True or False, got {snow_free!r}")
+        if not 0 <= max_snow_fraction <= 1:
+            raise ValueError(
+                f"max_snow_fraction must be between 0 and 1 (share of the polygon allowed to be "
+                f"snow/ice), got {max_snow_fraction}"
+            )
 
         # Announce no_download mode at the top
         if no_download:
@@ -675,25 +832,40 @@ class EarthEngineDownloader:
         # Process chunks with joblib (sequential if n_parallel=1, parallel otherwise)
         self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
 
-        # Use tqdm for progress bar
-        df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
-            joblib.delayed(self._extract_time_series)(
-                dates=dates, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
+        if snow_free:
+            self._log_info(
+                "snow_free=True: per-polygon snow-free scene selection, then one mode composite "
+                f"per distinct scene set (<= {max_snow_fraction:.0%} snow/ice)"
             )
-            for chunk in tqdm(gdf_chunks, desc="Downloading DW chunks", unit="chunk")
-        )
-        # Filter out None/empty results
-        df_out_list = [df for df in df_out_list if df is not None and not df.empty]
-
-        # Combine all chunks. Errors have already been raised above, so an empty list
-        # here means Earth Engine confirmed there is no Dynamic World data at all.
-        if not df_out_list:
-            raise NoDynamicWorldDataError(
-                f"No data was extracted from any chunk: Earth Engine returned no Dynamic World data "
-                f"for any of the {len(gdf_chunks)} chunks and {n_dates} dates requested."
+            df_out = self._monthly_mode_snow_free_frame(
+                dates=dates,
+                gdf_chunks=gdf_chunks,
+                name_attribute=name_attribute,
+                scale=scale,
+                n_parallel=n_parallel_effective,
+                max_snow_fraction=max_snow_fraction,
             )
+        else:
+            # Use tqdm for progress bar
+            df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
+                joblib.delayed(self._extract_time_series)(
+                    dates=dates, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
+                )
+                for chunk in tqdm(gdf_chunks, desc="Downloading DW chunks", unit="chunk")
+            )
+            # Filter out None/empty results
+            df_out_list = [df for df in df_out_list if df is not None and not df.empty]
 
-        df_out = pd.concat(df_out_list)
+            # Combine all chunks. Errors have already been raised above, so an empty list
+            # here means Earth Engine confirmed there is no Dynamic World data at all.
+            if not df_out_list:
+                raise NoDynamicWorldDataError(
+                    f"No data was extracted from any chunk: Earth Engine returned no Dynamic World data "
+                    f"for any of the {len(gdf_chunks)} chunks and {n_dates} dates requested."
+                )
+
+            df_out = pd.concat(df_out_list)
+
         ds = df_out.set_index([name_attribute, "date"]).to_xarray()
 
         # Log summary statistics using the dataset coordinates (indexes)
@@ -701,14 +873,17 @@ class EarthEngineDownloader:
         n_dates = len(ds.coords["date"])
         self._log_info(f"Download complete: {n_items} items, {n_dates} dates collected")
 
-        # Remove the 'reducer' variable if present
-        ds = ds.drop_vars("reducer")
+        # Remove the 'reducer' variable if present (the snow_free_median path has dropped it already)
+        ds = ds.drop_vars("reducer", errors="ignore")
 
         # force date to pd.datetime format
         ds["date"] = pd.to_datetime(ds["date"])
 
         # Annotate dataset with metadata
         ds = annotate_xr_dataset_dw(ds, input_vector_file=vector_dataset)
+        ds.attrs["snow_free"] = bool(snow_free)
+        if snow_free:
+            ds.attrs["max_snow_fraction"] = float(max_snow_fraction)
 
         # Save to file if requested
         if save_to_file is not None:

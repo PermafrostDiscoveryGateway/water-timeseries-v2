@@ -871,6 +871,90 @@ class TestDwCoverageStats:
         assert pd.isna(stats.loc["empty", "coverage_median"])
 
 
+class TestMonthlySnowFreeFiltering:
+    """snow_free: per-polygon scene filtering of the monthly mode composite."""
+
+    @pytest.fixture
+    def downloader(self):
+        from shapely.geometry import box
+
+        dl = EarthEngineDownloader(ee_project="test-project", ee_auth=False)
+        dl.gdf = gpd.GeoDataFrame(
+            {"id_geohash": ["lakeA"]}, geometry=[box(0, 0, 0.01, 0.01)], crs="EPSG:4326"
+        )
+        return dl
+
+    @staticmethod
+    def _scenes(entries) -> pd.DataFrame:
+        """Frame shaped like ee_to_df: ``(lake, date, water_ha, snow_ha)`` per acquisition."""
+        rows = []
+        for lake, day, water, snow in entries:
+            rec = {"id_geohash": lake, "date": pd.Timestamp(day)}
+            for var in dw_bandnames:
+                rec[var] = 0.0
+            rec["water"] = water
+            rec["snow_and_ice"] = snow
+            rows.append(rec)
+        return pd.DataFrame(rows)
+
+    def test_attrs_record_the_filter(self, downloader):
+        downloader._monthly_mode_snow_free_frame = mock.Mock(
+            return_value=self._scenes([("lakeA", "2020-06-01", 12.0, 0.0)])
+        )
+        ds = downloader.download_dw_monthly(
+            gdf=downloader.gdf, years=[2020], months=[6], snow_free=True, max_snow_fraction=0.1
+        )
+        assert ds.attrs["snow_free"] is True
+        assert ds.attrs["max_snow_fraction"] == pytest.approx(0.10)
+
+    def test_filter_is_off_by_default_and_unchanged(self, downloader):
+        downloader._extract_time_series = mock.Mock(
+            return_value=self._scenes([("lakeA", "2020-06-01", 12.0, 0.0)])
+        )
+        downloader._monthly_mode_snow_free_frame = mock.Mock(side_effect=AssertionError("must not be used"))
+        ds = downloader.download_dw_monthly(gdf=downloader.gdf, years=[2020], months=[6])
+        assert ds.attrs["snow_free"] is False
+        assert "max_snow_fraction" not in ds.attrs
+
+    def test_snow_free_must_be_a_bool(self, downloader):
+        """`snow_free="true"` is a truthy string, which used to enable the filter silently."""
+        with pytest.raises(TypeError, match="must be True or False"):
+            downloader.download_dw_monthly(gdf=downloader.gdf, years=[2020], months=[6], snow_free="true")
+
+    def test_snow_free_uses_the_scene_filtered_path(self, downloader):
+        downloader._monthly_mode_snow_free_frame = mock.Mock(
+            return_value=self._scenes([("lakeA", "2020-06-01", 12.0, 0.0)])
+        )
+        downloader._extract_time_series = mock.Mock(side_effect=AssertionError("must not be used"))
+        ds = downloader.download_dw_monthly(gdf=downloader.gdf, years=[2020], months=[6], snow_free=True)
+        downloader._monthly_mode_snow_free_frame.assert_called_once()
+        assert ds.attrs["snow_free"] is True
+        assert float(ds["water"].isel(date=0, id_geohash=0)) == pytest.approx(12.0)
+
+    def test_snow_free_groups_by_shared_scene_sets(self):
+        """Polygons with the same snow-free acquisitions share one composite."""
+        survey = pd.DataFrame(
+            {
+                "id_geohash": ["a", "a", "b", "b", "c", "c"],
+                "date": [1, 2, 1, 2, 1, 2],
+                "snow_area": [0.0, 0.0, 0.0, 5.0, 10.0, 10.0],
+                "valid_area": [10.0, 10.0, 10.0, 10.0, 10.0, 10.0],
+            }
+        )
+        groups = EarthEngineDownloader._snow_free_groups(survey, "id_geohash", 0.05)
+        assert groups == {(1, 2): ["a"], (1,): ["b"]}  # "c" has no snow-free scene
+
+    def test_invalid_max_snow_fraction_raises(self, downloader):
+        with pytest.raises(ValueError, match="max_snow_fraction"):
+            downloader.download_dw_monthly(
+                gdf=downloader.gdf,
+                years=[2020],
+                months=[6],
+                snow_free=True,
+                max_snow_fraction=1.5,
+            )
+
+
 # Run tests
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
