@@ -973,11 +973,38 @@ class TestMonthlyMedianAggregation:
         assert ds.attrs["snow_free"] is False
         assert "max_snow_fraction" not in ds.attrs
 
-    def test_snow_free_requires_the_median_aggregation(self, downloader):
-        with pytest.raises(ValueError, match="requires aggregation='median'"):
+    def test_snow_free_must_be_a_bool(self, downloader):
+        """`snow_free="true"` is a truthy string, which used to enable the filter silently."""
+        with pytest.raises(TypeError, match="must be True or False"):
             downloader.download_dw_monthly(
-                gdf=downloader.gdf, years=[2020], months=[6], aggregation="mode", snow_free=True
+                gdf=downloader.gdf, years=[2020], months=[6], aggregation="mode", snow_free="true"
             )
+
+    def test_mode_with_snow_free_uses_the_scene_filtered_path(self, downloader):
+        downloader._monthly_mode_snow_free_frame = mock.Mock(
+            return_value=self._scenes([("lakeA", "2020-06-01", 12.0, 0.0)])
+        )
+        downloader._extract_time_series = mock.Mock(side_effect=AssertionError("must not be used"))
+        ds = downloader.download_dw_monthly(
+            gdf=downloader.gdf, years=[2020], months=[6], aggregation="mode", snow_free=True
+        )
+        downloader._monthly_mode_snow_free_frame.assert_called_once()
+        assert ds.attrs["aggregation"] == "mode"
+        assert ds.attrs["snow_free"] is True
+        assert float(ds["water"].isel(date=0, id_geohash=0)) == pytest.approx(12.0)
+
+    def test_snow_free_groups_by_shared_scene_sets(self):
+        """Polygons with the same snow-free acquisitions share one composite."""
+        survey = pd.DataFrame(
+            {
+                "id_geohash": ["a", "a", "b", "b", "c", "c"],
+                "date": [1, 2, 1, 2, 1, 2],
+                "snow_area": [0.0, 0.0, 0.0, 5.0, 10.0, 10.0],
+                "valid_area": [10.0, 10.0, 10.0, 10.0, 10.0, 10.0],
+            }
+        )
+        groups = EarthEngineDownloader._snow_free_groups(survey, "id_geohash", 0.05)
+        assert groups == {(1, 2): ["a"], (1,): ["b"]}  # "c" has no snow-free scene
 
     def test_invalid_aggregation_raises(self, downloader):
         with pytest.raises(ValueError, match="aggregation must be"):

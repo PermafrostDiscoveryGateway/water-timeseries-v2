@@ -369,6 +369,99 @@ def calc_dw_aggregate_v2(
     return ee.Image(image)
 
 
+# Dynamic World label for the snow_and_ice class, used by the scene-level snow filter.
+DW_SNOW_ICE_LABEL = 8
+
+
+def dw_snow_valid_areas(
+    polygons: ee.FeatureCollection,
+    start_date: str,
+    end_date: str,
+    crs: str = "EPSG:3572",
+    scale: float = 10,
+) -> ee.ImageCollection:
+    """Per-acquisition snow/ice and valid-pixel areas, for scene-level filtering.
+
+    Every image carries two bands:
+
+    - ``snow_area``: area in hectares of the ``snow_and_ice`` class,
+    - ``valid_area``: area in hectares of all pixels carrying any classification.
+
+    Their ratio is the snow/ice share of the *observed* lake surface, which is what
+    ``EarthEngineDownloader.download_dw_monthly(..., aggregation="mode", snow_free=True)``
+    thresholds per polygon before compositing a month. Using the classified area as the
+    denominator makes the share insensitive to cloud masking: a scene that is half cloudy
+    but fully snow-covered on the visible half still scores 1.0.
+
+    Args:
+        polygons: Region of interest, used to filter the collection.
+        start_date: Start date ``'YYYY-MM-DD'`` (inclusive).
+        end_date: End date ``'YYYY-MM-DD'`` (exclusive).
+        crs: Coordinate reference system for the default projection (default: EPSG:3572).
+        scale: Pixel scale in meters (default: 10).
+
+    Returns:
+        ee.ImageCollection: Two-band (``snow_area``, ``valid_area``) images, one per
+        acquisition, each keeping its ``system:time_start``.
+    """
+    collection = (
+        ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1").filterBounds(polygons).filterDate(start_date, end_date)
+    )
+    pixel_area_ha = ee.Image.pixelArea().multiply(1e-4)
+
+    def to_areas(image):
+        label = image.select("label")
+        snow = label.eq(DW_SNOW_ICE_LABEL).multiply(pixel_area_ha).rename("snow_area")
+        valid = label.mask().multiply(pixel_area_ha).rename("valid_area")
+        return (
+            ee.Image([snow, valid])
+            .set("system:time_start", image.get("system:time_start"))
+            .setDefaultProjection(crs=crs, scale=scale)
+        )
+
+    return collection.map(to_areas)
+
+
+def dw_mode_composite(
+    polygons: ee.FeatureCollection,
+    start_date: str,
+    end_date: str,
+    timestamps: list[int],
+    crs: str = "EPSG:3572",
+    scale: float = 10,
+) -> ee.Image:
+    """Mode composite of selected acquisitions only.
+
+    Restricts the collection to the given ``system:time_start`` values and reduces the
+    ``label`` band with ``ee.Reducer.mode()``. The composite is stamped with the month start
+    so it lands on the monthly grid, and its band is named ``label_mode`` for
+    :func:`create_dw_classes_mask`.
+
+    Args:
+        polygons: Region of interest, used to filter the collection.
+        start_date: Start date ``'YYYY-MM-DD'`` (inclusive), also used to bound the collection.
+        end_date: End date ``'YYYY-MM-DD'`` (exclusive).
+        timestamps: ``system:time_start`` values (milliseconds) to composite.
+        crs: Coordinate reference system for the default projection (default: EPSG:3572).
+        scale: Pixel scale in meters (default: 10).
+
+    Returns:
+        ee.Image: Single-band (``label_mode``) mode composite with the month-start timestamp.
+    """
+    collection = (
+        ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1")
+        .filterBounds(polygons)
+        .filterDate(start_date, end_date)
+        .filter(ee.Filter.inList("system:time_start", list(timestamps)))
+        .select("label")
+    )
+    return (
+        collection.reduce(ee.Reducer.mode())
+        .set("system:time_start", ee.Date(start_date).millis())
+        .setDefaultProjection(crs=crs, scale=scale)
+    )
+
+
 def create_dw_classes_mask(image):
     """
     Creates a mask for all classes in the given image.

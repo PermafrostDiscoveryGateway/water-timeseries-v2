@@ -212,9 +212,9 @@ ds = dl.download_dw_monthly(
 | `aggregation` | `snow_free` | what you get |
 |---|---|---|
 | **`"mode"`** (default) | `False` | historical product: one mode composite of the month (`ee.Reducer.mode()` on the label band) and its class areas. Cheapest, and comparable with existing archives. |
+| `"mode"` | `True` | the same modal composite, but built **per polygon from that polygon's own snow-free scenes** - one composite per distinct snow-free scene set inside a chunk (usually one or two). This is the "normal monthly product, minus the snowy scenes" option. |
 | `"median"` | `False` | every acquisition of the month is extracted and the **median class areas** are reported - a baseline that includes snow-covered scenes. |
-| `"median"` | `True` | same, but each scene is judged **per polygon** and discarded when snow/ice covers more than `max_snow_fraction` of it; the survivors are combined by median. **Recommended for snow-affected lakes.** |
-| `"mode"` | `True` | rejected with a `ValueError`: filtering scenes per polygon needs one composite per polygon, which the mode path does not build. |
+| `"median"` | `True` | same, but scenes are filtered per polygon by `max_snow_fraction` and the survivors are combined by median. Cheaper per month than the mode variant, but it reports a median area rather than a modal label map. |
 
 The mode composite has a known artefact: in a month that is snow-covered for most of its
 days the modal class is `snow_and_ice`, so the month is reported as **`water = 0 ha`** even
@@ -226,17 +226,20 @@ snow-free acquisitions - spring melt and autumn refreeze alike.
 # historical behaviour, default
 ds_mode = dl.download_dw_monthly(vector_dataset, years=[2020], months=[6, 7, 8, 9])
 
-# median of all acquisitions, no filter (baseline)
-ds_median = dl.download_dw_monthly(vector_dataset, years=[2020], months=[6, 7, 8, 9], aggregation="median")
-
-# snow-free scenes only, per polygon - recommended for Arctic lakes
-ds_snow = dl.download_dw_monthly(
+# modal composite per lake over its own snow-free scenes (recommended for Arctic lakes)
+ds_mode_snowfree = dl.download_dw_monthly(
     vector_dataset,
     years=[2020],
-    months=[6, 7, 8, 9],
-    aggregation="median",
+    months=[5, 6, 7, 8, 9],
+    aggregation="mode",
     snow_free=True,
     max_snow_fraction=0.05,   # default: the same threshold DWDataset._mask_invalid uses
+)
+
+# median of the surviving per-acquisition class areas instead
+ds_median_snowfree = dl.download_dw_monthly(
+    vector_dataset, years=[2020], months=[5, 6, 7, 8, 9],
+    aggregation="median", snow_free=True,
 )
 ```
 
