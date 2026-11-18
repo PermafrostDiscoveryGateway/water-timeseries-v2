@@ -213,39 +213,39 @@ selected with `aggregation=`:
 | method | what it does | when to use |
 |---|---|---|
 | **`"mode"`** (default) | builds one mode composite of the month (`ee.Reducer.mode()` on the label band) and reports its class areas | keeping comparability with existing monthly archives and the NRT pipeline |
-| **`"ice_free"`** | extracts every acquisition of the month, **discards each scene whose snow/ice share of the polygon exceeds `max_snow_fraction`**, and reports the **median** class areas of the survivors | ice-affected lakes - the recommended method in the Arctic |
+| **`"snow_free"`** | extracts every acquisition of the month, **discards each scene whose snow/ice share of the polygon exceeds `max_snow_fraction`**, and reports the **median** class areas of the survivors | snow-affected lakes - the recommended method in the Arctic |
 
 The mode composite has a known artefact: in a month that is snow-covered for most of its
 days, the modal class is `snow_and_ice`, so the month is reported as **`water = 0 ha`** even
-where the lake opened up late in the month. The ice-free method removes those scenes
+where the lake opened up late in the month. The snow-free method removes those scenes
 instead, and because the test is applied per polygon, every lake keeps only *its own*
-ice-free acquisitions - spring and autumn refreeze alike.
+snow-free acquisitions - spring and autumn refreeze alike.
 
 ```python
 # historical behaviour, default
 ds_mode = dl.download_dw_monthly(vector_dataset, years=[2020], months=[6, 7, 8, 9])
 
-# ice-free aggregation, recommended for Arctic lakes
-ds_ice = dl.download_dw_monthly(
+# snow-free aggregation, recommended for Arctic lakes
+ds_snow = dl.download_dw_monthly(
     vector_dataset,
     years=[2020],
     months=[6, 7, 8, 9],
-    aggregation="ice_free",
+    aggregation="snow_free",
     max_snow_fraction=0.05,   # default: the same threshold DWDataset._mask_invalid uses
 )
 ```
 
 Differences to be aware of:
 
-- **A month with no ice-free acquisition is absent** from `"ice_free"` output rather than
+- **A month with no snow-free acquisition is absent** from `"snow_free"` output rather than
   reported as zero. For a lake that is snow-covered for the whole of May, that means no May
   row - which is the honest answer, and it removes the false "drainage" signal.
 - The aggregation statistic is a **median** over the surviving scenes, not a modal label
   map. Only class areas are published, so the dataset shape is unchanged.
-- `"ice_free"` costs roughly what `download_dw_daily` costs, because it reuses that
+- `"snow_free"` costs roughly what `download_dw_daily` costs, because it reuses that
   extraction path. `"mode"` remains the cheaper one.
 - The dataset records which method produced it: `ds.attrs["aggregation"]`
-  (`"mode"` / `"ice_free"`), plus `ds.attrs["max_snow_fraction"]` for the ice-free case.
+  (`"mode"` / `"snow_free"`), plus `ds.attrs["max_snow_fraction"]` for the snow-free case.
 
 ### Download per-acquisition (unaggregated) data
 

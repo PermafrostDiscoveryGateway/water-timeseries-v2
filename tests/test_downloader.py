@@ -871,8 +871,8 @@ class TestDwCoverageStats:
         assert pd.isna(stats.loc["empty", "coverage_median"])
 
 
-class TestMonthlyIceFreeAggregation:
-    """aggregation='ice_free': scene-level ice filter, median per (polygon, month)."""
+class TestMonthlySnowFreeAggregation:
+    """aggregation='snow_free': scene-level snow filter, median per (polygon, month)."""
 
     @pytest.fixture
     def downloader(self):
@@ -897,45 +897,45 @@ class TestMonthlyIceFreeAggregation:
             rows.append(rec)
         return pd.DataFrame(rows)
 
-    def test_icy_scenes_are_discarded_and_survivors_median(self, downloader):
+    def test_snowy_scenes_are_discarded_and_survivors_median(self, downloader):
         downloader._extract_acquisitions = mock.Mock(
             return_value=self._scenes(
                 [
-                    ("lakeA", "2020-06-05", 10.0, 0.0),  # ice-free
-                    ("lakeA", "2020-06-12", 20.0, 0.5),  # ice-free (2.4 % of 20.5 ha)
+                    ("lakeA", "2020-06-05", 10.0, 0.0),  # snow-free
+                    ("lakeA", "2020-06-12", 20.0, 0.5),  # snow-free (2.4 % of 20.5 ha)
                     ("lakeA", "2020-06-20", 0.0, 100.0),  # fully ice: discarded
                 ]
             )
         )
         ds = downloader.download_dw_monthly(
-            gdf=downloader.gdf, years=[2020], months=[6], aggregation="ice_free"
+            gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free"
         )
         assert ds.sizes["date"] == 1
         assert float(ds["water"].isel(date=0, id_geohash=0)) == pytest.approx(15.0)  # median(10, 20)
 
-    def test_month_without_ice_free_scene_is_absent_not_zero(self, downloader):
+    def test_month_without_snow_free_scene_is_absent_not_zero(self, downloader):
         downloader._extract_acquisitions = mock.Mock(
             return_value=self._scenes(
                 [
                     ("lakeA", "2020-06-10", 0.0, 50.0),  # June: all ice
-                    ("lakeA", "2020-07-10", 12.0, 0.0),  # July: ice-free
+                    ("lakeA", "2020-07-10", 12.0, 0.0),  # July: snow-free
                 ]
             )
         )
         ds = downloader.download_dw_monthly(
-            gdf=downloader.gdf, years=[2020], months=[6, 7], aggregation="ice_free"
+            gdf=downloader.gdf, years=[2020], months=[6, 7], aggregation="snow_free"
         )
         months = pd.to_datetime(ds["date"].values).month.tolist()
         assert months == [7]
         assert float(ds["water"].min()) > 0
 
-    def test_all_scenes_icy_raises(self, downloader):
+    def test_all_scenes_snowy_raises(self, downloader):
         downloader._extract_acquisitions = mock.Mock(
             return_value=self._scenes([("lakeA", "2020-06-10", 0.0, 50.0)])
         )
         with pytest.raises(NoDynamicWorldDataError, match="none of the"):
             downloader.download_dw_monthly(
-                gdf=downloader.gdf, years=[2020], months=[6], aggregation="ice_free"
+                gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free"
             )
 
     def test_attrs_record_the_method(self, downloader):
@@ -943,9 +943,9 @@ class TestMonthlyIceFreeAggregation:
             return_value=self._scenes([("lakeA", "2020-06-10", 12.0, 0.0)])
         )
         ds = downloader.download_dw_monthly(
-            gdf=downloader.gdf, years=[2020], months=[6], aggregation="ice_free", max_snow_fraction=0.1
+            gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free", max_snow_fraction=0.1
         )
-        assert ds.attrs["aggregation"] == "ice_free"
+        assert ds.attrs["aggregation"] == "snow_free"
         assert ds.attrs["max_snow_fraction"] == pytest.approx(0.10)
 
     def test_mode_is_still_the_default_and_unchanged(self, downloader):
@@ -964,7 +964,7 @@ class TestMonthlyIceFreeAggregation:
     def test_invalid_max_snow_fraction_raises(self, downloader):
         with pytest.raises(ValueError, match="max_snow_fraction"):
             downloader.download_dw_monthly(
-                gdf=downloader.gdf, years=[2020], months=[6], aggregation="ice_free", max_snow_fraction=1.5
+                gdf=downloader.gdf, years=[2020], months=[6], aggregation="snow_free", max_snow_fraction=1.5
             )
 
 
