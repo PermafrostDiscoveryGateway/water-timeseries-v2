@@ -24,6 +24,17 @@ For installing just the runtime dependencies:
 pip install .
 ```
 
+Building PMTiles needs the `tippecanoe` binary, which ships as an optional extra (it is not needed
+for downloads, datasets or breakpoints):
+
+```bash
+pip install -e ".[pmtiles]"   # or: uv sync --extra pmtiles
+```
+
+A system install works just as well (`brew install tippecanoe`, `apt install tippecanoe`): the
+build path only looks for `tippecanoe` on `PATH`, and the tile commands raise a clear error when
+it is missing.
+
 ## Quick Example
 
 ```python

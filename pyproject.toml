@@ -17,11 +17,16 @@ dependencies = [
     "seaborn",
     "matplotlib>=3.8.0",
     "shapely",
-    "pyarrow",
+    # pyarrow 26+ refuses to import with numpy < 2 ("requires NumPy 2.0 or newer"), while this
+    # project pins numpy < 2; 18 is the first release with cp313 wheels. 18-25 import cleanly
+    # against numpy 1.26 (verified per version), so cap below 26 instead of downgrading.
+    "pyarrow>=18.0.0,<26.0.0",
     "h3pandas",
     "h3>=4.0.0,<5.0.0",
     "joblib>=1.4.2",
-    "ray[default]>=2.40.0",
+    # 2.60 is the first release with cp313/cp314 Windows wheels; earlier 2.4x/2.5x ship
+    # them only up to cp312, which made `uv sync` fail on Windows with Python 3.13.
+    "ray[default]>=2.60.0",
     "h5netcdf>=1.4.1",
     "zarr>=2.18.4",
     "opencv-python>=4.11.0.86",
@@ -52,7 +57,9 @@ dependencies = [
     "ffmpeg>=1.4",
     "ffmpeg-python>=0.2.0",
     "mapclassify>=2.10.0",
-    "packaging==24.1",
+    # loose pin: nothing in the package imports it, and a hard == blocked ray>=2.60,
+    # which needs packaging>=24.2 for its own metadata handling.
+    "packaging>=24.1",
     "sktime>=0.40.1",
     "pmdarima>=2.1.1",
     "dask[dataframe]>=2026.3.0",
@@ -64,7 +71,6 @@ dependencies = [
     "gcloud>=0.18.3",
     "xee>=0.1.1",
     "rioxarray>=0.19.0",
-    "tippecanoe>=2.72.0",
     "leafmap>=0.62.0",
     "pygeohash>=3.3.0",
     "ruff>=0.16.0",
@@ -75,6 +81,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# PMTiles building shells out to the `tippecanoe` binary. Installing this extra provides one
+# (it compiles from sdist: needs cmake >= 3.20 plus scikit_build_core and setuptools_scm < 10);
+# a system install (brew/apt) works just as well - `find_tippecanoe` only looks on PATH.
+pmtiles = [
+    "tippecanoe>=2.72.0",
+]
 dev = [
     "pytest>=7.0",
     "pytest-cov>=4.0",
