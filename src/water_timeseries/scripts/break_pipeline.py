@@ -13,7 +13,8 @@ from loguru import logger
 from tqdm import tqdm
 
 from water_timeseries.breakpoint import BeastBreakpoint
-from water_timeseries.dataset import DWDataset, JRCDataset
+from water_timeseries.dataset import create_water_dataset
+from water_timeseries.utils.data import get_water_dataset_type as sniff_water_dataset_type
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
 
@@ -63,12 +64,9 @@ def process_chunk_remote(chunk: xr.Dataset, water_dataset_type: str, break_metho
     """Ray remote function to process a single chunk."""
     from water_timeseries.breakpoint import SimpleBreakpoint
 
-    if water_dataset_type == "dynamic_world":
-        ds = DWDataset(chunk)
-    elif water_dataset_type == "jrc":
-        ds = JRCDataset(chunk)
-    else:
-        raise ValueError(f"Unknown water dataset type: {water_dataset_type}")
+    # One dispatch point: create_water_dataset knows every registered source, so adding a
+    # fourth does not mean editing this module (twice, for ray and joblib).
+    ds = create_water_dataset(chunk, water_dataset_type)
 
     if break_method == "beast":
         bp = BeastBreakpoint()
@@ -84,12 +82,9 @@ def process_chunk(chunk: xr.Dataset, water_dataset_type: str, break_method: str 
     """Process a single chunk (for use with joblib)."""
     from water_timeseries.breakpoint import SimpleBreakpoint
 
-    if water_dataset_type == "dynamic_world":
-        ds = DWDataset(chunk)
-    elif water_dataset_type == "jrc":
-        ds = JRCDataset(chunk)
-    else:
-        raise ValueError(f"Unknown water dataset type: {water_dataset_type}")
+    # One dispatch point: create_water_dataset knows every registered source, so adding a
+    # fourth does not mean editing this module (twice, for ray and joblib).
+    ds = create_water_dataset(chunk, water_dataset_type)
 
     if break_method == "beast":
         bp = BeastBreakpoint()
@@ -233,13 +228,12 @@ class BreakpointPipeline:
             self.breaks.to_parquet(output_file)
 
     def get_water_dataset_type(self) -> str:
-        """Determine the water dataset type based on the presence of specific variables in the dataset."""
-        if "area_water_permanent" in self.input_ds.data_vars:
-            self.water_dataset_type = "jrc"
-        elif "water" in self.input_ds.data_vars:
-            self.water_dataset_type = "dynamic_world"
-        else:
-            raise ValueError("Unknown water dataset type")
+        """Determine the water dataset type from the dataset's variables.
+
+        Delegates to :func:`water_timeseries.utils.data.get_water_dataset_type` so the
+        sniffer exists in one place only; the result is still cached on the pipeline.
+        """
+        self.water_dataset_type = sniff_water_dataset_type(self.input_ds)
         if self.logger:
             self.logger.info(f"Determined water dataset type: {self.water_dataset_type}")
 
@@ -452,10 +446,7 @@ class BreakpointPipeline:
 
                 # Sequential processing
                 for chunk in self.chunked_ds:
-                    if self.water_dataset_type == "dynamic_world":
-                        ds = DWDataset(chunk)
-                    elif self.water_dataset_type == "jrc":
-                        ds = JRCDataset(chunk)
+                    ds = create_water_dataset(chunk, self.water_dataset_type)
 
                     if self.break_method == "beast":
                         bp = BeastBreakpoint()
