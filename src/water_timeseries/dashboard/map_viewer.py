@@ -28,7 +28,7 @@ from water_timeseries.dashboard.share_state import (
     update_live_view,
 )
 from water_timeseries.dashboard.tutorial_popup import show_help_button, show_tutorial_popup
-from water_timeseries.dataset import DWDataset, JRCDataset
+from water_timeseries.dataset import DSWxDataset, DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.map_utils import (
     geohash_to_human_readable_name,
@@ -45,6 +45,7 @@ from water_timeseries.utils.dashboard import (
     plot_time_series_data,
 )
 from water_timeseries.utils.earthengine import (
+    DSWX_ARCHIVE_START,
     cached_get_rioxarray_ds_from_lake,
     cached_visualize_cube,
     get_unique_dates_from_xee_ds,
@@ -1260,6 +1261,10 @@ def create_app(
     if st.session_state.disable_jrc:
         logger.warning("JRC data loading is disabled!")
 
+    # OPERA DSWx-S1 time series panel. Off by default: the archive starts in 2024-08 and each
+    # lake needs its own download, so it is opt-in for the session (sidebar toggle below).
+    st.session_state.setdefault("disable_dswx", True)
+
     # Disable/Enable JRC data. True to disable
     st.session_state.disable_popup_plot = True
     if st.session_state.disable_popup_plot:
@@ -1343,6 +1348,20 @@ def create_app(
             "⚠️ Offline mode: Data downloads, timelapse generation, and recent satellite data views are disabled."
         )
 
+    # Opt-in third time-series panel. Off by default because DSWx needs a per-lake download
+    # and only covers 2024-08 onwards.
+    st.session_state.disable_dswx = not st.sidebar.toggle(
+        "OPERA DSWx-S1 time series",
+        value=not st.session_state.disable_dswx,
+        key="toggle_dswx_panel",
+        help=(
+            "Sentinel-1 radar surface water, 30 m, from "
+            f"{DSWX_ARCHIVE_START} onwards. Water bodies below ~3 ha are not mapped, and a "
+            "frozen basin is classified as inundated vegetation, so winter rows are an ice "
+            "signal rather than hydrology."
+        ),
+    )
+
     use_pmtiles = bool(pmtiles_file or pmtiles_url)
     map_backend = "pmtiles" if use_pmtiles else "folium"
 
@@ -1401,6 +1420,11 @@ def create_app(
             st.session_state.jrc_dataset_raw = None
         if "downloaded_dsjrc" not in st.session_state:
             st.session_state.downloaded_dsjrc = None
+    if not st.session_state.disable_dswx:
+        if "dswx_dataset" not in st.session_state:
+            st.session_state.dswx_dataset = None
+        if "downloaded_dsdswx" not in st.session_state:
+            st.session_state.downloaded_dsdswx = None
     if "show_ts_popup" not in st.session_state:
         st.session_state.show_ts_popup = False
 
@@ -1889,6 +1913,12 @@ def create_app(
                 id_available_jrc = check_dataset_availability(st.session_state.jrc_dataset, current)
             else:
                 id_available_jrc = False
+            if not st.session_state.disable_dswx:
+                id_available_dswx = check_dataset_availability(
+                    st.session_state.get("dswx_dataset"), current
+                )
+            else:
+                id_available_dswx = False
             # st.caption(f"DW availability: {id_available_dw}, JRC availability: {id_available_jrc}")
 
             # Automatically download if not available
@@ -2020,11 +2050,19 @@ def create_app(
                             f"No break date available for lake {current}. Time series plot will not include a break date."
                         )
 
-                    # Create container with one row and two columns for time series plots
-                    if st.session_state.disable_jrc:
-                        ts_col1, ts_col2 = st.columns(spec=[0.99, 0.01])  # hacky way to have 2 cols with left/only 99%
+                    # Panels: DW always, JRC and DSWx only when enabled.
+                    panel_count = (
+                        1 + int(not st.session_state.disable_jrc) + int(not st.session_state.disable_dswx)
+                    )
+                    ts_col3 = None
+                    if panel_count == 1:
+                        # hacky way to have 2 cols with left/only 99%
+                        ts_col1, ts_col2 = st.columns(spec=[0.99, 0.01])
                     else:
-                        ts_col1, ts_col2 = st.columns(2)
+                        panel_columns = st.columns(panel_count)
+                        ts_col1, ts_col2 = panel_columns[0], panel_columns[1]
+                        if panel_count == 3:
+                            ts_col3 = panel_columns[2]
 
                     # Plot Dynamic World time series in first column
                     with ts_col1:
@@ -2058,6 +2096,53 @@ def create_app(
                             with ts_col2:
                                 logger.info(f"JRC data not available for lake: {current}")
                                 st.caption("JRC data not available for this feature")
+
+                    # OPERA DSWx-S1 panel (opt-in). No automatic download: each lake needs a
+                    # month-by-month composite and the archive only starts in 2024-08, so the
+                    # panel offers a button instead of joining the automatic DW/JRC fetch.
+                    if ts_col3 is not None:
+                        with ts_col3:
+                            st.subheader("OPERA DSWx")
+                            if st.session_state.get("dswx_dataset") is not None and id_available_dswx:
+                                plot_time_series_data(
+                                    st.session_state.dswx_dataset,
+                                    current,
+                                    "dswx",
+                                    is_interactive=True,
+                                    show_success=False,
+                                    show_caption=True,
+                                    break_date=break_date,
+                                    plot_variables=[
+                                        "area_water",
+                                        "area_open_water",
+                                        "area_inundated_vegetation",
+                                    ],
+                                )
+                            elif st.session_state.get("offline_mode", False):
+                                st.caption("OPERA DSWx-S1 data not loaded (offline mode)")
+                            else:
+                                st.caption("OPERA DSWx-S1 data not loaded for this feature")
+                                if st.button("⬇️ Download OPERA DSWx-S1", key=f"dswx_download_{current}"):
+                                    try:
+                                        downloader = EarthEngineDownloader(ee_auth=True, ee_project=ee_project)
+                                        ds_dswx = downloader.download_dswx_monthly(
+                                            vector_dataset=data_path_input,
+                                            name_attribute=id_column,
+                                            id_list=[current],
+                                            years=list(
+                                                range(int(DSWX_ARCHIVE_START[:4]), pd.Timestamp.now().year + 1)
+                                            ),
+                                            months=list(range(1, 13)),
+                                        )
+                                        if ds_dswx is None:
+                                            st.error("Download returned no OPERA DSWx-S1 data.")
+                                        else:
+                                            st.session_state.dswx_dataset = DSWxDataset(ds_dswx)
+                                            st.session_state.downloaded_dsdswx = ds_dswx
+                                            st.rerun()
+                                    except Exception as e:  # noqa: BLE001
+                                        logger.error(f"Failed to download OPERA DSWx-S1 for {current}: {e}")
+                                        st.error(f"Error downloading OPERA DSWx-S1 data: {e}")
                 except Exception as e:  # noqa: BLE001
                     logger.error(f"Error plotting time series for lake {current}: {e}")
                     st.error(f"Error plotting time series: {e}")

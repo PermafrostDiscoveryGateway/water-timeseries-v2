@@ -7,7 +7,7 @@ import pandas as pd
 import streamlit as st
 import xarray as xr
 
-from water_timeseries.dataset import DWDataset, JRCDataset
+from water_timeseries.dataset import DSWxDataset, DWDataset, JRCDataset
 from water_timeseries.downloader import EarthEngineDownloader
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 
@@ -102,7 +102,7 @@ def check_dataset_availability_ds_raw(dataset: xr.Dataset, id_geohash: str) -> b
 
 
 def plot_time_series_data(
-    dataset: DWDataset | JRCDataset | None,
+    dataset: DWDataset | JRCDataset | DSWxDataset | None,
     id_geohash: str,
     dataset_type: str,
     is_interactive: bool = True,
@@ -115,9 +115,9 @@ def plot_time_series_data(
     Unified function to plot time series data with automatic format handling.
 
     Args:
-        dataset: Dataset object (DWDataset or JRCDataset)
+        dataset: Dataset object (DWDataset, JRCDataset or DSWxDataset)
         id_geohash: ID of the feature to plot
-        dataset_type: 'dw' or 'jrc' for labeling
+        dataset_type: 'dw', 'jrc' or 'dswx' for labeling
         is_interactive: Whether to use interactive (plotly) or static (matplotlib) plots
         show_success: Whether to show success message for DW data
         show_caption: Whether to show captions and availability information
@@ -125,6 +125,8 @@ def plot_time_series_data(
         plot_variables: Optional list of variables to plot. If None, uses default variables.
             For DW: defaults to all (water, bare, vegetation, snow_and_ice)
             For JRC: defaults to all (area_water_permanent, area_water_seasonal, area_land)
+            For DSWx: defaults to the product's own plot columns (total water, open water,
+                inundated vegetation)
 
     Returns:
         True if plotting succeeded, False otherwise
@@ -153,7 +155,7 @@ def plot_time_series_data(
 
         # Save as HTML for download
         html_buffer = fig.to_html(full_html=False, include_plotlyjs="cdn")
-        file_suffix = "jrc_" if dataset_type == "jrc" else ""
+        file_suffix = "" if dataset_type == "dw" else f"{dataset_type}_"
         st.download_button(
             label=f"💾 Save {file_suffix.upper()}Interactive Plot (HTML)",
             data=html_buffer,
