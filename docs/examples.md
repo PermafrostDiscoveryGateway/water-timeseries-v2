@@ -47,6 +47,33 @@ print(processor.data_columns)
 total_area = processor.ds["area_data"]
 ```
 
+## Working with DSWxDataset
+
+The `DSWxDataset` class handles OPERA DSWx-S1 radar surface water. Its three class areas are
+`area_open_water`, `area_inundated_vegetation` and `area_not_water`; `area_water` (open +
+inundated vegetation) is derived, and `water_column` is `area_open_water`.
+
+```python
+from water_timeseries.dataset import DSWxDataset
+
+# Either product works: per acquisition (one row per Sentinel-1 scene) or monthly
+ds = xr.open_dataset("dswx_monthly.zarr")
+processor = DSWxDataset(ds)
+
+print(processor.data_columns)
+# Output: ['area_open_water', 'area_inundated_vegetation', 'area_not_water']
+
+# Total water = the union of both water classes, comparable with DW water + flooded_vegetation
+total_water = processor.ds["area_water"]
+
+fig = processor.plot_timeseries(processor.object_ids_[0])
+```
+
+Comparing with Dynamic World: add DW's `flooded_vegetation` to its `water` before
+comparing, and expect DSWx open water alone to be roughly 63 % of DW's water. Winter rows
+are not hydrology - the product has no snow/ice class and reports a frozen basin as
+inundated vegetation, so gate them per acquisition against DW's `snow_and_ice`.
+
 ## Merging Datasets
 
 The `merge()` method allows combining two LakeDataset instances. This is useful for combining data from different time periods or adding new lakes to an existing dataset.

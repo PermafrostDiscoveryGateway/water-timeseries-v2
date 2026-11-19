@@ -19,6 +19,8 @@ Documentation is automatically built and deployed on every push to `main` using 
 
 - **Dynamic World Handler**: Process Dynamic World land cover classifications
 - **JRC Water Handler**: Handle JRC water occurrence and classification data
+- **OPERA DSWx-S1 Handler**: Radar (Sentinel-1) surface water classes, downloadable per
+  acquisition and monthly, from 2024-08 onward
 - **Earth Engine Downloader**: Download data directly from Google Earth Engine
 - **Data Normalization**: Automatic normalization and scaling of time series
 - **Breakpoint Detection**: Statistical (SimpleBreakpoint) and advanced (RBEAST) methods for detecting water extent changes
@@ -327,6 +329,60 @@ For very large lake sets (thousands) leave `max_total_requests` near its default
 beyond what the workers can run only add per-request overhead. Values are unchanged to
 ~1e-10 ha across settings, but only a fixed `max_total_requests` with `n_parallel=1` is
 bit-reproducible.
+
+### OPERA DSWx-S1 (radar surface water)
+
+`download_dswx_acquisitions` / `download_dswx_monthly` pull OPERA DSWx-S1 (Sentinel-1,
+30 m) for the same polygons, and take **the same date arguments** as the Dynamic World
+pair — so a DW call is repointed by changing the method name. Per acquisition:
+
+```python
+ds = dl.download_dswx_acquisitions(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    years=[2025], months=[6, 7, 8, 9],   # or date_list=["2025-06", ...]
+)   # or start_date="05-01", end_date="09-30"
+
+ds_m = dl.download_dswx_monthly(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    years=[2025], months=[6, 7, 8, 9],
+)
+
+from water_timeseries.dataset import DSWxDataset
+
+dataset = DSWxDataset(ds)
+fig = dataset.plot_timeseries("b7g4rf3n3x43")            # total water + open + vegetation
+html = dataset.plot_timeseries_interactive("b7g4rf3n3x43")
+```
+
+The product splits one water body into three classes, published as area bands:
+`area_open_water` (WTR 1), `area_inundated_vegetation` (WTR 3) and `area_not_water`
+(WTR 0). `DSWxDataset` adds `area_water` = open + inundated vegetation, the union that is
+comparable with Dynamic World's `water + flooded_vegetation`. `water_column` is
+`area_open_water`, so **a cross-source comparison has to add the vegetation class itself** —
+open water alone is ~63 % of DW's water, open + vegetation is 95–97 %.
+
+**Three limits you must know before reading a series:**
+
+- **The archive starts 2024-08** (measured: no images in July 2024, five in August), so this
+  is a forward-looking supplement, never a 2016-forward retrospective source.
+- **Water bodies below ~3 ha / 200 m width are not mapped.** Sub-MMU polygons read as "no
+  water" by design; the downloader warns with the count, and the 118-lake test set (median
+  5 ha) contains many such polygons.
+- **There is no snow/ice class, and the artefact lands in the vegetation band.** A frozen
+  basin is classified as *inundated vegetation*: measured on a 207 ha basin, January gave
+  3.4 ha open water + 182 ha inundated vegetation while DW reported 100 % `snow_and_ice`.
+  Winter rows are an ice signal, not hydrology. The product's own HAND (250) and
+  layover/shadow (251) masks measured empty in every acquisition and high confidence
+  changed nothing, so the gate must come from DW's `snow_and_ice` for the same polygon and
+  date — which only the per-acquisition product can do, because a monthly composite has
+  already mixed ice and open water.
+
+Tiles are collapsed, never summed: a polygon covered by several MGRS tiles on one date
+appears once, using the best-covered tile (tie-break: larger not-water area). A month or
+acquisition with no usable observation is **absent**, not zero. The no-data tolerance is
+`max(max_nodata, min_masked_pixels/polygon_pixels)` — 2 % with a two-pixel floor, because a
+0.5 ha pond spans ~6 pixels at 30 m. Product provenance and these caveats are written into
+`ds.attrs` by `annotate_xr_dataset_dswx`.
 
 ### Command Line Interface
 
