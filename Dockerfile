@@ -38,10 +38,10 @@ ENV PATH="/app/.venv/bin:$PATH"
 RUN uv pip install "h3>=4.0.0"
 
 # Sync all dependencies
-RUN uv sync --no-dev
+RUN uv sync --no-dev --extra pmtiles
 
 # Install the package in editable mode
-RUN uv pip install -e .
+RUN uv pip install -e ".[pmtiles]"
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV VIRTUAL_ENV=/app/.venv
