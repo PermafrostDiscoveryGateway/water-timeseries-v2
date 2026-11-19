@@ -248,6 +248,11 @@ def plot_water_time_series_jrc(
         "area_water_permanent": "#4a90e2",  # Blue
         "area_land": "#8B4513",  # Brown
         "area_water_seasonal": "#a6bddb",
+        # OPERA DSWx-S1 (same plotter, area-class schema)
+        "area_water": "#08519c",  # total water - dark blue, emphasised
+        "area_open_water": "#4a90e2",  # Blue
+        "area_inundated_vegetation": "#31a354",  # Green
+        "area_not_water": "#bdbdbd",  # Light grey
     }
     # pull annual data from xarray dataset
     # plot annual lake area
@@ -257,8 +262,8 @@ def plot_water_time_series_jrc(
     for variable in df_melt["variable"].unique():
         data = df_melt[df_melt["variable"] == variable]
         color = color_map.get(variable, None)  # Use predefined color or None
-        linewidth = 1.5 if variable == "area_water_permanent" else 1
-        markersize = 6 if variable == "area_water_permanent" else 5
+        linewidth = 2.0 if variable == "area_water" else (1.5 if variable == "area_water_permanent" else 1)
+        markersize = 6 if variable in ("area_water", "area_water_permanent") else 5
 
         sns.lineplot(
             data=data,
