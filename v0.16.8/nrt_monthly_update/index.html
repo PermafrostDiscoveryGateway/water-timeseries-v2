@@ -1,0 +1,1343 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Automated analysis of water timeseries data from satellite imagery and remote sensing sources">
+      
+      
+      
+        <link rel="canonical" href="https://PermafrostDiscoveryGateway.github.io/water-timeseries-v2/v0.16.8/nrt_monthly_update/">
+      
+      
+        <link rel="prev" href="../tile_generation/">
+      
+      
+        <link rel="next" href="../api/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
+    
+    
+      
+        <title>NRT Monthly Update - water-timeseries</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#refreshing-the-dashboard-for-a-new-nrt-month" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="water-timeseries" class="md-header__button md-logo" aria-label="water-timeseries" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            water-timeseries
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              NRT Monthly Update
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="blue" data-md-color-accent="light-blue"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    PermafrostDiscoveryGateway/water-timeseries-v2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="water-timeseries" class="md-nav__button md-logo" aria-label="water-timeseries" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    water-timeseries
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    PermafrostDiscoveryGateway/water-timeseries-v2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../examples/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embedding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Embedding & Shareable Links
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tile_generation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building Map Tilesets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    NRT Monthly Update
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    NRT Monthly Update
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0-see-what-upstream-actually-has" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0. See what upstream actually has
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-dynamic-world-cube" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Dynamic World cube
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-nrt-run-lake-geometries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. NRT run: lake geometries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-merge-the-months-drainage-confidence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Merge the month's drainage confidence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-build-the-months-tileset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Build the month's tileset
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Build the month&#39;s tileset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-archive-holds-and-why-nrt-run-dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the archive holds, and why --nrt-run-dir
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rebuilding-the-base-archive-and-the-historical-overlay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rebuilding the base archive and the historical overlay
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-deploying-the-refresh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Deploying the refresh
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-full-run-for-the-month" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No full run for the month
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+        
+          
+          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_7">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/dataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dataset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/breakpoint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breakpoint
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Utils
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#0-see-what-upstream-actually-has" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        0. See what upstream actually has
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#1-dynamic-world-cube" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        1. Dynamic World cube
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#2-nrt-run-lake-geometries" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        2. NRT run: lake geometries
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#3-merge-the-months-drainage-confidence" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        3. Merge the month's drainage confidence
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-build-the-months-tileset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        4. Build the month's tileset
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="4. Build the month&#39;s tileset">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#what-the-archive-holds-and-why-nrt-run-dir" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        What the archive holds, and why --nrt-run-dir
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#rebuilding-the-base-archive-and-the-historical-overlay" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Rebuilding the base archive and the historical overlay
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#5-verify" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        5. Verify
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#6-deploying-the-refresh" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        6. Deploying the refresh
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#no-full-run-for-the-month" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        No full run for the month
+      
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="refreshing-the-dashboard-for-a-new-nrt-month">Refreshing the dashboard for a new NRT month<a class="headerlink" href="#refreshing-the-dashboard-for-a-new-nrt-month" title="Permanent link">🔗</a></h1>
+<p>When a new month of near-real-time data lands, a handful of artifacts have to be
+refreshed. Doing only some of them fails quietly rather than loudly: the month simply
+does not appear in the sidebar, or it appears with the wrong colors, or its lakes
+render but do not respond to clicks.</p>
+<p><strong>Every month:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Artifact</th>
+<th>What it drives</th>
+<th>Refreshed by</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Dynamic World cube (<code>.zarr</code>)</td>
+<td>The per-lake timeseries panel</td>
+<td>Download from GCS, update <code>dw_dataset_file</code></td>
+<td>multi-GB download</td>
+</tr>
+<tr>
+<td>Breaks table (<code>nrt_monthly_drain_breaks.parquet</code>)</td>
+<td>Which lakes drained, and their confidence</td>
+<td><code>merge-nrt-confidence</code></td>
+<td>~15 s</td>
+</tr>
+<tr>
+<td>Month tileset (<code>nrt_&lt;month&gt;_drainage.pmtiles</code>)</td>
+<td>The Drainage Status overlay, and what every lake hovers</td>
+<td><code>build-nrt-pmtiles --months</code></td>
+<td>~40 s, or 8-12 min with a full run to score from</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Only when it has fallen behind</strong> (deferrable — see step 2):</p>
+<table>
+<thead>
+<tr>
+<th>Artifact</th>
+<th>What it drives</th>
+<th>Refreshed by</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NRT run geometries (<code>.parquet</code>)</td>
+<td>Resolving a map click to a lake</td>
+<td>Download, <code>repartition-parquet</code>, update <code>vector_file</code></td>
+<td>multi-GB download</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Rarely — only when the lake geometry itself changes, not per month:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Artifact</th>
+<th>What it drives</th>
+<th>Refreshed by</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Shared base archive (<code>data/lake_geometry/lakes.pmtiles</code>)</td>
+<td>The grey lake polygons, in <em>both</em> modes</td>
+<td><code>build-pmtiles</code></td>
+<td>~35 min</td>
+</tr>
+<tr>
+<td>Historical drained overlay (<code>lakes_drained.pmtiles</code>)</td>
+<td>The colored drained lakes in historical mode</td>
+<td><code>build-drained-pmtiles</code></td>
+<td>seconds</td>
+</tr>
+</tbody>
+</table>
+<p>Both modes render their lakes from the <em>one</em> shared base archive, so an NRT month no
+longer needs its multi-GB <code>.pmtiles</code> downloaded or <code>pmtiles_file</code> re-pointed — the
+modes cover the same lakes with the same geometry (verified byte-identical), and
+neither styles the base layer from a baked property.</p>
+<p>The historical mode is otherwise untouched by an NRT month — it reads its own
+<code>precomputed_historical</code> directory and its own drained overlay.</p>
+<p>How each of those tilesets is actually built — inputs, layers, tippecanoe profiles, and
+why there are three archives rather than one — is in
+<a href="../tile_generation/">Building Map Tilesets</a>. This page is the monthly routine; that one
+is the reference behind it.</p>
+<h2 id="0-see-what-upstream-actually-has">0. See what upstream actually has<a class="headerlink" href="#0-see-what-upstream-actually-has" title="Permanent link">🔗</a></h2>
+<p>Everything below is gated on what the upstream pipeline has published, so start
+here. Both listings need <code>gcloud auth login</code> first (interactive, in your own
+browser).</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># The imagery-derived cube -- the ceiling on which months can have any NRT data</span>
+gcloud<span class="w"> </span>storage<span class="w"> </span>ls<span class="w"> </span>gs://pdg-storage-default/workflows_optimization/lake_change_detection/
+
+<span class="c1"># The monthly NRT pipeline runs</span>
+gcloud<span class="w"> </span>storage<span class="w"> </span>ls<span class="w"> </span>gs://pdg-storage-default/workflows_optimization/dashboard_nrt/
+</code></pre></div>
+<p>The cube lags real time by roughly a month, and it is the hard ceiling: if the
+newest cube stops at 2026-07, there is no 2026-08 data to show no matter what else
+exists. A month with a cube but <strong>no</strong> <code>DW_NRT_&lt;month&gt;_run&lt;date&gt;_allGeoms_v*.parquet</code>
+has no drainage confidence to extract, and the only route to one is the ~30 h/month
+<code>breakpoint-analysis-nrt</code> batch (see <a href="#no-full-run-for-the-month">No full run for the month</a>).</p>
+<p>Note the exact <code>run&lt;date&gt;</code> suffix — it is stamped upstream and is not derivable from
+the month. 2026-06's run is <code>run2025-06-25</code>; 2026-07's is <code>run2026-07-31</code>.</p>
+<p>The <code>allGeoms_v&lt;n&gt;</code> version is stamped upstream too, and it does <strong>not</strong> track the
+month: 2026-07 published <code>allGeoms_v2</code> while the older 2026-06 run is <code>allGeoms_v3</code>.
+Read it off the listing rather than assuming; the commands below use a <code>v*</code> glob, and
+so does <code>find_nrt_run_parquets</code>.</p>
+<h2 id="1-dynamic-world-cube">1. Dynamic World cube<a class="headerlink" href="#1-dynamic-world-cube" title="Permanent link">🔗</a></h2>
+<div class="highlight"><pre><span></span><code>gcloud<span class="w"> </span>storage<span class="w"> </span>cp<span class="w"> </span>-r<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>gs://pdg-storage-default/workflows_optimization/lake_change_detection/lakes_dw_V2d_2016-&lt;month&gt;_gapfilled_chunked.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>data/
+</code></pre></div>
+<p>Then point <code>dw_dataset_file</code> at it in <code>configs/dashboard_panarctic.yaml</code> (top level —
+both modes share the cube).</p>
+<p>Prefer the <code>_gapfilled_chunked</code> variant. A cube published without that suffix has not
+been gap-filled or re-chunked, so the timeseries panel will be slower and may show
+holes; it works, but it is not what the config is tuned for.</p>
+<p>Leave <code>dw_start_month</code> / <code>dw_end_month</code> alone. Those are the <strong>seasonal window</strong>
+(June–September), not a data cutoff — the dashboard reads them as
+<code>range(dw_start_month, dw_end_month + 1)</code>. Only <code>dw_end_year</code> moves, and only when
+the year rolls over.</p>
+<h2 id="2-nrt-run-lake-geometries">2. NRT run: lake geometries<a class="headerlink" href="#2-nrt-run-lake-geometries" title="Permanent link">🔗</a></h2>
+<p>Only the parquet is needed. The run also publishes a multi-GB <code>.pmtiles</code>, but the
+dashboard no longer uses it: both modes render from the shared base archive (see
+<a href="#rebuilding-the-base-archive-and-the-historical-overlay">Rebuilding the base archive and the historical overlay</a>), so
+downloading the run's tiles and re-pointing <code>pmtiles_file</code> is no longer part of a
+monthly refresh.</p>
+<div class="highlight"><pre><span></span><code>mkdir<span class="w"> </span>-p<span class="w"> </span>data/DW_NRT/DW_NRT_&lt;month&gt;_run&lt;date&gt;
+gcloud<span class="w"> </span>storage<span class="w"> </span>cp<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="s2">"gs://pdg-storage-default/workflows_optimization/dashboard_nrt/DW_NRT_&lt;month&gt;_run&lt;date&gt;_allGeoms_v*.parquet"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>data/DW_NRT/DW_NRT_&lt;month&gt;_run&lt;date&gt;/
+</code></pre></div>
+<p>The parquet needs repartitioning before the dashboard can read single lakes out of it
+efficiently — sorted by <code>id_geohash</code> with small row groups, so a per-lake read touches
+one row group instead of scanning ~1M rows:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>repartition-parquet<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>data/DW_NRT/DW_NRT_&lt;month&gt;_run&lt;date&gt;/DW_NRT_&lt;month&gt;_run&lt;date&gt;_allGeoms_v&lt;n&gt;.parquet<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>data/DW_NRT/DW_NRT_&lt;month&gt;_run&lt;date&gt;/DW_NRT_&lt;month&gt;_run&lt;date&gt;_allGeoms_v&lt;n&gt;_repartitioned.parquet
+</code></pre></div>
+<p>Substitute the <code>v&lt;n&gt;</code> the run actually published (see above). Keep the
+<code>_repartitioned</code> suffix: <code>find_nrt_run_parquets</code> prefers that copy when it picks the
+month's run for the <code>scored</code> layer, and the dashboard reads single lakes out of it.
+For 2026-07 this was 2.92 GB downloaded at ~30 MB/s and a 13 s repartition into 2014
+row groups.</p>
+<p>Then update the <code>nrt_drainage</code> mode in <code>configs/dashboard_panarctic.yaml</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="nt">modes</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">nrt_drainage</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">vector_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">data/DW_NRT/DW_NRT_&lt;month&gt;_run&lt;date&gt;/DW_NRT_&lt;month&gt;_run&lt;date&gt;_allGeoms_v3_repartitioned.parquet</span>
+<span class="w">    </span><span class="c1"># pmtiles_file is the shared base archive and does not change per month.</span>
+</code></pre></div>
+<p><code>vector_file</code> is what turns a map click into a lake id. If it still points at an older
+run, lakes that only exist in the new run will paint but not respond to clicks — the
+map reads as dead rather than as misconfigured.</p>
+<p>This step is also the one you can legitimately skip for a while: the Drainage Status
+overlay has its own per-month tileset (step 4) and does not depend on the base run
+matching the month. Steps 3 and 4 alone will light up a new month on an older base.</p>
+<h2 id="3-merge-the-months-drainage-confidence">3. Merge the month's drainage confidence<a class="headerlink" href="#3-merge-the-months-drainage-confidence" title="Permanent link">🔗</a></h2>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>merge-nrt-confidence<span class="w"> </span>&lt;month&gt;<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="s2">"DW_NRT_&lt;month&gt;_run&lt;date&gt;_allGeoms_v*.parquet"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--breaks-file<span class="w"> </span>data/precomputed_nrt/nrt_monthly_drain_breaks.parquet
+</code></pre></div>
+<p>Quote the glob so the shell leaves it alone. <code>--breaks-file</code> is required here: unlike
+<code>build-nrt-pmtiles</code>, this command reads top-level config keys only, so
+<code>--config-file configs/dashboard_panarctic.yaml</code> would not find <code>precomputed_nrt_dir</code>
+under <code>modes.nrt_drainage</code>.</p>
+<p>Takes ~15 s — a column-pruned, filtered read over <code>gcsfs</code>, not a download of the
+multi-GB run. The previous table is backed up to <code>.bak</code>, and the month's existing rows
+are dropped before the merge, so re-running is safe.</p>
+<p>This is what makes the month appear in the sidebar at all: the month list is built
+from <code>analysis_month</code> in this table, not from the tilesets on disk.</p>
+<h2 id="4-build-the-months-tileset">4. Build the month's tileset<a class="headerlink" href="#4-build-the-months-tileset" title="Permanent link">🔗</a></h2>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>build-nrt-pmtiles<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--config-file<span class="w"> </span>configs/dashboard_panarctic.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--months<span class="w"> </span>&lt;month&gt;<span class="w"> </span>--poly-max-zoom<span class="w"> </span><span class="m">12</span>
+</code></pre></div>
+<p>The config supplies <code>breaks_file</code>, <code>geometry_file</code>, <code>output_dir</code> and <code>nrt_run_dir</code>
+(the last one is what gets the <code>scored</code> layer built — see below); pass them as flags
+instead if you are working outside a config:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>build-nrt-pmtiles<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--breaks-file<span class="w"> </span>data/precomputed_nrt/nrt_monthly_drain_breaks.parquet<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--geometry-file<span class="w"> </span>data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-dir<span class="w"> </span>data/nrt_tiles<span class="w"> </span>--nrt-run-dir<span class="w"> </span>data/DW_NRT<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--months<span class="w"> </span>&lt;month&gt;<span class="w"> </span>--poly-max-zoom<span class="w"> </span><span class="m">12</span>
+</code></pre></div>
+<p><strong>Always pass <code>--months</code>.</strong> Without it every month in the breaks table is rebuilt —
+drained layers are ~10 s each (~7 minutes across a 41-month table), but every month
+that also has a full run under <code>nrt_run_dir</code> adds 8-12 minutes of its own. Needs
+<code>tippecanoe</code> (<code>brew install tippecanoe</code>).</p>
+<h3 id="what-the-archive-holds-and-why-nrt-run-dir">What the archive holds, and why <code>--nrt-run-dir</code><a class="headerlink" href="#what-the-archive-holds-and-why-nrt-run-dir" title="Permanent link">🔗</a></h3>
+<p>Two layers, because two sets of lakes have two different kinds of value:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Lakes</th>
+<th>Values</th>
+<th>Budget</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>drained</code> (+ <code>drained_points</code>)</td>
+<td>drained that month (~36k-61k)</td>
+<td>the drainage signal</td>
+<td>every feature kept, at every zoom</td>
+</tr>
+<tr>
+<td><code>scored</code></td>
+<td>every lake the month's full run predicted for</td>
+<td>observed vs predicted area, CI, residual, confidence</td>
+<td><code>--drop-densest-as-needed</code>, 2 MB tiles</td>
+</tr>
+</tbody>
+</table>
+<p>The <code>scored</code> layer is what a <strong>non-drained</strong> lake hovers. Without it the month's
+tileset spoke only for its drained lakes, and every other lake fell through to
+<code>pmtiles_file</code> — the shared base archive, which is mode-agnostic and has nothing
+month-specific in it, so a stable lake's popup showed the lake id and the historical
+area columns and no NRT values at all.</p>
+<p>It is built only for the months <code>--nrt-run-dir</code> finds a run parquet for
+(<code>DW_NRT_&lt;month&gt;_run&lt;date&gt;/..._allGeoms_v*_repartitioned.parquet</code>, <code>_subset</code> files
+ignored), because only a full run predicts per lake: the breaks table has the drained
+lakes and nothing else. A month with no run there gets the <code>drained</code> layers alone and
+works exactly as before, and the dashboard reads which layers a month actually has off
+the archive (<code>pmtiles_has_layer</code>), so nothing has to be configured per month.</p>
+<p>The two layers cannot come out of one tippecanoe run: its density and tile-size flags
+are per invocation, not per <code>-L</code> layer, and these two need opposite ones (a dropped
+drained lake is a lake missing from the map; 1.8M scored lakes have to be dropped to
+fit). So they are tiled separately and merged with <code>tile-join -pk</code> — <code>-pk</code> matters,
+since tile-join otherwise re-applies its own 500 KB cap and would drop from the
+drained layer that the split build exists to protect.</p>
+<p>Measured at <code>--poly-max-zoom 12</code>, both months that have a full run:</p>
+<table>
+<thead>
+<tr>
+<th>Month</th>
+<th>Run</th>
+<th>Scored lakes</th>
+<th>Archive</th>
+<th>Build</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-06</td>
+<td><code>run2025-06-25</code>, <code>allGeoms_v3</code></td>
+<td>1,842,467 (45.8%)</td>
+<td>820.6 MB</td>
+<td>~8 min</td>
+</tr>
+<tr>
+<td>2026-07</td>
+<td><code>run2026-07-31</code>, <code>allGeoms_v2</code></td>
+<td>3,027,972 (75.2%)</td>
+<td>1339.7 MB</td>
+<td>~12 min</td>
+</tr>
+</tbody>
+</table>
+<p>Most of that is the scored layer: it streams a ~3 GB intermediate GeoJSONL through
+tippecanoe. The drained-only path is still ~40 s, and the drained layer itself is
+33.9 MB at <code>--poly-max-zoom 12</code> against 57.3 MB at 14.</p>
+<p><strong>Scored coverage is a property of the run, not of this build</strong> — 45.8% of lakes for
+2026-06 against 75.2% for 2026-07. So the same lake can hover full NRT values on one
+month and only the base archive's historical area columns on another. An unscored lake
+has null values and <code>"nan : nan"</code> in its CI column, which the popup drops rather than
+showing, so this reads as a shorter popup and not as an error.</p>
+<p>Order matters: build this <em>after</em> step 3. A tileset baked from a month with no
+confidence bakes that absence into its tile properties, and the overlay falls back to
+a flat water-loss gradient. The only fix is rebuilding it.</p>
+<p>The zoom where the map switches from centroids to polygons is
+<code>POINT_POLY_SWITCH_ZOOM</code> in <code>utils/pmtiles_build.py</code> (currently 8), and the style
+layers derive their <code>minzoom</code>/<code>maxzoom</code> from it. Both layers are baked
+<code>POINT_POLY_OVERLAP_ZOOMS</code> levels either side of it, so nudging the switch within
+that band is a one-line style change; moving it further needs every archive rebuilt
+(~7 minutes for all months) or the map draws nothing at the uncovered zooms.</p>
+<h3 id="rebuilding-the-base-archive-and-the-historical-overlay">Rebuilding the base archive and the historical overlay<a class="headerlink" href="#rebuilding-the-base-archive-and-the-historical-overlay" title="Permanent link">🔗</a></h3>
+<p>Neither is part of a monthly refresh — rebuild them only when the lake geometry or the
+historical breaks change. <a href="../tile_generation/">Building Map Tilesets</a> covers what each
+carries and why; the commands are:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># The shared base archive both modes render their grey lakes from (~35 min, ~2.6 GB)</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>build-pmtiles<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>data/DW_historicalbp_simple_merged_breaks_with_allgeoms_v4.parquet<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>data/lake_geometry/lakes.pmtiles
+
+<span class="c1"># The historical drained-lakes overlay, which must land beside it (seconds, ~24 MB)</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>build-drained-pmtiles<span class="w"> </span>--config-file<span class="w"> </span>configs/dashboard_panarctic.yaml
+</code></pre></div>
+<p>Either mode's table works as the geometry source for the base archive: both cover the
+same 4,026,306 lakes with the same <code>id_geohash</code> and byte-identical geometry. The
+historical one is the canonical choice, and the only one carrying <code>date_break_year</code>,
+which the drained overlay filters on.</p>
+<blockquote>
+<p><strong>The drained overlay is not optional.</strong> Deleting it (or pointing
+<code>drained_pmtiles_file:</code> at nothing) falls back to filtering the base archive on
+<code>date_break_year</code>, which the shared base archive does not carry — so the filter
+matches nothing, every lake renders as a stable grey dot under a "Drainage Year"
+legend, and the map looks like data rather than like a misconfiguration. <code>app.py</code>
+logs a warning when it is missing in <code>drainage_year</code> mode; that warning is the only
+signal.</p>
+</blockquote>
+<p>Build to a new path, check it, then swap it in — the dashboard keeps serving the old
+one meanwhile. See
+<a href="../tile_generation/#verifying-an-archive">Verifying an archive</a>.</p>
+<h2 id="5-verify">5. Verify<a class="headerlink" href="#5-verify" title="Permanent link">🔗</a></h2>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
+<span class="s2">import pandas as pd</span>
+<span class="s2">print(pd.read_parquet('data/precomputed_nrt/nrt_monthly_drain_breaks.parquet',</span>
+<span class="s2">      columns=['analysis_month','drainage_confidence']).groupby('analysis_month').count())"</span>
+
+ls<span class="w"> </span>-la<span class="w"> </span>data/nrt_tiles/nrt_&lt;month&gt;_drainage.pmtiles
+</code></pre></div>
+<p>Then launch and switch to Near Real-Time:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>dashboard<span class="w"> </span>--config-file<span class="w"> </span>configs/dashboard_panarctic.yaml
+</code></pre></div>
+<p>The month should appear in the sidebar's "Drainage Status" list with its drained-lake
+count, and the log should carry
+<code>NRT monthly tiles for &lt;month&gt;: ... (scored layer: True)</code>. That log line is the one to
+check, in two parts: no line at all means the overlay silently fell back to the slower
+runtime feature-state path (step 4's archive was not found), and <code>scored layer: False</code>
+means the archive is there but was built without a full run for the month, so
+non-drained lakes will hover the base archive's historical columns instead of the
+month's prediction.</p>
+<p>Confirm what actually got baked by reading the archive rather than its file size:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">"</span>
+<span class="s2">from water_timeseries.utils.pmtiles_reader import read_pmtiles_metadata</span>
+<span class="s2">md = read_pmtiles_metadata('data/nrt_tiles/nrt_&lt;month&gt;_drainage.pmtiles')</span>
+<span class="s2">for layer in md['vector_layers']:</span>
+<span class="s2">    print(layer['id'], sorted(layer['fields']))"</span>
+</code></pre></div>
+<p>Expect <code>drained</code>, <code>drained_points</code> and — for a month with a full run — <code>scored</code>. Tile
+metadata is not proof that a layer's features survived at a given zoom, though; for
+that, decode tiles (see <a href="#background-the-centroid-handoff">Background: the centroid handoff</a>).</p>
+<h2 id="6-deploying-the-refresh">6. Deploying the refresh<a class="headerlink" href="#6-deploying-the-refresh" title="Permanent link">🔗</a></h2>
+<p>In production the config is mounted at <code>/data/dashboard-config.yaml</code> and the tiles are
+served by the <code>serve-tiles</code> sidecar, with <code>PMTILES_BASE_URL</code> pointing the browser at
+it. Two things follow:</p>
+<ul>
+<li><code>serve-tiles</code> reads only each mode's <code>pmtiles_file</code> out of the config — it does
+  <strong>not</strong> pick up <code>nrt_pmtiles_dir</code>. It serves the parent directory of the archive it
+  was given, so per-month archives are reachable by bare filename only if they sit in
+  that same directory.</li>
+<li>With <code>PMTILES_BASE_URL</code> set, the dashboard asks for <code>&lt;base_url&gt;/nrt_&lt;month&gt;_drainage.pmtiles</code>
+  — a bare filename, no directory component. The same applies to the historical
+  drained overlay: <code>&lt;base_url&gt;/lakes_drained.pmtiles</code>. Keeping it beside the shared
+  base archive means the directory <code>serve-tiles</code> was pointed at already contains it,
+  so it resolves with no extra deployment step.</li>
+</ul>
+<p>So either copy the month archives next to the base <code>.pmtiles</code> on the PVC, or set
+<code>nrt_pmtiles_dir</code> to an <code>http(s)://</code> or <code>gs://</code> prefix and let the browser fetch them
+straight from there.</p>
+<p><strong>Budget for the size.</strong> A month with a <code>scored</code> layer is ~0.8-1.3 GB, not the ~35-60 MB
+a drained-only month costs — 820.6 MB for 2026-06 and 1339.7 MB for 2026-07. Two such
+months is more than the shared base archive itself (4.1 GB) is worth thinking about
+next to. The browser only range-requests the tiles it needs, so this is a storage and
+transfer question, not a client-performance one, but a PVC sized for the old archives
+will not take many of these. If it matters, <code>--poly-max-zoom 12</code> is already applied
+above; the next lever is not building <code>scored</code> for older months you do not need it on
+(just leave their run out of <code>nrt_run_dir</code>).</p>
+<h2 id="no-full-run-for-the-month">No full run for the month<a class="headerlink" href="#no-full-run-for-the-month" title="Permanent link">🔗</a></h2>
+<p>If GCS has a cube but no <code>DW_NRT_&lt;month&gt;_run&lt;date&gt;</code> files, the confidence has to be
+computed locally — roughly 30 hours per month of ARIMA fitting:</p>
+<div class="highlight"><pre><span></span><code>uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>breakpoint-analysis-nrt<span class="w"> </span>&lt;args&gt;
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>aggregate-nrt<span class="w"> </span>&lt;nrt-dir&gt;
+</code></pre></div>
+<p><code>aggregate-nrt</code> consolidates the per-month <code>nrt_*_drain_breaks.parquet</code> files into
+<code>nrt_monthly_drain_breaks.parquet</code> plus <code>nrt_monthly_drain_counts.parquet</code>, which is
+the same table step 3 would have written. Steps 4 onward are unchanged.</p>
+<p>A month is not always one file in one directory: a tiled run writes each tile's
+parquet next to its <code>.nc</code>, in that month's own subdirectory. <code>aggregate-nrt</code> takes
+any number of input directories, so pass them all, or point it at the parent with
+<code>--recursive</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># one directory per tile</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>aggregate-nrt<span class="w"> </span>&lt;dir-a&gt;<span class="w"> </span>&lt;dir-b&gt;<span class="w"> </span>&lt;dir-c&gt;<span class="w"> </span>--output-dir<span class="w"> </span>&lt;nrt-dir&gt;
+
+<span class="c1"># or let it walk the month subdirectories itself</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>aggregate-nrt<span class="w"> </span>&lt;parent-dir&gt;<span class="w"> </span>--recursive<span class="w"> </span>--output-dir<span class="w"> </span>&lt;nrt-dir&gt;
+</code></pre></div>
+<p>Files are deduplicated by resolved path, so overlapping arguments (a parent with
+<code>--recursive</code> plus one of its own children) cannot double-count a month's rows.
+Note that <code>--output-dir</code> defaults to the <em>first</em> input directory, which is rarely
+what you want with several inputs — pass it explicitly.</p>
+<p>Always check GCS for a newer full run before committing to this — the run may simply
+not have been published yet.</p>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": null}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+    
+  </body>
+</html>
