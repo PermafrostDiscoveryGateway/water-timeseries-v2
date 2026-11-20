@@ -100,16 +100,21 @@ jobs:
       - name: Build package
         run: uv build
 
+      # Creates the release AND attaches the built wheel/sdist. The previous step
+      # (actions/create-release@v1) only created the page, so every release shipped with an
+      # empty asset list even on a green run - and it is an archived Node-12 action, which put
+      # the docker job below at risk because it `needs` this one.
       - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ needs.update-version.outputs.VERSION }}
-          release_name: ${{ needs.update-version.outputs.VERSION }}
+          name: ${{ needs.update-version.outputs.VERSION }}
           draft: false
           prerelease: false
+          files: dist/*
+          # Fail loudly if `uv build` produced nothing, instead of publishing an empty release
+          # again.
+          fail_on_unmatched_files: true
 
   # Runs on: manual dispatch with publish=true after tag+release
   build-and-push-docker:
