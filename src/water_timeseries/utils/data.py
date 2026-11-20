@@ -25,13 +25,32 @@ def calculate_water_area_before(df_water, break_date, water_column: str, stats=N
 
 
 def get_water_dataset_type(input_ds) -> str:
-    """Determine the water dataset type based on the presence of specific variables in the dataset."""
+    """Determine the water dataset type based on the presence of specific variables in the dataset.
+
+    This is the single place that maps a dataset's variables to a source name; the
+    pipelines and the ``create_water_dataset`` factory both rely on it instead of
+    repeating the sniffing logic.
+
+    Args:
+        input_ds: xarray Dataset (or DataArray-convertible) holding one of the products.
+
+    Returns:
+        str: ``"jrc"``, ``"dswx"`` or ``"dynamic_world"``.
+
+    Raises:
+        ValueError: If the variables match none of the known products.
+    """
     if "area_water_permanent" in input_ds.data_vars:
         water_dataset_type = "jrc"
+    elif "area_open_water" in input_ds.data_vars:
+        water_dataset_type = "dswx"
     elif "water" in input_ds.data_vars:
         water_dataset_type = "dynamic_world"
     else:
-        raise ValueError("Unknown water dataset type")
+        raise ValueError(
+            "Unknown water dataset type: no known identifier variable found "
+            "(expected 'area_water_permanent', 'area_open_water' or 'water')"
+        )
 
     return water_dataset_type
 
@@ -144,6 +163,79 @@ jrc_bandnames = [
     "area_water_seasonal",
     "area_water_permanent",
 ]
+
+# OPERA DSWx-S1: three class areas derived from the WTR classification. There is no
+# ``area_nodata`` band - the DSWxDataset derives it from the coverage maximum, exactly
+# like DWDataset does for the land-cover classes.
+dswx_bandnames = [
+    "area_open_water",  # WTR class 1
+    "area_inundated_vegetation",  # WTR class 3
+    "area_not_water",  # WTR class 0
+]
+
+# Derived in DSWxDataset._preprocess: the union of the two water classes, i.e. what
+# BWTR_Binary_water reports. Comparable with Dynamic World's water + flooded_vegetation.
+DSWX_WATER_TOTAL = "area_water"
+
+# What the DSWx plots show by default: the total plus its two components. area_not_water
+# is deliberately excluded - it is most of the polygon and flattens the interesting series.
+dswx_plot_variables = [DSWX_WATER_TOTAL, "area_open_water", "area_inundated_vegetation"]
+
+
+def annotate_xr_dataset_dswx(
+    ds: xr.Dataset,
+    input_vector_file: Path | str | None = None,
+    temporal_resolution: str = "monthly",
+) -> xr.Dataset:
+    """Annotate a DSWx dataset with units, provenance and the product's limits.
+
+    The three limits in ``description`` are the ones a user hits first: production starts
+    2024-08, water bodies below ~3 ha are not mapped, and there is no snow/ice class - a
+    frozen basin is reported as ``inundated vegetation``, so an un-gated winter series is
+    an ice series.
+
+    Parameters:
+        ds (xarray.Dataset): The dataset to annotate.
+        input_vector_file (str|Path, optional): The path to the accompanying vector dataset.
+        temporal_resolution (str, optional): ``"monthly"`` (one mode composite per month,
+            from :meth:`EarthEngineDownloader.download_dswx_monthly`) or
+            ``"per_acquisition"`` (one row per DSWx scene, from
+            :meth:`EarthEngineDownloader.download_dswx_acquisitions`). Defaults to "monthly".
+
+    Returns:
+        xarray.Dataset: The annotated dataset.
+    """
+    for var in list(ds.data_vars):
+        ds[var].attrs["units"] = "ha"
+
+    cadence = (
+        "One row per OPERA DSWx-S1 acquisition (Sentinel-1 pass, MGRS tile), not a "
+        "gap-filled daily series: dates without data are coverage gaps."
+        if temporal_resolution == "per_acquisition"
+        else "One row per month, from a per-pixel mode composite of that month's acquisitions."
+    )
+    ds.attrs["description"] = (
+        "This dataset provides the surface water area of selected lake polygons, split into "
+        "open water (WTR class 1), inundated vegetation (WTR class 3) and not water (WTR "
+        "class 0), from the OPERA DSWx-S1 Level 3 product through Google Earth Engine. "
+        f"{cadence} The areas are per MGRS tile: a polygon covered by several tiles on one "
+        "date appears once, using the best-covered tile (tie-break: larger not-water area). "
+        "Known limits of the product: production starts 2024-08 (no retrospective series), "
+        "water bodies below ~3 ha / 200 m width are not mapped, and there is no snow/ice "
+        "class - a frozen basin is classified as inundated vegetation, so winter rows are an "
+        "ice signal and must be gated per acquisition. Lake polygons were calculated by "
+        "Ingmar Nitze through the Permafrost Discovery Gateway Project. \"id_geohash\" is the "
+        "lake_id, which needs be joined to the accompanying polygon vector dataset"
+    )
+    ds.attrs["temporal_resolution"] = temporal_resolution
+    ds.attrs["product"] = "OPERA DSWx-S1 (OPERA/DSWX/L3_V1/S1)"
+    if input_vector_file is not None:
+        input_vector_file = Path(input_vector_file)
+        ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
+    ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
+    ds.attrs["contact"] = "ingmar.nitze@awi.de"
+    return ds
 
 
 def dw_coverage_stats(ds: xr.Dataset) -> pd.DataFrame:

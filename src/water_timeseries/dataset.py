@@ -18,7 +18,15 @@ import pandas as pd
 import plotly.graph_objects as go
 import xarray as xr
 
-from water_timeseries.utils.data import detect_temporal_resolution, dw_bandnames, jrc_bandnames
+from water_timeseries.utils.data import (
+    DSWX_WATER_TOTAL,
+    detect_temporal_resolution,
+    dswx_bandnames,
+    dswx_plot_variables,
+    dw_bandnames,
+    get_water_dataset_type,
+    jrc_bandnames,
+)
 from water_timeseries.utils.earthengine import create_timelapse
 from water_timeseries.utils.plotting import (
     plot_water_time_series_dw,
@@ -1051,3 +1059,193 @@ class JRCDataset(LakeDataset):
         )
 
         return fig
+
+
+class DSWxDataset(JRCDataset):
+    """Handler for OPERA DSWx-S1 surface water extent (area-class schema).
+
+    DSWx-S1 classifies every 30 m pixel into water / not water / inundated vegetation
+    rather than reporting land-cover areas, so the downloader publishes three class
+    areas and this class treats them like JRC's area columns:
+
+    - ``area_open_water`` (WTR class 1) - the ``water_column`` of this product,
+    - ``area_inundated_vegetation`` (WTR class 3),
+    - ``area_not_water`` (WTR class 0).
+
+    ``area_data`` is their sum and ``area_nodata`` the shortfall against the best
+    observation of the same object, which is what ``_normalize_ds`` and the breakpoint
+    layer expect. There is no snow/ice class: frozen water bodies simply are not water
+    in a Sentinel-1 product, and confidence filtering happens at download time.
+
+    Two deliberate differences from ``JRCDataset``, which this class otherwise reuses
+    (including its plotters): ``_mask_invalid`` tolerates a few no-data pixels instead of
+    rejecting any observation that has one, and the plots default to this product's three
+    class areas rather than JRC's.
+
+    Attributes:
+        water_column (str): ``"area_open_water"``.
+        data_columns (list): The three DSWx class areas.
+        plot_columns (list): What the plots draw by default - total water plus its two components.
+        max_nodata_fraction (float): Allowed no-data share of an observation.
+
+    Example:
+        >>> ds = DSWxDataset(xr.open_dataset("dswx_monthly.zarr"))
+        >>> ds.ds_normalized[ds.water_column]
+    """
+
+    def __init__(
+        self,
+        ds,
+        id_field: str = "id_geohash",
+        mask_data: bool = True,
+        max_nodata_fraction: float = 0.02,
+    ) -> None:
+        """Initialize DSWxDataset with OPERA DSWx-S1 class areas.
+
+        Args:
+            ds: Input xarray Dataset with the three DSWx class areas.
+            id_field: Name of the identifier coordinate (default: ``"id_geohash"``).
+            mask_data: Whether invalid data should be masked (default: True).
+            max_nodata_fraction: Allowed no-data share of an observation before it is
+                masked (default: 0.02). Relative to the best observation of the same
+                object, because a dataset carries no polygon geometry.
+
+        Raises:
+            ValueError: If `max_nodata_fraction` is outside 0..1.
+        """
+        # max_nodata_fraction must exist before super().__init__(), because the base
+        # constructor runs _preprocess -> _normalize_ds -> _mask_invalid, and
+        # _mask_invalid reads it. water_column / data_columns are set *after*, because
+        # the base constructor nulls them and JRCDataset fills in its own.
+        if not 0 <= max_nodata_fraction <= 1:
+            raise ValueError(f"max_nodata_fraction must be between 0 and 1, got {max_nodata_fraction}")
+        self.max_nodata_fraction = float(max_nodata_fraction)
+
+        super().__init__(ds, id_field=id_field, mask_data=mask_data)
+
+        self.water_column = "area_open_water"
+        self.data_columns = dswx_bandnames
+        # What the plots draw by default: total water + its two components.
+        self.plot_columns = list(dswx_plot_variables)
+
+    def _preprocess(self) -> None:
+        """Calculate total area as the sum of the three classes, and the no-data area."""
+        ds = self.ds
+        ds["area_data"] = ds["area_open_water"] + ds["area_inundated_vegetation"] + ds["area_not_water"]
+        # Total water = the union of the two water classes, i.e. BWTR_Binary_water. This is the
+        # series comparable with Dynamic World's water + flooded_vegetation.
+        ds[DSWX_WATER_TOTAL] = ds["area_open_water"] + ds["area_inundated_vegetation"]
+
+        max_area = ds["area_data"].max(dim="date", skipna=True)
+        ds["area_nodata"] = (max_area - ds["area_data"]).round(4)
+
+        self.preprocessed_ = True
+        self.ds = ds
+
+    def _mask_invalid(self) -> None:
+        """Mask observations whose no-data share exceeds ``max_nodata_fraction``."""
+        if self.mask_data is False:
+            return
+        ds = self.ds_normalized
+        mask = ds["area_nodata"] <= self.max_nodata_fraction
+        self.ds = self.ds.where(mask)
+        self.ds_normalized = self.ds_normalized.where(mask)
+
+        self.ds_ismasked_ = True
+        self.ds_normalized_ismasked_ = True
+
+    def plot_timeseries(
+        self,
+        object_id: str | int | None = None,
+        breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
+        plot_variables: list[str | None] | None = None,
+        save_path: str | Path | None = None,
+        *,
+        id_geohash: str | int | None = None,
+    ) -> plt.Figure:
+        """Plot the DSWx class areas of one object (static matplotlib figure).
+
+        Args:
+            object_id: The object identifier (a value from :attr:`object_ids_`).
+            breakpoints: Breakpoint method, date or list of dates (see the base class).
+            plot_variables: Subset of the class areas to show; defaults to all three.
+            save_path: Optional path to save the figure.
+            id_geohash: DEPRECATED alias for `object_id`; emits a FutureWarning.
+
+        Returns:
+            matplotlib.pyplot.Figure
+        """
+        object_id = self._resolve_object_id(object_id=object_id, id_geohash=id_geohash)
+        df = (self.ds.sel({self.id_field: object_id}).load().to_dataframe()).dropna().reset_index(drop=False)
+        bp = self._first_breakpoint_date_from_any_source(object_id, breakpoints)
+
+        fig = plot_water_time_series_jrc(  # type: ignore
+            df=df,
+            first_break=bp,
+            plot_variables=plot_variables if plot_variables is not None else list(self.plot_columns),
+            normalization_factor=df["area_data"].max(),
+            object_id=object_id,
+            save_path=save_path,
+        )
+        return fig
+
+    def plot_timeseries_interactive(
+        self,
+        object_id: str | int | None = None,
+        breakpoints: BreakpointMethod | pd.Timestamp | str | list[pd.Timestamp] | list[str] | None = None,
+        plot_variables: list[str | None] | None = None,
+        save_path: str | Path | None = None,
+        *,
+        id_geohash: str | int | None = None,
+    ) -> go.Figure:
+        """Plot the DSWx class areas of one object (interactive Plotly figure).
+
+        Args:
+            object_id: The object identifier (a value from :attr:`object_ids_`).
+            breakpoints: Breakpoint method, date or list of dates (see the base class).
+            plot_variables: Subset of the class areas to show; defaults to all three.
+            save_path: Optional path to save the figure as HTML.
+            id_geohash: DEPRECATED alias for `object_id`; emits a FutureWarning.
+
+        Returns:
+            plotly.graph_objects.Figure
+        """
+        object_id = self._resolve_object_id(object_id=object_id, id_geohash=id_geohash)
+        df = (self.ds.sel({self.id_field: object_id}).load().to_dataframe()).dropna().reset_index(drop=False)
+        bp = self._first_breakpoint_date_from_any_source(object_id, breakpoints)
+
+        fig = plot_water_time_series_jrc_interactive(  # type: ignore
+            df=df,
+            first_break=bp,
+            plot_variables=plot_variables if plot_variables is not None else list(self.plot_columns),
+            normalization_factor=df["area_data"].max(),
+            lake_id=object_id,
+            save_path=save_path,
+        )
+        return fig
+
+
+def create_water_dataset(ds: xr.Dataset, water_dataset_type: str | None = None) -> LakeDataset:
+    """Instantiate the dataset class for a water product.
+
+    Single dispatch point used by the breakpoint and plot pipelines, so a new source is
+    registered in one place instead of in every pipeline's ``if/elif`` chain.
+
+    Args:
+        ds: xarray Dataset with one of the supported products.
+        water_dataset_type: ``"dynamic_world"``, ``"jrc"`` or ``"dswx"``. If ``None``, it
+            is sniffed from the dataset's variables via :func:`get_water_dataset_type`.
+
+    Returns:
+        LakeDataset: ``DWDataset``, ``JRCDataset`` or ``DSWxDataset`` for that dataset.
+
+    Raises:
+        ValueError: If the type is unknown.
+    """
+    if water_dataset_type is None:
+        water_dataset_type = get_water_dataset_type(ds)
+
+    classes = {"dynamic_world": DWDataset, "jrc": JRCDataset, "dswx": DSWxDataset}
+    if water_dataset_type not in classes:
+        raise ValueError(f"Unknown water dataset type: {water_dataset_type}")
+    return classes[water_dataset_type](ds)

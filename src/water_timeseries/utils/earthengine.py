@@ -963,6 +963,153 @@ def dw_acquisitions(
     )
 
 
+# ---------------------------------------------------------------------------
+# OPERA DSWx-S1 (Sentinel-1 radar surface water)
+# ---------------------------------------------------------------------------
+
+DSWX_COLLECTION = "OPERA/DSWX/L3_V1/S1"
+DSWX_CLASS_BAND = "WTR_Water_classification"
+# Forward production only: there is nothing in the collection before this date, so the
+# downloader clamps its year list to it instead of returning empty years. Measured over the
+# 118-lake test AOI: 0 images in 2024-07, 5 in 2024-08, 11 in 2024-09 - the catalogue's
+# "production from September 2024" is a month late, and a call that starts at August returns
+# real data.
+DSWX_ARCHIVE_START = "2024-08-01"
+DSWX_CRS = "EPSG:3572"
+DSWX_SCALE = 30
+# Water bodies below roughly this size (or ~200 m across) are not mapped by the product, so
+# such a polygon reads as no-water by design rather than because the lake is dry.
+DSWX_MIN_MAPPING_AREA_HA = 3.0
+
+
+class NoDSWxDataError(ValueError):
+    """Raised when Earth Engine returns no usable OPERA DSWx-S1 observation.
+
+    Mirrors :class:`NoDynamicWorldDataError`: a "no data" answer is an error rather than an
+    empty dataset, so a coverage gap cannot be mistaken for a complete download.
+    """
+
+
+def dswx_class_areas(image):
+    """Class areas in hectares for one OPERA DSWx-S1 image.
+
+    Masks the ``WTR_Water_classification`` band into the three classes that occur in
+    practice - 0 not water, 1 open water, 3 inundated vegetation (class 2 never appeared in
+    probe histograms) - and multiplies each by the pixel area. Pixels with no data stay
+    masked in every class, so the sum of the three is the *classified* area: the difference
+    against the polygon area is the no-data share the downloader thresholds.
+
+    Args:
+        image: ``ee.Image`` with a ``WTR_Water_classification`` band.
+
+    Returns:
+        ee.Image: Three bands - ``area_not_water``, ``area_open_water``,
+        ``area_inundated_vegetation`` - in hectares, keeping ``system:time_start``.
+    """
+    wtr = image.select(DSWX_CLASS_BAND)
+    pixel_area_ha = ee.Image.pixelArea().multiply(1e-4)
+    return ee.Image(
+        [
+            wtr.eq(0).multiply(pixel_area_ha).rename("area_not_water"),
+            wtr.eq(1).multiply(pixel_area_ha).rename("area_open_water"),
+            wtr.eq(3).multiply(pixel_area_ha).rename("area_inundated_vegetation"),
+        ]
+    ).set("system:time_start", image.get("system:time_start"))
+
+
+def dswx_collection(polygons: ee.FeatureCollection, start_date: str, end_date: str) -> ee.ImageCollection:
+    """The OPERA DSWx-S1 acquisitions in a date range, class band only.
+
+    Single place where the collection is filtered, so a caller can size the month (``.size()``)
+    before building a composite.
+
+    Args:
+        polygons: Region of interest, used to filter the collection.
+        start_date: Start date ``'YYYY-MM-DD'`` (inclusive).
+        end_date: End date ``'YYYY-MM-DD'`` (exclusive).
+
+    Returns:
+        ee.ImageCollection: Images with only the ``WTR_Water_classification`` band.
+    """
+    return (
+        ee.ImageCollection(DSWX_COLLECTION)
+        .filterBounds(polygons)
+        .filterDate(start_date, end_date)
+        .select(DSWX_CLASS_BAND)
+    )
+
+
+def dswx_acquisitions(
+    polygons: ee.FeatureCollection,
+    start_date: str,
+    end_date: str,
+    crs: str = DSWX_CRS,
+    scale: float = DSWX_SCALE,
+) -> ee.ImageCollection:
+    """Every OPERA DSWx-S1 acquisition in a date range, as class-area bands.
+
+    One image per (MGRS tile, acquisition date): the same polygon can be reduced by several
+    tiles on one date, each covering only the part of the polygon inside that tile. The
+    reducer therefore returns per-tile fragments, and the caller must collapse them to one
+    row per (polygon, date) - never sum across tiles.
+
+    Args:
+        polygons: Region of interest, used to filter the collection.
+        start_date: Start date ``'YYYY-MM-DD'`` (inclusive).
+        end_date: End date ``'YYYY-MM-DD'`` (exclusive).
+        crs: Coordinate reference system for the default projection (default: EPSG:3572).
+        scale: Pixel scale in meters (default: 30, the product's native resolution).
+
+    Returns:
+        ee.ImageCollection: Three-band class areas in hectares, one per acquisition.
+    """
+    return dswx_collection(polygons, start_date, end_date).map(
+        lambda image: dswx_class_areas(image).setDefaultProjection(crs=crs, scale=scale)
+    )
+
+
+def dswx_month_composite(
+    polygons: ee.FeatureCollection,
+    start_date: str,
+    end_date: str,
+    crs: str = DSWX_CRS,
+    scale: float = DSWX_SCALE,
+) -> ee.Image:
+    """Per-pixel mode of a month's DSWx class codes.
+
+    Reduced with ``ee.Reducer.mode()`` over the class band, matching how
+    :func:`dw_mode_composite` builds the Dynamic World monthly product, so the two sources
+    are composited the same way. This differs from Google's own DSWx recipe
+    (``wtr.updateMask(wtr.lt(250))`` then ``ee.Reducer.max()``, i.e. a union): with two to
+    five scenes in a month a mode is thin, so a month's value is "the class most scenes
+    agreed on", not a guaranteed water maximum.
+
+    The band is renamed back to ``WTR_Water_classification`` so :func:`dswx_class_areas`
+    applies unchanged, and the composite is stamped with the month start so it lands on the
+    monthly grid.
+
+    Args:
+        polygons: Region of interest, used to filter the collection.
+        start_date: Month start ``'YYYY-MM-01'`` (inclusive), also the composite's timestamp.
+        end_date: End date ``'YYYY-MM-DD'`` (exclusive).
+        crs: Coordinate reference system for the default projection (default: EPSG:3572).
+        scale: Pixel scale in meters (default: 30).
+
+    Returns:
+        ee.Image: Single-band (``WTR_Water_classification``) mode composite.
+    """
+    collection = dswx_collection(polygons, start_date, end_date)
+    # Vote only with real classes (0..3): the product carries 250/251 for HAND and
+    # layover/shadow in the same band, and a mode that sees them can return one of them.
+    collection = collection.map(lambda image: image.updateMask(image.lte(3)))
+    return (
+        collection.reduce(ee.Reducer.mode())
+        .rename(DSWX_CLASS_BAND)
+        .set("system:time_start", ee.Date(start_date).millis())
+        .setDefaultProjection(crs=crs, scale=scale)
+    )
+
+
 def setup_annual_dates(years: list[int] | None = None, date_list: list[str] | None = None) -> list[str]:
     """Generate a list of annual dates from the given years or date_list.
 

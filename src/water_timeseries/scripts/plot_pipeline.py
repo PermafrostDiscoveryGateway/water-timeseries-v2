@@ -13,7 +13,7 @@ import xarray as xr
 from loguru import logger
 
 from water_timeseries.breakpoint import BeastBreakpoint, SimpleBreakpoint
-from water_timeseries.dataset import DWDataset, JRCDataset
+from water_timeseries.dataset import create_water_dataset
 from water_timeseries.utils.data import get_water_dataset_type
 
 app = typer.Typer(help="Plot time series of dataset")
@@ -70,14 +70,7 @@ def plot_lake_timeseries(
 
     # Get dataset type
     water_dataset_type = get_water_dataset_type(ds_xr)
-    if water_dataset_type == "jrc":
-        ds = JRCDataset(ds_xr)
-    elif water_dataset_type == "dynamic_world":
-        ds = DWDataset(ds_xr)
-    else:
-        if logger:
-            logger.error(f"Unknown water dataset type: {water_dataset_type}")
-        raise ValueError(f"Unknown water dataset type: {water_dataset_type}")
+    ds = create_water_dataset(ds_xr, water_dataset_type)
 
     # Plot timeseries
     if break_method == "beast":
