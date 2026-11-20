@@ -5,6 +5,12 @@ permissions:
   contents: read
   packages: write
 
+# The docs job below and docs.yml both push mike deployments to gh-pages; the shared group keeps
+# those pushes from racing each other.
+concurrency:
+  group: "gh-pages"
+  cancel-in-progress: false
+
 on:
   workflow_dispatch:
     inputs:
@@ -111,9 +117,10 @@ jobs:
           name: ${{ needs.update-version.outputs.VERSION }}
           draft: false
           prerelease: false
-          files: dist/*
+          files: dist/*.whl dist/*.tar.gz
           # Fail loudly if `uv build` produced nothing, instead of publishing an empty release
-          # again.
+          # again. The explicit patterns also keep `dist/.gitignore`, which `uv build` writes,
+          # out of the release.
           fail_on_unmatched_files: true
 
   # Runs on: manual dispatch with publish=true after tag+release
