@@ -6,50 +6,46 @@ on:
   pull_request:
     branches: [ main ]
 
+# The site is published by mike into the `gh-pages` branch, which is also what GitHub Pages
+# serves (Settings -> Pages -> Deploy from a branch: gh-pages / root). Released versions and the
+# `latest` alias are deployed by update_version.yml; this workflow publishes the `main` version so
+# doc fixes are visible without waiting for a release.
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
+# mike deploys are pushes to gh-pages; serialize them with the release workflow (same group) so a
+# bump and a main-push deploy cannot race on that branch.
 concurrency:
-  group: "pages"
+  group: "gh-pages"
   cancel-in-progress: false
 
 jobs:
-  build:
+  docs:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+      with:
+        fetch-depth: 0   # mike needs the gh-pages history it pushes onto
+
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.12'
-    
+
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e ".[docs]"
-    
-    - name: Build documentation
+
+    # Pull requests only validate that the docs still build - nothing is published.
+    - name: Build documentation (validation)
+      if: github.event_name == 'pull_request'
       run: mkdocs build
 
-    - name: Upload artifact
-      uses: actions/upload-pages-artifact@v3
-      with:
-        path: 'site'
-
-  deploy:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: build
-    runs-on: ubuntu-latest
-    
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    
-    steps:
-    - name: Deploy to GitHub Pages
-      id: deployment
-      uses: actions/deploy-pages@v4
+    - name: Publish the main version
+      if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        mike deploy --push main
