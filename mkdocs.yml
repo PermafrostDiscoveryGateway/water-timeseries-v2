@@ -17,6 +17,13 @@ theme:
     - search.suggest
     - search.highlight
 
+# Version selector. mkdocs-material fetches ../versions.json at runtime, which mike writes when it
+# deploys a version (releases: update_version.yml, main: docs.yml). Without this block the versioned
+# site is browsable by URL only - no dropdown.
+extra:
+  version:
+    provider: mike
+
 plugins:
   - search
   - mkdocstrings:
