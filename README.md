@@ -384,6 +384,44 @@ acquisition with no usable observation is **absent**, not zero. The no-data tole
 0.5 ha pond spans ~6 pixels at 30 m. Product provenance and these caveats are written into
 `ds.attrs` by `annotate_xr_dataset_dswx`.
 
+### OPERA DSWx-HLS (optical surface water)
+
+`download_dswx_hls_acquisitions` / `download_dswx_hls_monthly` pull **OPERA DSWx-HLS** (Harmonized
+Landsat 8/9 + Sentinel-2, 30 m) with the same date arguments as the other downloaders:
+
+```python
+ds = dl.download_dswx_hls_acquisitions(
+    vector_dataset="tests/data/lake_polygons.parquet",
+    years=[2025], months=[6, 7, 8, 9],
+)
+ds_m = dl.download_dswx_hls_monthly(vector_dataset="tests/data/lake_polygons.parquet", years=[2025], months=[6, 7, 8, 9])
+
+from water_timeseries.dataset import DSWxHLSDataset
+
+dataset = DSWxHLSDataset(ds)
+dataset.plot_timeseries("b7g4rf3n3x43")
+```
+
+Its class set is **not** the S1 one: `area_open_water` (WTR 1), `area_partial_water` (WTR 2, sub-pixel
+water) and `area_not_water` (WTR 0). There is no inundated-vegetation class, and 253 in the WTR band
+is the mask/cloud value. `area_water` = open + partial, which is the product's own
+`BWTR_Binary_water` — and it is the headline column here, because partial water is not a rounding
+detail: on the 377 ha test basin one July scene read **11 ha open against 201 ha partial**, so an
+open-water-only series would call that lake nearly dry in midsummer.
+
+`area_land_cover` comes from the product's LAND layer. It is an independent, near-static quantity —
+measured 114 ha of LAND against 175 ha of WTR `not water` on the same image — so it is published as
+its own band and deliberately kept out of `area_data` (adding it would double-count the polygon).
+
+**Two caveats, both measured:**
+
+- **The archive has two eras with a 28-month hole**: 2016-03 … 2020-09, then 2023-02 onwards. Years
+  are not clamped, so the gap shows up as absent months rather than an error; it may be backfilled.
+- **It is optical.** Cloud and snow remove observations: in July 2019 about half the acquisition dates
+  over the test lakes reduced to zero classified pixels, and a scene can exist in the collection while
+  being almost entirely mask. Winter rows are cloud/snow, not hydrology, and usable density in the
+  Arctic is far below the scene count — much sparser than DSWx-S1 despite a similar revisit.
+
 ### Command Line Interface
 
 ```bash
