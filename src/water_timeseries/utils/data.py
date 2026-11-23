@@ -218,7 +218,7 @@ def annotate_xr_dataset_dswx(
         temporal_resolution (str, optional): ``"monthly"`` (one mode composite per month,
             from :meth:`EarthEngineDownloader.download_dswx_monthly`) or
             ``"per_acquisition"`` (one row per DSWx scene, from
-            :meth:`EarthEngineDownloader.download_dswx_acquisitions`). Defaults to "monthly".
+            :meth:`EarthEngineDownloader.download_dswx_daily`). Defaults to "monthly".
 
     Returns:
         xarray.Dataset: The annotated dataset.

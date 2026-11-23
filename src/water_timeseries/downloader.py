@@ -6,6 +6,7 @@ into Dynamic World or JRC format.
 """
 
 import os
+import warnings
 from pathlib import Path
 
 import ee
@@ -1356,7 +1357,7 @@ class EarthEngineDownloader:
         tolerance = np.maximum(max_nodata, min_masked_pixels / frame["polygon_pixels"])
         return frame[frame["coverage"] >= 1 - tolerance]
 
-    def _extract_dswx_acquisitions(
+    def _extract_dswx_daily(
         self,
         windows: list[tuple[str, str]],
         gdf_chunk,
@@ -1445,7 +1446,7 @@ class EarthEngineDownloader:
         fc_out = image_collection.getTimeSeriesByRegions(**reducer_dict)
         return call_with_retry(geemap.ee_to_df, fc_out)
 
-    def download_dswx_acquisitions(
+    def download_dswx_daily(
         self,
         vector_dataset: str | Path | None = None,
         gdf: gpd.GeoDataFrame | None = None,
@@ -1544,7 +1545,7 @@ class EarthEngineDownloader:
 
         Example:
             >>> downloader = EarthEngineDownloader()
-            >>> ds = downloader.download_dswx_acquisitions(
+            >>> ds = downloader.download_dswx_daily(
             ...     vector_dataset="tests/data/lake_polygons.parquet",
             ...     years=[2025],
             ...     start_date="05-01",
@@ -1673,7 +1674,7 @@ class EarthEngineDownloader:
         self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
 
         df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
-            joblib.delayed(self._extract_dswx_acquisitions)(
+            joblib.delayed(self._extract_dswx_daily)(
                 windows=windows, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
             )
             for chunk in tqdm(gdf_chunks, desc="Downloading DSWx acquisitions", unit="chunk")
@@ -1759,6 +1760,19 @@ class EarthEngineDownloader:
 
         return ds
 
+    def download_dswx_acquisitions(self, *args, **kwargs):
+        """Deprecated alias for :meth:`download_dswx_daily`.
+
+        The per-acquisition downloaders are named ``_daily`` for every source; this alias keeps the
+        0.17.x name working and will be removed in a later release.
+        """
+        warnings.warn(
+            "download_dswx_acquisitions is deprecated; use download_dswx_daily",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self.download_dswx_daily(*args, **kwargs)
+
     def download_dswx_monthly(
         self,
         vector_dataset: str | Path | None = None,
@@ -1784,7 +1798,7 @@ class EarthEngineDownloader:
         """Download monthly OPERA DSWx-S1 class areas for specified periods.
 
         One per-pixel mode composite of the month's acquisitions, reduced to the three class
-        areas - the monthly counterpart of :meth:`download_dswx_acquisitions`, and the same
+        areas - the monthly counterpart of :meth:`download_dswx_daily`, and the same
         compositing rule as :meth:`download_dw_monthly`, so the two sources share a cadence
         and a statistic.
 
@@ -2005,7 +2019,7 @@ class EarthEngineDownloader:
         }
         return fc, reducer_dict
 
-    def _extract_dswx_hls_acquisitions(
+    def _extract_dswx_hls_daily(
         self,
         windows: list[tuple[str, str]],
         gdf_chunk,
@@ -2089,7 +2103,7 @@ class EarthEngineDownloader:
         fc_out = image_collection.getTimeSeriesByRegions(**reducer_dict)
         return call_with_retry(geemap.ee_to_df, fc_out)
 
-    def download_dswx_hls_acquisitions(
+    def download_dswx_hls_daily(
         self,
         vector_dataset: str | Path | None = None,
         gdf: gpd.GeoDataFrame | None = None,
@@ -2115,7 +2129,7 @@ class EarthEngineDownloader:
     ) -> xr.Dataset:
         """Download OPERA DSWx-HLS class areas per acquisition (unaggregated).
 
-        The optical counterpart of :meth:`download_dswx_acquisitions`: Harmonized Landsat 8/9 +
+        The optical counterpart of :meth:`download_dswx_daily`: Harmonized Landsat 8/9 +
         Sentinel-2, 30 m, one row per scene inside the selected windows. The date arguments are the
         same as for the Dynamic World and DSWx-S1 downloaders.
 
@@ -2285,7 +2299,7 @@ class EarthEngineDownloader:
         self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
 
         df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
-            joblib.delayed(self._extract_dswx_hls_acquisitions)(
+            joblib.delayed(self._extract_dswx_hls_daily)(
                 windows=windows, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
             )
             for chunk in tqdm(gdf_chunks, desc="Downloading DSWx-HLS acquisitions", unit="chunk")
@@ -2364,6 +2378,19 @@ class EarthEngineDownloader:
             save_xarray_dataset(ds=ds, save_path=save_path, logger=self.logger)
 
         return ds
+
+    def download_dswx_hls_acquisitions(self, *args, **kwargs):
+        """Deprecated alias for :meth:`download_dswx_hls_daily`.
+
+        The per-acquisition downloaders are named ``_daily`` for every source; this alias keeps the
+        0.17.x name working and will be removed in a later release.
+        """
+        warnings.warn(
+            "download_dswx_hls_acquisitions is deprecated; use download_dswx_hls_daily",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self.download_dswx_hls_daily(*args, **kwargs)
 
     def download_dswx_hls_monthly(
         self,

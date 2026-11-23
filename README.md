@@ -332,12 +332,12 @@ bit-reproducible.
 
 ### OPERA DSWx-S1 (radar surface water)
 
-`download_dswx_acquisitions` / `download_dswx_monthly` pull OPERA DSWx-S1 (Sentinel-1,
+`download_dswx_daily` / `download_dswx_monthly` pull OPERA DSWx-S1 (Sentinel-1,
 30 m) for the same polygons, and take **the same date arguments** as the Dynamic World
 pair — so a DW call is repointed by changing the method name. Per acquisition:
 
 ```python
-ds = dl.download_dswx_acquisitions(
+ds = dl.download_dswx_daily(
     vector_dataset="tests/data/lake_polygons.parquet",
     years=[2025], months=[6, 7, 8, 9],   # or date_list=["2025-06", ...]
 )   # or start_date="05-01", end_date="09-30"
@@ -386,11 +386,11 @@ acquisition with no usable observation is **absent**, not zero. The no-data tole
 
 ### OPERA DSWx-HLS (optical surface water)
 
-`download_dswx_hls_acquisitions` / `download_dswx_hls_monthly` pull **OPERA DSWx-HLS** (Harmonized
+`download_dswx_hls_daily` / `download_dswx_hls_monthly` pull **OPERA DSWx-HLS** (Harmonized
 Landsat 8/9 + Sentinel-2, 30 m) with the same date arguments as the other downloaders:
 
 ```python
-ds = dl.download_dswx_hls_acquisitions(
+ds = dl.download_dswx_hls_daily(
     vector_dataset="tests/data/lake_polygons.parquet",
     years=[2025], months=[6, 7, 8, 9],
 )

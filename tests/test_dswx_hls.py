@@ -129,10 +129,10 @@ class TestHLSDataset:
 
 class TestHLSDownloader:
     def test_bandnames_and_attrs(self, downloader):
-        downloader._extract_dswx_hls_acquisitions = mock.Mock(
+        downloader._extract_dswx_hls_daily = mock.Mock(
             return_value=_hls_frame([("lakeA", "2025-06-05", 1.0, 6.0, 2.0, 12.0)])
         )
-        ds = downloader.download_dswx_hls_acquisitions(gdf=downloader.gdf, years=[2025], months=[6])
+        ds = downloader.download_dswx_hls_daily(gdf=downloader.gdf, years=[2025], months=[6])
         assert set(ds.data_vars) == set(dswx_hls_bandnames)
         assert ds.attrs["temporal_resolution"] == "per_acquisition"
         assert ds.attrs["product"].startswith("OPERA DSWx-HLS")
@@ -140,14 +140,14 @@ class TestHLSDownloader:
 
     def test_coverage_ignores_the_land_band(self, downloader):
         """A land-only row must not look covered: coverage is measured on the water classes."""
-        downloader._extract_dswx_hls_acquisitions = mock.Mock(
+        downloader._extract_dswx_hls_daily = mock.Mock(
             return_value=_hls_frame([("lakeA", "2025-06-05", 0.05, 1.0, 0.0, 20.0)])
         )
         with pytest.raises(NoDSWxHLSDataError):
-            downloader.download_dswx_hls_acquisitions(gdf=downloader.gdf, years=[2025], months=[6])
+            downloader.download_dswx_hls_daily(gdf=downloader.gdf, years=[2025], months=[6])
 
     def test_fully_masked_row_is_dropped(self, downloader):
-        downloader._extract_dswx_hls_acquisitions = mock.Mock(
+        downloader._extract_dswx_hls_daily = mock.Mock(
             return_value=_hls_frame(
                 [
                     ("lakeA", "2025-06-05", 0.0, 0.0, 0.0, 0.0),
@@ -155,11 +155,11 @@ class TestHLSDownloader:
                 ]
             )
         )
-        ds = downloader.download_dswx_hls_acquisitions(gdf=downloader.gdf, years=[2025], months=[6, 7])
+        ds = downloader.download_dswx_hls_daily(gdf=downloader.gdf, years=[2025], months=[6, 7])
         assert ds.sizes["date"] == 1
 
     def test_tiles_collapse_to_the_best_covered_one(self, downloader):
-        downloader._extract_dswx_hls_acquisitions = mock.Mock(
+        downloader._extract_dswx_hls_daily = mock.Mock(
             return_value=_hls_frame(
                 [
                     ("lakeA", "2025-06-05", 0.60, 8.0, 4.0, 8.0),
@@ -167,18 +167,18 @@ class TestHLSDownloader:
                 ]
             )
         )
-        ds = downloader.download_dswx_hls_acquisitions(gdf=downloader.gdf, years=[2025], months=[6])
+        ds = downloader.download_dswx_hls_daily(gdf=downloader.gdf, years=[2025], months=[6])
         assert ds.sizes["date"] == 1
         assert float(ds["area_partial_water"].max()) == pytest.approx(6.0)
 
     def test_months_and_date_list_select_the_same_windows(self, downloader):
-        downloader._extract_dswx_hls_acquisitions = mock.Mock(
+        downloader._extract_dswx_hls_daily = mock.Mock(
             return_value=_hls_frame([("lakeA", "2025-06-05", 1.0, 6.0, 2.0, 12.0)])
         )
-        downloader.download_dswx_hls_acquisitions(gdf=downloader.gdf, years=[2025], months=[6, 7])
-        by_months = downloader._extract_dswx_hls_acquisitions.call_args.kwargs["windows"]
-        downloader.download_dswx_hls_acquisitions(gdf=downloader.gdf, date_list=["2025-06", "2025-07"])
-        by_date_list = downloader._extract_dswx_hls_acquisitions.call_args.kwargs["windows"]
+        downloader.download_dswx_hls_daily(gdf=downloader.gdf, years=[2025], months=[6, 7])
+        by_months = downloader._extract_dswx_hls_daily.call_args.kwargs["windows"]
+        downloader.download_dswx_hls_daily(gdf=downloader.gdf, date_list=["2025-06", "2025-07"])
+        by_date_list = downloader._extract_dswx_hls_daily.call_args.kwargs["windows"]
         assert by_months == by_date_list
 
     def test_archive_floor_is_2016(self, downloader):
@@ -189,7 +189,7 @@ class TestHLSDownloader:
         with mock.patch(
             "water_timeseries.downloader.dswx_hls_acquisitions", side_effect=AssertionError("must not query EE")
         ):
-            assert downloader.download_dswx_hls_acquisitions(gdf=downloader.gdf, years=[2025], no_download=True) is None
+            assert downloader.download_dswx_hls_daily(gdf=downloader.gdf, years=[2025], no_download=True) is None
 
     def test_monthly_absent_month_is_absent(self, downloader):
         downloader._extract_dswx_hls_monthly = mock.Mock(
