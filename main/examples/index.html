@@ -401,6 +401,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#working-with-dswxhlsdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with DSWxHLSDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#merging-datasets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1081,6 +1092,17 @@
 </li>
       
         <li class="md-nav__item">
+  <a href="#working-with-dswxhlsdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with DSWxHLSDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
   <a href="#merging-datasets" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1500,6 +1522,25 @@ inundated vegetation) is derived, and <code>water_column</code> is <code>area_op
 comparing, and expect DSWx open water alone to be roughly 63 % of DW's water. Winter rows
 are not hydrology - the product has no snow/ice class and reports a frozen basin as
 inundated vegetation, so gate them per acquisition against DW's <code>snow_and_ice</code>.</p>
+<h2 id="working-with-dswxhlsdataset">Working with DSWxHLSDataset<a class="headerlink" href="#working-with-dswxhlsdataset" title="Permanent link">🔗</a></h2>
+<p><code>DSWxHLSDataset</code> handles OPERA DSWx-HLS: optical (Harmonized Landsat-Sentinel) surface water with a
+different class set from DSWx-S1 - open water, <strong>partial surface water</strong> and not water, plus the
+LAND layer.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">DSWxHLSDataset</span>
+
+<span class="n">processor</span> <span class="o">=</span> <span class="n">DSWxHLSDataset</span><span class="p">(</span><span class="n">xr</span><span class="o">.</span><span class="n">open_dataset</span><span class="p">(</span><span class="s2">"dswx_hls_monthly.zarr"</span><span class="p">))</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">data_columns</span><span class="p">)</span>
+<span class="c1"># ['area_open_water', 'area_partial_water', 'area_not_water', 'area_land_cover']</span>
+
+<span class="c1"># headline series: open + partial, i.e. the product's BWTR_Binary_water</span>
+<span class="n">total_water</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds</span><span class="p">[</span><span class="n">processor</span><span class="o">.</span><span class="n">water_column</span><span class="p">]</span>      <span class="c1"># water_column == "area_water"</span>
+
+<span class="n">fig</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">plot_timeseries</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">object_ids_</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</code></pre></div>
+<p>Two things to remember: <code>area_land_cover</code> is an independent quantity (the product's LAND layer)
+and is not part of <code>area_data</code>, and the product is optical - a masked month is cloud, so a gap in
+the series is not necessarily a gap in the lake.</p>
 <h2 id="merging-datasets">Merging Datasets<a class="headerlink" href="#merging-datasets" title="Permanent link">🔗</a></h2>
 <p>The <code>merge()</code> method allows combining two LakeDataset instances. This is useful for combining data from different time periods or adding new lakes to an existing dataset.</p>
 <h3 id="merge-along-both-dimensions">Merge Along Both Dimensions<a class="headerlink" href="#merge-along-both-dimensions" title="Permanent link">🔗</a></h3>

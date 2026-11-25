@@ -624,6 +624,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#dswxhlsdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DSWxHLSDataset
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#dswxdataset" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -1442,6 +1453,17 @@
 </li>
         
           <li class="md-nav__item">
+  <a href="#dswxhlsdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        DSWxHLSDataset
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
   <a href="#dswxdataset" class="md-nav__link">
     <span class="md-ellipsis">
       
@@ -2004,11 +2026,19 @@ uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class
 <p>Handles Dynamic World land cover data with classes for water, bare, snow, trees, grass, and more.</p>
 <h3 id="jrcdataset"><code>JRCDataset</code><a class="headerlink" href="#jrcdataset" title="Permanent link">🔗</a></h3>
 <p>Handles Joint Research Centre (JRC) water data with permanent and seasonal water classifications.</p>
+<h3 id="dswxhlsdataset"><code>DSWxHLSDataset</code><a class="headerlink" href="#dswxhlsdataset" title="Permanent link">🔗</a></h3>
+<p>Handles OPERA DSWx-HLS optical surface water (Harmonized Landsat 8/9 + Sentinel-2, 30 m):
+<code>area_open_water</code> (WTR 1), <code>area_partial_water</code> (WTR 2) and <code>area_not_water</code> (WTR 0), plus
+<code>area_land_cover</code> from the product's LAND layer. <code>area_water</code> = open + partial is the headline
+series - it is the product's own <code>BWTR_Binary_water</code>, and partial surface water is sub-pixel water,
+not noise. The archive has two eras (2016-03 .. 2020-09, then 2023-02 onwards) and, being optical,
+cloud and snow remove observations. Download with <code>download_dswx_hls_daily</code> /
+<code>download_dswx_hls_monthly</code>.</p>
 <h3 id="dswxdataset"><code>DSWxDataset</code><a class="headerlink" href="#dswxdataset" title="Permanent link">🔗</a></h3>
 <p>Handles OPERA DSWx-S1 radar surface water: <code>area_open_water</code> (WTR 1),
 <code>area_inundated_vegetation</code> (WTR 3) and <code>area_not_water</code> (WTR 0), plus the derived
 <code>area_water</code> (open + inundated vegetation) that is comparable with Dynamic World's
-<code>water + flooded_vegetation</code>. Download it with <code>download_dswx_acquisitions</code> (per scene) or
+<code>water + flooded_vegetation</code>. Download it with <code>download_dswx_daily</code> (per scene) or
 <code>download_dswx_monthly</code> (mode composite); the archive starts 2024-08, water bodies below
 ~3 ha are not mapped, and a frozen basin is classified as inundated vegetation, so winter
 rows have to be gated against Dynamic World's <code>snow_and_ice</code>.</p>

@@ -962,11 +962,7 @@
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/utils/data.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">58</span>
-<span class="normal">59</span>
-<span class="normal">60</span>
-<span class="normal">61</span>
-<span class="normal">62</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">62</span>
 <span class="normal">63</span>
 <span class="normal">64</span>
 <span class="normal">65</span>
@@ -975,7 +971,11 @@
 <span class="normal">68</span>
 <span class="normal">69</span>
 <span class="normal">70</span>
-<span class="normal">71</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_temporal_stats</span><span class="p">(</span><span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="normal">71</span>
+<span class="normal">72</span>
+<span class="normal">73</span>
+<span class="normal">74</span>
+<span class="normal">75</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_temporal_stats</span><span class="p">(</span><span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Calculate temporal statistics for a given DataFrame."""</span>
     <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
     <span class="n">df</span><span class="p">[</span><span class="s2">"pre_break_median"</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="s2">"pre_break_median"</span><span class="p">]</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">df</span><span class="p">[</span><span class="s2">"pre_break_median"</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">nan</span><span class="p">)</span>
@@ -1883,7 +1883,11 @@ repeating the sniffing logic.</p>
 <span class="normal">52</span>
 <span class="normal">53</span>
 <span class="normal">54</span>
-<span class="normal">55</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_water_dataset_type</span><span class="p">(</span><span class="n">input_ds</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="normal">55</span>
+<span class="normal">56</span>
+<span class="normal">57</span>
+<span class="normal">58</span>
+<span class="normal">59</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_water_dataset_type</span><span class="p">(</span><span class="n">input_ds</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Determine the water dataset type based on the presence of specific variables in the dataset.</span>
 
 <span class="sd">    This is the single place that maps a dataset's variables to a source name; the</span>
@@ -1901,6 +1905,10 @@ repeating the sniffing logic.</p>
 <span class="sd">    """</span>
     <span class="k">if</span> <span class="s2">"area_water_permanent"</span> <span class="ow">in</span> <span class="n">input_ds</span><span class="o">.</span><span class="n">data_vars</span><span class="p">:</span>
         <span class="n">water_dataset_type</span> <span class="o">=</span> <span class="s2">"jrc"</span>
+    <span class="k">elif</span> <span class="s2">"area_partial_water"</span> <span class="ow">in</span> <span class="n">input_ds</span><span class="o">.</span><span class="n">data_vars</span><span class="p">:</span>
+        <span class="c1"># DSWx-HLS. Must be tested before the DSWx-S1 branch: both products carry</span>
+        <span class="c1"># ``area_open_water``, only HLS has the partial-surface-water class.</span>
+        <span class="n">water_dataset_type</span> <span class="o">=</span> <span class="s2">"dswx_hls"</span>
     <span class="k">elif</span> <span class="s2">"area_open_water"</span> <span class="ow">in</span> <span class="n">input_ds</span><span class="o">.</span><span class="n">data_vars</span><span class="p">:</span>
         <span class="n">water_dataset_type</span> <span class="o">=</span> <span class="s2">"dswx"</span>
     <span class="k">elif</span> <span class="s2">"water"</span> <span class="ow">in</span> <span class="n">input_ds</span><span class="o">.</span><span class="n">data_vars</span><span class="p">:</span>
@@ -1908,7 +1916,7 @@ repeating the sniffing logic.</p>
     <span class="k">else</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span>
             <span class="s2">"Unknown water dataset type: no known identifier variable found "</span>
-            <span class="s2">"(expected 'area_water_permanent', 'area_open_water' or 'water')"</span>
+            <span class="s2">"(expected 'area_water_permanent', 'area_partial_water', 'area_open_water' or 'water')"</span>
         <span class="p">)</span>
 
     <span class="k">return</span> <span class="n">water_dataset_type</span>
