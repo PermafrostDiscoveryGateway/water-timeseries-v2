@@ -217,10 +217,16 @@ class BreakpointPipeline:
             if self.logger:
                 self.logger.info("Joining break results with vector dataset geometries")
             local_gdf = self.gdf.set_index("id_geohash").loc[self.process_ids][["geometry"]]
+            breaks = self.breaks
+            if "id_geohash" in breaks.columns:
+                # A frame from a dataset with a custom id_field carries the contract column
+                # already; the index holds the same values, and reset_index() below would
+                # refuse to create a duplicate. Drop it and let the index supply the column.
+                breaks = breaks.drop(columns=["id_geohash"])
             if self.output_geometry_all:
-                joined = local_gdf.join(self.breaks, how="left").reset_index(drop=False)
+                joined = local_gdf.join(breaks, how="left").reset_index(drop=False)
             else:
-                joined = local_gdf.join(self.breaks, how="inner").reset_index(drop=False)
+                joined = local_gdf.join(breaks, how="inner").reset_index(drop=False)
             joined.to_parquet(output_file)
         else:
             if self.logger:

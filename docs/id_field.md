@@ -44,13 +44,29 @@ remaining non-`date` 1-D coordinate. When several candidates exist and none is d
 it raises rather than guessing: selecting the wrong column silently is the bug this
 design removes.
 
-## Artefacts keep `id_geohash`
+## Artefacts keep `id_geohash`, and carry the source name beside it
 
 Files this package writes — break parquets, NRT parquets, PMTiles properties, dashboard
 payloads — carry the identifier as **`id_geohash`**, whatever the source dataset called
 it. That name is a wire contract for `pmtiles_build`, the MapLibre styles
-(`promoteId`) and existing consumers. A custom `id_field` changes which column is *read*,
-not which columns are *written*.
+(`promoteId`) and existing consumers.
+
+When the source name differs, the artefact also **keeps** it, so a reader can map back
+to the dataset:
+
+```python
+from water_timeseries.utils.data import ensure_id_columns
+
+df = ensure_id_columns(df, "lake_id")      # columns: lake_id, id_geohash, ...
+```
+
+`ensure_id_columns` is additive by construction — it never renames, drops or reorders.
+With the default `id_field="id_geohash"` it is a no-op, so existing files and their
+columns are unchanged. `calculate_break` (simple / beast / NRT) already returns such a
+frame: the index keeps the dataset's own name and `id_geohash` is present as a column.
+
+A new column is only ever added when the names differ. Consumers that assert an exact
+column list will see one extra column in that case — the default path emits nothing new.
 
 ## Known limits
 
