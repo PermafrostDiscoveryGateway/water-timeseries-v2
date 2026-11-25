@@ -389,6 +389,33 @@
   
   
     <li class="md-nav__item">
+      <a href="../../id_field/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Object Identifiers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
       <a href="../../nrt_monthly_update/" class="md-nav__link">
         
   
@@ -426,10 +453,10 @@
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" checked>
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_8" checked>
         
           
-          <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+          <label class="md-nav__link" for="__nav_8" id="__nav_8_label" tabindex="0">
             
   
   
@@ -447,8 +474,8 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_7">
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_8_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_8">
             <span class="md-nav__icon md-icon"></span>
             
   
@@ -1752,12 +1779,7 @@ break_threshold : float, optional
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">304</span>
-<span class="normal">305</span>
-<span class="normal">306</span>
-<span class="normal">307</span>
-<span class="normal">308</span>
-<span class="normal">309</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">309</span>
 <span class="normal">310</span>
 <span class="normal">311</span>
 <span class="normal">312</span>
@@ -1880,7 +1902,12 @@ break_threshold : float, optional
 <span class="normal">429</span>
 <span class="normal">430</span>
 <span class="normal">431</span>
-<span class="normal">432</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BeastBreakpoint</span><span class="p">(</span><span class="n">BreakpointMethod</span><span class="p">):</span>
+<span class="normal">432</span>
+<span class="normal">433</span>
+<span class="normal">434</span>
+<span class="normal">435</span>
+<span class="normal">436</span>
+<span class="normal">437</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BeastBreakpoint</span><span class="p">(</span><span class="n">BreakpointMethod</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Bayesian RBEAST-based breakpoint detector.</span>
 
 <span class="sd">    This method uses the RBEAST library to detect breakpoints in water‑timeseries</span>
@@ -1942,7 +1969,7 @@ break_threshold : float, optional
         <span class="c1"># Example implementation for BeastBreakpoint</span>
         <span class="c1"># In a real application, this would use the rbeast library or similar</span>
         <span class="n">ds</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span>
-        <span class="n">df</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
         <span class="n">df</span><span class="p">[</span><span class="s2">"date"</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span>
         <span class="n">data</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span><span class="p">]</span>
 
@@ -1981,13 +2008,13 @@ break_threshold : float, optional
         <span class="n">break_df</span> <span class="o">=</span> <span class="n">break_df</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">"proba_rbeast"</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
         <span class="n">break_df</span><span class="p">[</span><span class="s2">"break_number"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">break_df</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 
-        <span class="n">break_df_out</span> <span class="o">=</span> <span class="n">break_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="s2">"date_break"</span><span class="p">})</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">"id_geohash"</span><span class="p">)</span>
+        <span class="n">break_df_out</span> <span class="o">=</span> <span class="n">break_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="s2">"date_break"</span><span class="p">})</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">)</span>
         <span class="n">break_df_out</span><span class="p">[</span><span class="s2">"break_method"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">method_name</span>
 
         <span class="n">df_out</span> <span class="o">=</span> <span class="n">break_df_out</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">breakpoint_columns</span><span class="p">]</span>
 
         <span class="n">break_list</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">df_water</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
+        <span class="n">df_water</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df_out</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
             <span class="n">id_geohash</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">name</span>
             <span class="n">df_breaks</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span>
@@ -2050,12 +2077,7 @@ object_id : str
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">347</span>
-<span class="normal">348</span>
-<span class="normal">349</span>
-<span class="normal">350</span>
-<span class="normal">351</span>
-<span class="normal">352</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">352</span>
 <span class="normal">353</span>
 <span class="normal">354</span>
 <span class="normal">355</span>
@@ -2135,7 +2157,12 @@ object_id : str
 <span class="normal">429</span>
 <span class="normal">430</span>
 <span class="normal">431</span>
-<span class="normal">432</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_break</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">LakeDataset</span><span class="p">,</span> <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="normal">432</span>
+<span class="normal">433</span>
+<span class="normal">434</span>
+<span class="normal">435</span>
+<span class="normal">436</span>
+<span class="normal">437</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_break</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">LakeDataset</span><span class="p">,</span> <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Calculate breakpoints for a single lake object using RBEAST.</span>
 
 <span class="sd">    Parameters</span>
@@ -2154,7 +2181,7 @@ object_id : str
     <span class="c1"># Example implementation for BeastBreakpoint</span>
     <span class="c1"># In a real application, this would use the rbeast library or similar</span>
     <span class="n">ds</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span>
-    <span class="n">df</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
     <span class="n">df</span><span class="p">[</span><span class="s2">"date"</span><span class="p">]</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">index</span>
     <span class="n">data</span> <span class="o">=</span> <span class="n">df</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span><span class="p">]</span>
 
@@ -2193,13 +2220,13 @@ object_id : str
     <span class="n">break_df</span> <span class="o">=</span> <span class="n">break_df</span><span class="o">.</span><span class="n">sort_values</span><span class="p">(</span><span class="s2">"proba_rbeast"</span><span class="p">,</span> <span class="n">ascending</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">copy</span><span class="p">()</span>
     <span class="n">break_df</span><span class="p">[</span><span class="s2">"break_number"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">range</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">break_df</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)</span>
 
-    <span class="n">break_df_out</span> <span class="o">=</span> <span class="n">break_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="s2">"date_break"</span><span class="p">})</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="s2">"id_geohash"</span><span class="p">)</span>
+    <span class="n">break_df_out</span> <span class="o">=</span> <span class="n">break_df</span><span class="o">.</span><span class="n">rename</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">{</span><span class="s2">"date"</span><span class="p">:</span> <span class="s2">"date_break"</span><span class="p">})</span><span class="o">.</span><span class="n">set_index</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">)</span>
     <span class="n">break_df_out</span><span class="p">[</span><span class="s2">"break_method"</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">method_name</span>
 
     <span class="n">df_out</span> <span class="o">=</span> <span class="n">break_df_out</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">breakpoint_columns</span><span class="p">]</span>
 
     <span class="n">break_list</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">df_water</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
+    <span class="n">df_water</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df_out</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
         <span class="n">id_geohash</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">name</span>
         <span class="n">df_breaks</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span>
@@ -2265,8 +2292,7 @@ object_id : str
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 51</span>
-<span class="normal"> 52</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 52</span>
 <span class="normal"> 53</span>
 <span class="normal"> 54</span>
 <span class="normal"> 55</span>
@@ -2345,7 +2371,10 @@ object_id : str
 <span class="normal">128</span>
 <span class="normal">129</span>
 <span class="normal">130</span>
-<span class="normal">131</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BreakpointMethod</span><span class="p">:</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">BreakpointMethod</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Base class for breakpoint detection methods.</span>
 
 <span class="sd">    Parameters</span>
@@ -2358,7 +2387,9 @@ object_id : str
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">method_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">):</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">method_name</span> <span class="o">=</span> <span class="n">method_name</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_first_break_date</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_first_break_date</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">,</span> <span class="n">id_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"id_geohash"</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Placeholder implementation for the abstract base.</span>
 
 <span class="sd">        Concrete subclasses override this method.  The default returns a</span>
@@ -2419,9 +2450,9 @@ object_id : str
         <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
         <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
         <span class="k">if</span> <span class="n">progress_bar</span><span class="p">:</span>
-            <span class="n">progress</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="o">.</span><span class="n">id_geohash</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+            <span class="n">progress</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="n">progress</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="o">.</span><span class="n">id_geohash</span><span class="o">.</span><span class="n">values</span>
+            <span class="n">progress</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
         <span class="k">for</span> <span class="n">object_id</span> <span class="ow">in</span> <span class="n">progress</span><span class="p">:</span>
             <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calculate_break</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">object_id</span><span class="p">)</span>
             <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
@@ -2467,10 +2498,7 @@ object_id : str
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 86</span>
-<span class="normal"> 87</span>
-<span class="normal"> 88</span>
-<span class="normal"> 89</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal"> 89</span>
 <span class="normal"> 90</span>
 <span class="normal"> 91</span>
 <span class="normal"> 92</span>
@@ -2483,7 +2511,10 @@ object_id : str
 <span class="normal"> 99</span>
 <span class="normal">100</span>
 <span class="normal">101</span>
-<span class="normal">102</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_break</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">LakeDataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="normal">102</span>
+<span class="normal">103</span>
+<span class="normal">104</span>
+<span class="normal">105</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_break</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">LakeDataset</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Calculate breakpoints for a single object.</span>
 
 <span class="sd">    Sub‑classes must implement the actual detection algorithm and return a</span>
@@ -2530,10 +2561,7 @@ progress_bar : bool, optional
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">104</span>
-<span class="normal">105</span>
-<span class="normal">106</span>
-<span class="normal">107</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">107</span>
 <span class="normal">108</span>
 <span class="normal">109</span>
 <span class="normal">110</span>
@@ -2557,7 +2585,10 @@ progress_bar : bool, optional
 <span class="normal">128</span>
 <span class="normal">129</span>
 <span class="normal">130</span>
-<span class="normal">131</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_breaks_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">LakeDataset</span><span class="p">,</span> <span class="n">progress_bar</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="normal">131</span>
+<span class="normal">132</span>
+<span class="normal">133</span>
+<span class="normal">134</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_breaks_batch</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">LakeDataset</span><span class="p">,</span> <span class="n">progress_bar</span><span class="p">:</span> <span class="nb">bool</span> <span class="o">=</span> <span class="kc">False</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Run ``calculate_break`` for every lake in *dataset*.</span>
 
 <span class="sd">    Parameters</span>
@@ -2578,9 +2609,9 @@ progress_bar : bool, optional
     <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="o">.</span><span class="n">load</span><span class="p">()</span>
     <span class="n">results</span> <span class="o">=</span> <span class="p">[]</span>
     <span class="k">if</span> <span class="n">progress_bar</span><span class="p">:</span>
-        <span class="n">progress</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="o">.</span><span class="n">id_geohash</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
+        <span class="n">progress</span> <span class="o">=</span> <span class="n">tqdm</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">)</span>
     <span class="k">else</span><span class="p">:</span>
-        <span class="n">progress</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="o">.</span><span class="n">id_geohash</span><span class="o">.</span><span class="n">values</span>
+        <span class="n">progress</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
     <span class="k">for</span> <span class="n">object_id</span> <span class="ow">in</span> <span class="n">progress</span><span class="p">:</span>
         <span class="n">result</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calculate_break</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">object_id</span><span class="p">)</span>
         <span class="n">results</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
@@ -2595,7 +2626,7 @@ progress_bar : bool, optional
 
 
 <h3 id="water_timeseries.breakpoint.BreakpointMethod.get_first_break_date" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">get_first_break_date</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="s1">'water'</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">get_first_break_date</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="s1">'water'</span><span class="p">,</span> <span class="n">id_column</span><span class="o">=</span><span class="s1">'id_geohash'</span><span class="p">)</span></code>
 
 <a href="#water_timeseries.breakpoint.BreakpointMethod.get_first_break_date" class="headerlink" title="Permanent link">🔗</a></h3>
 
@@ -2619,8 +2650,7 @@ column : str, optional
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">64</span>
-<span class="normal">65</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">65</span>
 <span class="normal">66</span>
 <span class="normal">67</span>
 <span class="normal">68</span>
@@ -2639,7 +2669,12 @@ column : str, optional
 <span class="normal">81</span>
 <span class="normal">82</span>
 <span class="normal">83</span>
-<span class="normal">84</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_first_break_date</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="normal">84</span>
+<span class="normal">85</span>
+<span class="normal">86</span>
+<span class="normal">87</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_first_break_date</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">,</span> <span class="n">id_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"id_geohash"</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Placeholder implementation for the abstract base.</span>
 
 <span class="sd">    Concrete subclasses override this method.  The default returns a</span>
@@ -2735,12 +2770,7 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">435</span>
-<span class="normal">436</span>
-<span class="normal">437</span>
-<span class="normal">438</span>
-<span class="normal">439</span>
-<span class="normal">440</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">440</span>
 <span class="normal">441</span>
 <span class="normal">442</span>
 <span class="normal">443</span>
@@ -3209,7 +3239,20 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
 <span class="normal">906</span>
 <span class="normal">907</span>
 <span class="normal">908</span>
-<span class="normal">909</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">NRTBreakpoint</span><span class="p">(</span><span class="n">BreakpointMethod</span><span class="p">):</span>
+<span class="normal">909</span>
+<span class="normal">910</span>
+<span class="normal">911</span>
+<span class="normal">912</span>
+<span class="normal">913</span>
+<span class="normal">914</span>
+<span class="normal">915</span>
+<span class="normal">916</span>
+<span class="normal">917</span>
+<span class="normal">918</span>
+<span class="normal">919</span>
+<span class="normal">920</span>
+<span class="normal">921</span>
+<span class="normal">922</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">NRTBreakpoint</span><span class="p">(</span><span class="n">BreakpointMethod</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Near‑Real‑Time (NRT) breakpoint detector.</span>
 
 <span class="sd">    This method implements custom logic for detecting breakpoints in water‑timeseries</span>
@@ -3301,7 +3344,12 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
         <span class="p">]</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">predict_nrt_arima</span><span class="p">(</span>
-        <span class="bp">self</span><span class="p">,</span> <span class="n">ds_in</span><span class="p">:</span> <span class="n">xr</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span> <span class="n">id_geohash</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">min_length</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">water_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span>
+        <span class="bp">self</span><span class="p">,</span>
+        <span class="n">ds_in</span><span class="p">:</span> <span class="n">xr</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span>
+        <span class="n">id_geohash</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+        <span class="n">min_length</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+        <span class="n">water_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">,</span>
+        <span class="n">id_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""_summary_</span>
 
@@ -3322,10 +3370,11 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
         <span class="c1"># any missing values (e.g. cloud-cover gaps), which statsmodels treats as an</span>
         <span class="c1"># unsupported index - newer statsmodels versions (&gt;=0.15) raise a hard</span>
         <span class="c1"># "No supported index is available" ValueError for this instead of only warning.</span>
+        <span class="n">id_field</span> <span class="o">=</span> <span class="n">id_field</span> <span class="ow">or</span> <span class="n">resolve_id_field</span><span class="p">(</span><span class="n">ds_in</span><span class="p">)</span>
         <span class="n">df_in</span> <span class="o">=</span> <span class="p">(</span>
-            <span class="n">ds_in</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">id_geohash</span><span class="p">)</span>
+            <span class="n">ds_in</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">id_field</span><span class="p">:</span> <span class="n">id_geohash</span><span class="p">})</span>
             <span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
-            <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"id_geohash"</span><span class="p">])[</span><span class="n">water_column</span><span class="p">]</span>
+            <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">id_field</span><span class="p">])[</span><span class="n">water_column</span><span class="p">]</span>
             <span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
             <span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
         <span class="p">)</span>
@@ -3407,10 +3456,11 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
 <span class="sd">            Filtered (ds_analysis, ds_historical) datasets.</span>
 <span class="sd">        """</span>
         <span class="c1"># Get valid id_geohash values that have non-NaN data in ds_analysis</span>
-        <span class="n">valid_ids</span> <span class="o">=</span> <span class="n">ds_analysis</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="s2">"id_geohash"</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">"all"</span><span class="p">)</span><span class="o">.</span><span class="n">id_geohash</span><span class="o">.</span><span class="n">values</span>
+        <span class="n">id_field</span> <span class="o">=</span> <span class="n">resolve_id_field</span><span class="p">(</span><span class="n">ds_analysis</span><span class="p">)</span>
+        <span class="n">valid_ids</span> <span class="o">=</span> <span class="n">ds_analysis</span><span class="o">.</span><span class="n">dropna</span><span class="p">(</span><span class="n">dim</span><span class="o">=</span><span class="n">id_field</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">"all"</span><span class="p">)[</span><span class="n">id_field</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
 
         <span class="c1"># get invalid ids with nan values</span>
-        <span class="n">all_ids</span> <span class="o">=</span> <span class="n">ds_analysis</span><span class="o">.</span><span class="n">id_geohash</span><span class="o">.</span><span class="n">values</span>
+        <span class="n">all_ids</span> <span class="o">=</span> <span class="n">ds_analysis</span><span class="p">[</span><span class="n">id_field</span><span class="p">]</span><span class="o">.</span><span class="n">values</span>
         <span class="n">nan_ids</span> <span class="o">=</span> <span class="n">all_ids</span><span class="p">[</span><span class="o">~</span><span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">all_ids</span><span class="p">)</span><span class="o">.</span><span class="n">isin</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">(</span><span class="n">valid_ids</span><span class="p">))]</span>
 
         <span class="c1"># Count total ids and valid ids for logging</span>
@@ -3424,8 +3474,8 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
         <span class="p">)</span>
 
         <span class="c1"># Filter both datasets to only include valid ids</span>
-        <span class="n">ds_analysis_filtered</span> <span class="o">=</span> <span class="n">ds_analysis</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">valid_ids</span><span class="p">)</span>
-        <span class="n">ds_historical_filtered</span> <span class="o">=</span> <span class="n">ds_historical</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">valid_ids</span><span class="p">)</span>
+        <span class="n">ds_analysis_filtered</span> <span class="o">=</span> <span class="n">ds_analysis</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">id_field</span><span class="p">:</span> <span class="n">valid_ids</span><span class="p">})</span>
+        <span class="n">ds_historical_filtered</span> <span class="o">=</span> <span class="n">ds_historical</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">id_field</span><span class="p">:</span> <span class="n">valid_ids</span><span class="p">})</span>
 
         <span class="k">return</span> <span class="n">ds_analysis_filtered</span><span class="p">,</span> <span class="n">ds_historical_filtered</span><span class="p">,</span> <span class="n">valid_ids</span><span class="p">,</span> <span class="n">nan_ids</span>
 
@@ -3435,7 +3485,8 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
 <span class="w">        </span><span class="sd">"""Calculate statistics for the given dataset."""</span>
         <span class="k">if</span> <span class="n">filter_month</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
             <span class="n">dataset</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="n">dataset</span><span class="o">.</span><span class="n">date</span><span class="o">.</span><span class="n">dt</span><span class="o">.</span><span class="n">month</span> <span class="o">==</span> <span class="n">filter_month</span><span class="p">,</span> <span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
-        <span class="n">out_df</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()[</span><span class="n">water_column</span><span class="p">]</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s2">"id_geohash"</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">([</span><span class="s2">"mean"</span><span class="p">,</span> <span class="s2">"median"</span><span class="p">,</span> <span class="s2">"std"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">])</span>
+        <span class="n">id_field</span> <span class="o">=</span> <span class="n">resolve_id_field</span><span class="p">(</span><span class="n">dataset</span><span class="p">)</span>
+        <span class="n">out_df</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()[</span><span class="n">water_column</span><span class="p">]</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="n">id_field</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">([</span><span class="s2">"mean"</span><span class="p">,</span> <span class="s2">"median"</span><span class="p">,</span> <span class="s2">"std"</span><span class="p">,</span> <span class="s2">"min"</span><span class="p">,</span> <span class="s2">"max"</span><span class="p">])</span>
         <span class="k">return</span> <span class="n">out_df</span>
 
     <span class="k">def</span><span class="w"> </span><span class="nf">_add_confidence_level</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">break_output_df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
@@ -3563,7 +3614,7 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
             <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
                 <span class="n">object_id</span> <span class="o">=</span> <span class="p">[</span><span class="n">object_id</span><span class="p">]</span>
             <span class="n">object_id</span> <span class="o">=</span> <span class="p">[</span><span class="n">obj</span> <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">object_id</span> <span class="k">if</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">object_ids_</span><span class="p">]</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span>
 
         <span class="c1"># split data into historical and analysis datasets based on analysis_date</span>
         <span class="n">ds_analysis</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">date</span><span class="o">=</span><span class="n">analysis_date</span><span class="p">)</span>
@@ -3607,7 +3658,7 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
         <span class="n">prediction_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">prediction_df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
             <span class="n">prediction_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
-                <span class="n">index</span><span class="o">=</span><span class="n">ds_analysis_filtered</span><span class="o">.</span><span class="n">id_geohash</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
+                <span class="n">index</span><span class="o">=</span><span class="n">ds_analysis_filtered</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
                 <span class="n">columns</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">output_columns</span><span class="p">,</span>
             <span class="p">)</span>
 
@@ -3658,7 +3709,7 @@ result = bp.calculate_break(dataset, analysis_date="2024-07")</p>
                 <span class="n">columns</span><span class="o">=</span><span class="n">base_columns_no_abs</span><span class="p">,</span>
             <span class="p">)</span>
             <span class="n">df_historical_stats_nans</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ds_stats</span><span class="p">(</span>
-                <span class="n">ds_historical</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">nan_ids</span><span class="p">),</span> <span class="n">water_column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span>
+                <span class="n">ds_historical</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">nan_ids</span><span class="p">}),</span> <span class="n">water_column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span>
             <span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
             <span class="n">df_historical_stats_nans</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="s2">"water_historical_"</span> <span class="o">+</span> <span class="n">df_historical_stats_nans</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
             <span class="n">df_output_nan</span> <span class="o">=</span> <span class="n">prediction_df_nan</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">df_historical_stats_nans</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">"left"</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
@@ -3742,20 +3793,7 @@ Returns</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">733</span>
-<span class="normal">734</span>
-<span class="normal">735</span>
-<span class="normal">736</span>
-<span class="normal">737</span>
-<span class="normal">738</span>
-<span class="normal">739</span>
-<span class="normal">740</span>
-<span class="normal">741</span>
-<span class="normal">742</span>
-<span class="normal">743</span>
-<span class="normal">744</span>
-<span class="normal">745</span>
-<span class="normal">746</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">746</span>
 <span class="normal">747</span>
 <span class="normal">748</span>
 <span class="normal">749</span>
@@ -3918,7 +3956,20 @@ Returns</p>
 <span class="normal">906</span>
 <span class="normal">907</span>
 <span class="normal">908</span>
-<span class="normal">909</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_break</span><span class="p">(</span>
+<span class="normal">909</span>
+<span class="normal">910</span>
+<span class="normal">911</span>
+<span class="normal">912</span>
+<span class="normal">913</span>
+<span class="normal">914</span>
+<span class="normal">915</span>
+<span class="normal">916</span>
+<span class="normal">917</span>
+<span class="normal">918</span>
+<span class="normal">919</span>
+<span class="normal">920</span>
+<span class="normal">921</span>
+<span class="normal">922</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_break</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">dataset</span><span class="p">:</span> <span class="n">LakeDataset</span><span class="p">,</span>
     <span class="n">analysis_date</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">,</span>
@@ -3974,7 +4025,7 @@ Returns</p>
         <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">object_id</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
             <span class="n">object_id</span> <span class="o">=</span> <span class="p">[</span><span class="n">object_id</span><span class="p">]</span>
         <span class="n">object_id</span> <span class="o">=</span> <span class="p">[</span><span class="n">obj</span> <span class="k">for</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">object_id</span> <span class="k">if</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">dataset</span><span class="o">.</span><span class="n">object_ids_</span><span class="p">]</span>
-        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span>
 
     <span class="c1"># split data into historical and analysis datasets based on analysis_date</span>
     <span class="n">ds_analysis</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">date</span><span class="o">=</span><span class="n">analysis_date</span><span class="p">)</span>
@@ -4018,7 +4069,7 @@ Returns</p>
     <span class="n">prediction_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">predictions</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">prediction_df</span><span class="o">.</span><span class="n">empty</span><span class="p">:</span>
         <span class="n">prediction_df</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
-            <span class="n">index</span><span class="o">=</span><span class="n">ds_analysis_filtered</span><span class="o">.</span><span class="n">id_geohash</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
+            <span class="n">index</span><span class="o">=</span><span class="n">ds_analysis_filtered</span><span class="p">[</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">]</span><span class="o">.</span><span class="n">values</span><span class="p">,</span>
             <span class="n">columns</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">output_columns</span><span class="p">,</span>
         <span class="p">)</span>
 
@@ -4069,7 +4120,7 @@ Returns</p>
             <span class="n">columns</span><span class="o">=</span><span class="n">base_columns_no_abs</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">df_historical_stats_nans</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_get_ds_stats</span><span class="p">(</span>
-            <span class="n">ds_historical</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">nan_ids</span><span class="p">),</span> <span class="n">water_column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span>
+            <span class="n">ds_historical</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">nan_ids</span><span class="p">}),</span> <span class="n">water_column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span>
         <span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
         <span class="n">df_historical_stats_nans</span><span class="o">.</span><span class="n">columns</span> <span class="o">=</span> <span class="s2">"water_historical_"</span> <span class="o">+</span> <span class="n">df_historical_stats_nans</span><span class="o">.</span><span class="n">columns</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="nb">str</span><span class="p">)</span>
         <span class="n">df_output_nan</span> <span class="o">=</span> <span class="n">prediction_df_nan</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">df_historical_stats_nans</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">"left"</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span>
@@ -4105,7 +4156,7 @@ Returns</p>
 
 
 <h3 id="water_timeseries.breakpoint.NRTBreakpoint.predict_nrt_arima" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">predict_nrt_arima</span><span class="p">(</span><span class="n">ds_in</span><span class="p">,</span> <span class="n">id_geohash</span><span class="p">,</span> <span class="n">min_length</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">water_column</span><span class="o">=</span><span class="s1">'water'</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">predict_nrt_arima</span><span class="p">(</span><span class="n">ds_in</span><span class="p">,</span> <span class="n">id_geohash</span><span class="p">,</span> <span class="n">min_length</span><span class="o">=</span><span class="mi">3</span><span class="p">,</span> <span class="n">water_column</span><span class="o">=</span><span class="s1">'water'</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#water_timeseries.breakpoint.NRTBreakpoint.predict_nrt_arima" class="headerlink" title="Permanent link">🔗</a></h3>
 
@@ -4219,12 +4270,7 @@ Returns</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">526</span>
-<span class="normal">527</span>
-<span class="normal">528</span>
-<span class="normal">529</span>
-<span class="normal">530</span>
-<span class="normal">531</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">531</span>
 <span class="normal">532</span>
 <span class="normal">533</span>
 <span class="normal">534</span>
@@ -4283,8 +4329,24 @@ Returns</p>
 <span class="normal">587</span>
 <span class="normal">588</span>
 <span class="normal">589</span>
-<span class="normal">590</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">predict_nrt_arima</span><span class="p">(</span>
-    <span class="bp">self</span><span class="p">,</span> <span class="n">ds_in</span><span class="p">:</span> <span class="n">xr</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span> <span class="n">id_geohash</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">min_length</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span> <span class="n">water_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span>
+<span class="normal">590</span>
+<span class="normal">591</span>
+<span class="normal">592</span>
+<span class="normal">593</span>
+<span class="normal">594</span>
+<span class="normal">595</span>
+<span class="normal">596</span>
+<span class="normal">597</span>
+<span class="normal">598</span>
+<span class="normal">599</span>
+<span class="normal">600</span>
+<span class="normal">601</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">predict_nrt_arima</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span>
+    <span class="n">ds_in</span><span class="p">:</span> <span class="n">xr</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span>
+    <span class="n">id_geohash</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span>
+    <span class="n">min_length</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">3</span><span class="p">,</span>
+    <span class="n">water_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">,</span>
+    <span class="n">id_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
 <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""_summary_</span>
 
@@ -4305,10 +4367,11 @@ Returns</p>
     <span class="c1"># any missing values (e.g. cloud-cover gaps), which statsmodels treats as an</span>
     <span class="c1"># unsupported index - newer statsmodels versions (&gt;=0.15) raise a hard</span>
     <span class="c1"># "No supported index is available" ValueError for this instead of only warning.</span>
+    <span class="n">id_field</span> <span class="o">=</span> <span class="n">id_field</span> <span class="ow">or</span> <span class="n">resolve_id_field</span><span class="p">(</span><span class="n">ds_in</span><span class="p">)</span>
     <span class="n">df_in</span> <span class="o">=</span> <span class="p">(</span>
-        <span class="n">ds_in</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">id_geohash</span><span class="p">)</span>
+        <span class="n">ds_in</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">id_field</span><span class="p">:</span> <span class="n">id_geohash</span><span class="p">})</span>
         <span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
-        <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"id_geohash"</span><span class="p">])[</span><span class="n">water_column</span><span class="p">]</span>
+        <span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">id_field</span><span class="p">])[</span><span class="n">water_column</span><span class="p">]</span>
         <span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
         <span class="o">.</span><span class="n">reset_index</span><span class="p">(</span><span class="n">drop</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
     <span class="p">)</span>
@@ -4406,10 +4469,7 @@ for consecutive time points, which helps reduce false positives.</p>
 
               <details class="mkdocstrings-source">
                 <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">134</span>
-<span class="normal">135</span>
-<span class="normal">136</span>
-<span class="normal">137</span>
+                <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">137</span>
 <span class="normal">138</span>
 <span class="normal">139</span>
 <span class="normal">140</span>
@@ -4573,7 +4633,12 @@ for consecutive time points, which helps reduce false positives.</p>
 <span class="normal">298</span>
 <span class="normal">299</span>
 <span class="normal">300</span>
-<span class="normal">301</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">SimpleBreakpoint</span><span class="p">(</span><span class="n">BreakpointMethod</span><span class="p">):</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">SimpleBreakpoint</span><span class="p">(</span><span class="n">BreakpointMethod</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Fast rolling‑window statistical breakpoint detector.</span>
 
 <span class="sd">    This method detects breakpoints by comparing current water values against</span>
@@ -4605,7 +4670,9 @@ for consecutive time points, which helps reduce false positives.</p>
         <span class="bp">self</span><span class="o">.</span><span class="n">kwargs_break</span> <span class="o">=</span> <span class="n">kwargs_break</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">breakpoint_columns</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"date_break"</span><span class="p">,</span> <span class="s2">"date_before_break"</span><span class="p">,</span> <span class="s2">"date_after_break"</span><span class="p">,</span> <span class="s2">"break_method"</span><span class="p">]</span>
 
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_first_break_date</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">get_first_break_date</span><span class="p">(</span>
+        <span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">,</span> <span class="n">id_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"id_geohash"</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
 <span class="w">        </span><span class="sd">"""Find the first break date and the immediately preceding index value.</span>
 
 <span class="sd">        The detection uses a dual‑window approach: a primary rolling window</span>
@@ -4626,7 +4693,7 @@ for consecutive time points, which helps reduce false positives.</p>
 <span class="sd">            (first_break_date, previous_date, after_date) where each element is</span>
 <span class="sd">            a pandas Timestamp or None if no break was found.</span>
 <span class="sd">        """</span>
-        <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"id_geohash"</span><span class="p">])</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+        <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">id_column</span><span class="p">])</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
 
         <span class="c1"># Determine the rolling window sizes</span>
         <span class="n">primary_window</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kwargs_break</span><span class="p">[</span><span class="s2">"window"</span><span class="p">]</span>
@@ -4703,8 +4770,8 @@ for consecutive time points, which helps reduce false positives.</p>
 <span class="sd">        """</span>
         <span class="c1"># dataset._normalize_ds()</span>
         <span class="n">ds</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span>
-        <span class="n">df_normed</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
-        <span class="n">first_break</span><span class="p">,</span> <span class="n">previous_date</span><span class="p">,</span> <span class="n">after_date</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_first_break_date</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">df_normed</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span><span class="p">)</span>
+        <span class="n">df_normed</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+        <span class="n">first_break</span><span class="p">,</span> <span class="n">previous_date</span><span class="p">,</span> <span class="n">after_date</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_first_break_date</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">df_normed</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span><span class="p">,</span> <span class="n">id_column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">first_break</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
             <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">breakpoint_columns</span><span class="p">)</span>
         <span class="n">df_out</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
@@ -4718,7 +4785,7 @@ for consecutive time points, which helps reduce false positives.</p>
         <span class="p">)</span>
 
         <span class="n">break_list</span> <span class="o">=</span> <span class="p">[]</span>
-        <span class="n">df_water</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
+        <span class="n">df_water</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
         <span class="c1"># TODO: can this be optimized to process the entire dataframe?</span>
         <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df_out</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
             <span class="n">id_geohash</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">name</span>
@@ -4782,12 +4849,7 @@ object_id : str
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">246</span>
-<span class="normal">247</span>
-<span class="normal">248</span>
-<span class="normal">249</span>
-<span class="normal">250</span>
-<span class="normal">251</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">251</span>
 <span class="normal">252</span>
 <span class="normal">253</span>
 <span class="normal">254</span>
@@ -4837,7 +4899,12 @@ object_id : str
 <span class="normal">298</span>
 <span class="normal">299</span>
 <span class="normal">300</span>
-<span class="normal">301</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_break</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">LakeDataset</span><span class="p">,</span> <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
+<span class="normal">301</span>
+<span class="normal">302</span>
+<span class="normal">303</span>
+<span class="normal">304</span>
+<span class="normal">305</span>
+<span class="normal">306</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">calculate_break</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset</span><span class="p">:</span> <span class="n">LakeDataset</span><span class="p">,</span> <span class="n">object_id</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Calculate breakpoints for a single lake object.</span>
 
 <span class="sd">    Parameters</span>
@@ -4855,8 +4922,8 @@ object_id : str
 <span class="sd">    """</span>
     <span class="c1"># dataset._normalize_ds()</span>
     <span class="n">ds</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds_normalized</span>
-    <span class="n">df_normed</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
-    <span class="n">first_break</span><span class="p">,</span> <span class="n">previous_date</span><span class="p">,</span> <span class="n">after_date</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_first_break_date</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">df_normed</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span><span class="p">)</span>
+    <span class="n">df_normed</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span><span class="o">.</span><span class="n">to_pandas</span><span class="p">()</span>
+    <span class="n">first_break</span><span class="p">,</span> <span class="n">previous_date</span><span class="p">,</span> <span class="n">after_date</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_first_break_date</span><span class="p">(</span><span class="n">df</span><span class="o">=</span><span class="n">df_normed</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">water_column</span><span class="p">,</span> <span class="n">id_column</span><span class="o">=</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">first_break</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">breakpoint_columns</span><span class="p">)</span>
     <span class="n">df_out</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
@@ -4870,7 +4937,7 @@ object_id : str
     <span class="p">)</span>
 
     <span class="n">break_list</span> <span class="o">=</span> <span class="p">[]</span>
-    <span class="n">df_water</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">(</span><span class="n">id_geohash</span><span class="o">=</span><span class="n">object_id</span><span class="p">)</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
+    <span class="n">df_water</span> <span class="o">=</span> <span class="n">dataset</span><span class="o">.</span><span class="n">ds</span><span class="o">.</span><span class="n">sel</span><span class="p">({</span><span class="n">dataset</span><span class="o">.</span><span class="n">id_field</span><span class="p">:</span> <span class="n">object_id</span><span class="p">})</span><span class="o">.</span><span class="n">to_dataframe</span><span class="p">()</span>
     <span class="c1"># TODO: can this be optimized to process the entire dataframe?</span>
     <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">row</span> <span class="ow">in</span> <span class="n">df_out</span><span class="o">.</span><span class="n">iterrows</span><span class="p">():</span>
         <span class="n">id_geohash</span> <span class="o">=</span> <span class="n">row</span><span class="o">.</span><span class="n">name</span>
@@ -4903,7 +4970,7 @@ object_id : str
 
 
 <h3 id="water_timeseries.breakpoint.SimpleBreakpoint.get_first_break_date" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">get_first_break_date</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="s1">'water'</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">get_first_break_date</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="n">column</span><span class="o">=</span><span class="s1">'water'</span><span class="p">,</span> <span class="n">id_column</span><span class="o">=</span><span class="s1">'id_geohash'</span><span class="p">)</span></code>
 
 <a href="#water_timeseries.breakpoint.SimpleBreakpoint.get_first_break_date" class="headerlink" title="Permanent link">🔗</a></h3>
 
@@ -4928,10 +4995,7 @@ column : str, optional
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/breakpoint.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">166</span>
-<span class="normal">167</span>
-<span class="normal">168</span>
-<span class="normal">169</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">169</span>
 <span class="normal">170</span>
 <span class="normal">171</span>
 <span class="normal">172</span>
@@ -5006,7 +5070,14 @@ column : str, optional
 <span class="normal">241</span>
 <span class="normal">242</span>
 <span class="normal">243</span>
-<span class="normal">244</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_first_break_date</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
+<span class="normal">244</span>
+<span class="normal">245</span>
+<span class="normal">246</span>
+<span class="normal">247</span>
+<span class="normal">248</span>
+<span class="normal">249</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">get_first_break_date</span><span class="p">(</span>
+    <span class="bp">self</span><span class="p">,</span> <span class="n">df</span><span class="p">:</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">,</span> <span class="n">column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"water"</span><span class="p">,</span> <span class="n">id_column</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"id_geohash"</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Find the first break date and the immediately preceding index value.</span>
 
 <span class="sd">    The detection uses a dual‑window approach: a primary rolling window</span>
@@ -5027,7 +5098,7 @@ column : str, optional
 <span class="sd">        (first_break_date, previous_date, after_date) where each element is</span>
 <span class="sd">        a pandas Timestamp or None if no break was found.</span>
 <span class="sd">    """</span>
-    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="s2">"id_geohash"</span><span class="p">])</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
+    <span class="n">df</span> <span class="o">=</span> <span class="n">df</span><span class="o">.</span><span class="n">drop</span><span class="p">(</span><span class="n">columns</span><span class="o">=</span><span class="p">[</span><span class="n">id_column</span><span class="p">])</span><span class="o">.</span><span class="n">dropna</span><span class="p">()</span>
 
     <span class="c1"># Determine the rolling window sizes</span>
     <span class="n">primary_window</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">kwargs_break</span><span class="p">[</span><span class="s2">"window"</span><span class="p">]</span>
