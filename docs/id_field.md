@@ -68,6 +68,39 @@ frame: the index keeps the dataset's own name and `id_geohash` is present as a c
 A new column is only ever added when the names differ. Consumers that assert an exact
 column list will see one extra column in that case — the default path emits nothing new.
 
+## Download → break pipeline
+
+The downloaders name the identifier coordinate after the vector column they were given
+(`name_attribute`), and now record it on the dataset:
+
+```python
+dl = EarthEngineDownloader(ee_auth=True, logger=logger)
+ds = dl.download_dw_monthly(vector_dataset="lakes.parquet", name_attribute="lake_id")
+ds.attrs["id_field"]        # "lake_id"
+```
+
+From there the break pipeline resolves the name itself — no flag needed:
+
+```python
+pipeline = BreakpointPipeline(
+    water_dataset_file="lakes_lake_id.nc",
+    output_file="breaks.parquet",
+    break_method="simple",
+)
+pipeline.id_field   # "lake_id"  (from the dataset's attrs)
+```
+
+or pass it explicitly, which also covers a dataset that records nothing:
+
+```bash
+water-timeseries breakpoint-analysis-historical \
+    --water-dataset-file lakes_lake_id.nc \
+    --output-file breaks.parquet --id-field lake_id
+```
+
+The output parquet then carries **both** names: `id_geohash` (the contract every
+downstream consumer reads) plus `lake_id` (the source name, as the index).
+
 ## Known limits
 
 - The Streamlit dashboard (`run_map_viewer`) is geohash-only: it reads the contract

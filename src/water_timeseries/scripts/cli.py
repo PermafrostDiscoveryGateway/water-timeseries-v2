@@ -711,6 +711,7 @@ def breakpoint_analysis_historical(
     output_file: Path | None = None,
     config_file: Path | None = None,
     vector_dataset_file: Path | None = None,
+    id_field: str | None = None,
     chunksize: int | None = None,
     parallel_backend: str | None = None,
     break_method: str | None = None,
@@ -751,6 +752,11 @@ def breakpoint_analysis_historical(
     vector_dataset_file : Path, optional
         Path to vector dataset file (e.g., GeoParquet) containing
         lake boundary geometries for spatial analysis.
+    id_field : str, optional
+        Name of the identifier coordinate/column shared by the water dataset and
+        the vector file. Defaults to the name recorded in the dataset's
+        ``id_field`` attribute, else ``"id_geohash"``. Output artefacts keep an
+        ``id_geohash`` column beside the source name.
     chunksize : int, optional
         Number of lake IDs to process per chunk. Controls memory
         usage during parallel processing. Default is 100.
@@ -889,6 +895,7 @@ def breakpoint_analysis_historical(
         bbox_north=config_dict.get("bbox_north"),
         output_geometry=config_dict.get("output_geometry", True),
         output_geometry_all=config_dict.get("output_geometry_all", False),
+        id_field=config_dict.get("id_field"),
         logger=logger,
     )
     pipeline.run_breaks()
@@ -901,6 +908,7 @@ def breakpoint_analysis_historical(
         "water_dataset_file": water_dataset_file,
         "output_file": output_file,
         "vector_dataset_file": config_dict.get("vector_dataset_file"),
+        "id_field": pipeline.id_field,
         "chunksize": config_dict.get("chunksize"),
         "parallel_backend": config_dict.get("parallel_backend"),
         "break_method": config_dict.get("break_method"),

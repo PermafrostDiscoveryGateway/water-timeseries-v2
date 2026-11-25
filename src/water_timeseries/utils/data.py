@@ -75,7 +75,9 @@ def calculate_temporal_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str | None = None) -> xr.Dataset:
+def annotate_xr_dataset_jrc(
+    ds: xr.Dataset, input_vector_file: Path | str | None = None, id_field: str | None = None
+) -> xr.Dataset:
     """
     Annotates an xarray Dataset with units, description, author, and contact information.
 
@@ -98,6 +100,11 @@ def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str | None
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    if id_field:
+        # The identifier coordinate is named after the vector column it came from;
+        # recording it lets create_water_dataset()/_break_pipeline resolve it instead
+        # of assuming "id_geohash".
+        ds.attrs["id_field"] = id_field
     ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
     ds.attrs["contact"] = "ingmar.nitze@awi.de"
@@ -109,6 +116,7 @@ def annotate_xr_dataset_dw(
     ds: xr.Dataset,
     input_vector_file: Path | str | None = None,
     temporal_resolution: str = "monthly",
+    id_field: str | None = None,
 ) -> xr.Dataset:
     """
     Annotates an xarray Dataset with units, description, author, and contact information.
@@ -141,6 +149,11 @@ def annotate_xr_dataset_dw(
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    if id_field:
+        # The identifier coordinate is named after the vector column it came from;
+        # recording it lets create_water_dataset()/_break_pipeline resolve it instead
+        # of assuming "id_geohash".
+        ds.attrs["id_field"] = id_field
     ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = (
         "Ingmar Nitze (Alfred Wegener Institute), Kayla Hardie (Google), Chen Wang (NCSA, U Illinois), Todd Nicholson(NCSA, U Illinois)"
@@ -204,6 +217,7 @@ def annotate_xr_dataset_dswx(
     ds: xr.Dataset,
     input_vector_file: Path | str | None = None,
     temporal_resolution: str = "monthly",
+    id_field: str | None = None,
 ) -> xr.Dataset:
     """Annotate a DSWx dataset with units, provenance and the product's limits.
 
@@ -250,6 +264,11 @@ def annotate_xr_dataset_dswx(
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    if id_field:
+        # The identifier coordinate is named after the vector column it came from;
+        # recording it lets create_water_dataset()/_break_pipeline resolve it instead
+        # of assuming "id_geohash".
+        ds.attrs["id_field"] = id_field
     ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
     ds.attrs["contact"] = "ingmar.nitze@awi.de"
@@ -260,6 +279,7 @@ def annotate_xr_dataset_dswx_hls(
     ds: xr.Dataset,
     input_vector_file: Path | str | None = None,
     temporal_resolution: str = "monthly",
+    id_field: str | None = None,
 ) -> xr.Dataset:
     """Annotate a DSWx-HLS dataset with units, provenance and the product's limits.
 
@@ -308,6 +328,11 @@ def annotate_xr_dataset_dswx_hls(
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    if id_field:
+        # The identifier coordinate is named after the vector column it came from;
+        # recording it lets create_water_dataset()/_break_pipeline resolve it instead
+        # of assuming "id_geohash".
+        ds.attrs["id_field"] = id_field
     ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
     ds.attrs["contact"] = "ingmar.nitze@awi.de"
