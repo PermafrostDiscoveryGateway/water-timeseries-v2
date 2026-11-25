@@ -42,6 +42,10 @@ def get_water_dataset_type(input_ds) -> str:
     """
     if "area_water_permanent" in input_ds.data_vars:
         water_dataset_type = "jrc"
+    elif "area_partial_water" in input_ds.data_vars:
+        # DSWx-HLS. Must be tested before the DSWx-S1 branch: both products carry
+        # ``area_open_water``, only HLS has the partial-surface-water class.
+        water_dataset_type = "dswx_hls"
     elif "area_open_water" in input_ds.data_vars:
         water_dataset_type = "dswx"
     elif "water" in input_ds.data_vars:
@@ -49,7 +53,7 @@ def get_water_dataset_type(input_ds) -> str:
     else:
         raise ValueError(
             "Unknown water dataset type: no known identifier variable found "
-            "(expected 'area_water_permanent', 'area_open_water' or 'water')"
+            "(expected 'area_water_permanent', 'area_partial_water', 'area_open_water' or 'water')"
         )
 
     return water_dataset_type
@@ -181,6 +185,20 @@ DSWX_WATER_TOTAL = "area_water"
 # is deliberately excluded - it is most of the polygon and flattens the interesting series.
 dswx_plot_variables = [DSWX_WATER_TOTAL, "area_open_water", "area_inundated_vegetation"]
 
+# OPERA DSWx-HLS: Landsat/Sentinel-2 optical surface water. The class set differs from DSWx-S1 -
+# 0 not water, 1 open water, **2 partial surface water**, and no inundated-vegetation class ever
+# appeared - and the LAND layer adds one static non-water footprint that is NOT the complement of
+# the water classes, so it travels as its own band and never enters ``area_data``.
+dswx_hls_bandnames = [
+    "area_open_water",  # WTR class 1
+    "area_partial_water",  # WTR class 2
+    "area_not_water",  # WTR class 0
+    "area_land_cover",  # LAND layer, an independent quantity
+]
+
+# Default plot: total water (= open + partial, which is BWTR_Binary_water) plus both components.
+dswx_hls_plot_variables = [DSWX_WATER_TOTAL, "area_open_water", "area_partial_water"]
+
 
 def annotate_xr_dataset_dswx(
     ds: xr.Dataset,
@@ -200,7 +218,7 @@ def annotate_xr_dataset_dswx(
         temporal_resolution (str, optional): ``"monthly"`` (one mode composite per month,
             from :meth:`EarthEngineDownloader.download_dswx_monthly`) or
             ``"per_acquisition"`` (one row per DSWx scene, from
-            :meth:`EarthEngineDownloader.download_dswx_acquisitions`). Defaults to "monthly".
+            :meth:`EarthEngineDownloader.download_dswx_daily`). Defaults to "monthly".
 
     Returns:
         xarray.Dataset: The annotated dataset.
@@ -229,6 +247,64 @@ def annotate_xr_dataset_dswx(
     )
     ds.attrs["temporal_resolution"] = temporal_resolution
     ds.attrs["product"] = "OPERA DSWx-S1 (OPERA/DSWX/L3_V1/S1)"
+    if input_vector_file is not None:
+        input_vector_file = Path(input_vector_file)
+        ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
+    ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
+    ds.attrs["contact"] = "ingmar.nitze@awi.de"
+    return ds
+
+
+def annotate_xr_dataset_dswx_hls(
+    ds: xr.Dataset,
+    input_vector_file: Path | str | None = None,
+    temporal_resolution: str = "monthly",
+) -> xr.Dataset:
+    """Annotate a DSWx-HLS dataset with units, provenance and the product's limits.
+
+    The four things a reader hits first, all measured: the class set has **partial surface water**
+    (WTR 2) where DSWx-S1 has inundated vegetation, ``area_water`` is open + partial (the product's
+    own ``BWTR_Binary_water``), the archive has two eras separated by a 28-month hole, and optical
+    acquisitions are limited by cloud and snow rather than by revisit.
+
+    Parameters:
+        ds (xarray.Dataset): The dataset to annotate.
+        input_vector_file (str|Path, optional): The path to the accompanying vector dataset.
+        temporal_resolution (str, optional): ``"monthly"`` or ``"per_acquisition"``.
+
+    Returns:
+        xarray.Dataset: The annotated dataset.
+    """
+    for var in list(ds.data_vars):
+        ds[var].attrs["units"] = "ha"
+
+    cadence = (
+        "One row per OPERA DSWx-HLS acquisition (Harmonized Landsat-Sentinel scene, MGRS tile), not "
+        "a gap-filled daily series: a missing date is a cloud or footprint gap."
+        if temporal_resolution == "per_acquisition"
+        else "One row per month, from a per-pixel mode composite of that month's acquisitions."
+    )
+    ds.attrs["description"] = (
+        "This dataset provides the surface water area of selected lake polygons from the OPERA "
+        "DSWx-HLS product (Harmonized Landsat 8/9 + Sentinel-2, 30 m) through Google Earth Engine. "
+        "Water classes: open water (WTR 1), partial surface water (WTR 2) and not water (WTR 0); "
+        "area_water = open + partial, which is the product's own BWTR_Binary_water and the column "
+        "comparable with Dynamic World's water + flooded_vegetation and with DSWx-S1's total. "
+        "area_land_cover comes from the product's LAND layer and is an independent quantity, not "
+        "the complement of the water classes, so it is not part of area_data. "
+        f"{cadence} The areas are per MGRS tile: a polygon covered by several tiles on one date "
+        "appears once, using the tile with the largest classified area. "
+        "Known limits: the archive has two eras with a 28-month hole (2016-03 to 2020-09, then "
+        "2023-02 onwards), and the product is optical - cloud and snow remove observations, so "
+        "winter rows are a cloud/snow signal rather than hydrology and usable density in the "
+        "Arctic is far below the scene count. Water bodies below ~3 ha are not mapped. "
+        "Lake polygons were calculated by Ingmar Nitze through the Permafrost Discovery Gateway "
+        'Project. "id_geohash" is the lake_id, which needs be joined to the accompanying polygon '
+        "vector dataset"
+    )
+    ds.attrs["temporal_resolution"] = temporal_resolution
+    ds.attrs["product"] = "OPERA DSWx-HLS (OPERA/DSWX/L3_V1/HLS)"
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name

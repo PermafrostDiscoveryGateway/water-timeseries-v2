@@ -22,6 +22,8 @@ from water_timeseries.utils.data import (
     DSWX_WATER_TOTAL,
     detect_temporal_resolution,
     dswx_bandnames,
+    dswx_hls_bandnames,
+    dswx_hls_plot_variables,
     dswx_plot_variables,
     dw_bandnames,
     get_water_dataset_type,
@@ -1225,6 +1227,80 @@ class DSWxDataset(JRCDataset):
         return fig
 
 
+class DSWxHLSDataset(DSWxDataset):
+    """Handler for OPERA DSWx-HLS optical surface water (area-class schema).
+
+    Same area-class machinery as :class:`DSWxDataset`, with a different class set:
+
+    - ``area_open_water`` (WTR class 1),
+    - ``area_partial_water`` (WTR class 2) - sub-pixel water, which HLS carries where DSWx-S1
+      carries inundated vegetation,
+    - ``area_not_water`` (WTR class 0).
+
+    ``area_water`` = open + partial is the product's own ``BWTR_Binary_water`` and is this product's
+    ``water_column``. It is not a cosmetic difference: on a 377 ha basin one summer scene read
+    11 ha open water against 201 ha partial, so treating open water as the extent understates the
+    lake by an order of magnitude.
+
+    ``area_land_cover`` comes from the product's LAND layer. It is an independent, near-static
+    quantity - measured 114 ha of LAND against 175 ha of WTR ``not water`` on the same image - so it
+    is published as its own band and deliberately kept out of ``area_data``: adding it would
+    double-count the polygon and corrupt the normalisation and the no-data share.
+
+    Attributes:
+        water_column (str): ``"area_water"``.
+        data_columns (list): The three water classes plus ``area_land_cover``.
+        plot_columns (list): total water, open water and partial water.
+        max_nodata_fraction (float): Allowed no-data share of an observation.
+
+    Example:
+        >>> ds = DSWxHLSDataset(xr.open_dataset("dswx_hls_monthly.zarr"))
+        >>> ds.ds_normalized[ds.water_column]
+    """
+
+    def __init__(
+        self,
+        ds,
+        id_field: str = "id_geohash",
+        mask_data: bool = True,
+        max_nodata_fraction: float = 0.02,
+    ) -> None:
+        """Initialize DSWxHLSDataset with OPERA DSWx-HLS class areas.
+
+        Args:
+            ds: Input xarray Dataset with the three water classes and the LAND band.
+            id_field: Name of the identifier coordinate (default: ``"id_geohash"``).
+            mask_data: Whether invalid data should be masked (default: True).
+            max_nodata_fraction: Allowed no-data share of an observation before it is masked
+                (default: 0.02). Relative to the best observation of the same object.
+
+        Raises:
+            ValueError: If `max_nodata_fraction` is outside 0..1.
+        """
+        super().__init__(
+            ds, id_field=id_field, mask_data=mask_data, max_nodata_fraction=max_nodata_fraction
+        )
+        # set after the parent constructor, which fills these with the DSWx-S1 defaults
+        self.water_column = DSWX_WATER_TOTAL
+        self.data_columns = dswx_hls_bandnames
+        self.plot_columns = list(dswx_hls_plot_variables)
+
+    def _preprocess(self) -> None:
+        """Sum the three water classes and derive total water as open + partial.
+
+        ``area_land_cover`` is left untouched and is not part of ``area_data``.
+        """
+        ds = self.ds
+        ds["area_data"] = ds["area_open_water"] + ds["area_partial_water"] + ds["area_not_water"]
+        ds[DSWX_WATER_TOTAL] = ds["area_open_water"] + ds["area_partial_water"]
+
+        max_area = ds["area_data"].max(dim="date", skipna=True)
+        ds["area_nodata"] = (max_area - ds["area_data"]).round(4)
+
+        self.preprocessed_ = True
+        self.ds = ds
+
+
 def create_water_dataset(ds: xr.Dataset, water_dataset_type: str | None = None) -> LakeDataset:
     """Instantiate the dataset class for a water product.
 
@@ -1233,11 +1309,11 @@ def create_water_dataset(ds: xr.Dataset, water_dataset_type: str | None = None) 
 
     Args:
         ds: xarray Dataset with one of the supported products.
-        water_dataset_type: ``"dynamic_world"``, ``"jrc"`` or ``"dswx"``. If ``None``, it
-            is sniffed from the dataset's variables via :func:`get_water_dataset_type`.
+        water_dataset_type: ``"dynamic_world"``, ``"jrc"``, ``"dswx"`` or ``"dswx_hls"``. If
+            ``None``, it is sniffed from the dataset's variables via :func:`get_water_dataset_type`.
 
     Returns:
-        LakeDataset: ``DWDataset``, ``JRCDataset`` or ``DSWxDataset`` for that dataset.
+        LakeDataset: The dataset handler for that product.
 
     Raises:
         ValueError: If the type is unknown.
@@ -1245,7 +1321,12 @@ def create_water_dataset(ds: xr.Dataset, water_dataset_type: str | None = None) 
     if water_dataset_type is None:
         water_dataset_type = get_water_dataset_type(ds)
 
-    classes = {"dynamic_world": DWDataset, "jrc": JRCDataset, "dswx": DSWxDataset}
+    classes = {
+        "dynamic_world": DWDataset,
+        "jrc": JRCDataset,
+        "dswx": DSWxDataset,
+        "dswx_hls": DSWxHLSDataset,
+    }
     if water_dataset_type not in classes:
         raise ValueError(f"Unknown water dataset type: {water_dataset_type}")
     return classes[water_dataset_type](ds)

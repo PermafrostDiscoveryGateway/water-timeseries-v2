@@ -74,6 +74,30 @@ comparing, and expect DSWx open water alone to be roughly 63 % of DW's water. Wi
 are not hydrology - the product has no snow/ice class and reports a frozen basin as
 inundated vegetation, so gate them per acquisition against DW's `snow_and_ice`.
 
+## Working with DSWxHLSDataset
+
+`DSWxHLSDataset` handles OPERA DSWx-HLS: optical (Harmonized Landsat-Sentinel) surface water with a
+different class set from DSWx-S1 - open water, **partial surface water** and not water, plus the
+LAND layer.
+
+```python
+from water_timeseries.dataset import DSWxHLSDataset
+
+processor = DSWxHLSDataset(xr.open_dataset("dswx_hls_monthly.zarr"))
+
+print(processor.data_columns)
+# ['area_open_water', 'area_partial_water', 'area_not_water', 'area_land_cover']
+
+# headline series: open + partial, i.e. the product's BWTR_Binary_water
+total_water = processor.ds[processor.water_column]      # water_column == "area_water"
+
+fig = processor.plot_timeseries(processor.object_ids_[0])
+```
+
+Two things to remember: `area_land_cover` is an independent quantity (the product's LAND layer)
+and is not part of `area_data`, and the product is optical - a masked month is cloud, so a gap in
+the series is not necessarily a gap in the lake.
+
 ## Merging Datasets
 
 The `merge()` method allows combining two LakeDataset instances. This is useful for combining data from different time periods or adding new lakes to an existing dataset.

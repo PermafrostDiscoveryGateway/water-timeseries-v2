@@ -358,11 +358,20 @@ Handles Dynamic World land cover data with classes for water, bare, snow, trees,
 ### `JRCDataset`
 Handles Joint Research Centre (JRC) water data with permanent and seasonal water classifications.
 
+### `DSWxHLSDataset`
+Handles OPERA DSWx-HLS optical surface water (Harmonized Landsat 8/9 + Sentinel-2, 30 m):
+`area_open_water` (WTR 1), `area_partial_water` (WTR 2) and `area_not_water` (WTR 0), plus
+`area_land_cover` from the product's LAND layer. `area_water` = open + partial is the headline
+series - it is the product's own `BWTR_Binary_water`, and partial surface water is sub-pixel water,
+not noise. The archive has two eras (2016-03 .. 2020-09, then 2023-02 onwards) and, being optical,
+cloud and snow remove observations. Download with `download_dswx_hls_daily` /
+`download_dswx_hls_monthly`.
+
 ### `DSWxDataset`
 Handles OPERA DSWx-S1 radar surface water: `area_open_water` (WTR 1),
 `area_inundated_vegetation` (WTR 3) and `area_not_water` (WTR 0), plus the derived
 `area_water` (open + inundated vegetation) that is comparable with Dynamic World's
-`water + flooded_vegetation`. Download it with `download_dswx_acquisitions` (per scene) or
+`water + flooded_vegetation`. Download it with `download_dswx_daily` (per scene) or
 `download_dswx_monthly` (mode composite); the archive starts 2024-08, water bodies below
 ~3 ha are not mapped, and a frozen basin is classified as inundated vegetation, so winter
 rows have to be gated against Dynamic World's `snow_and_ice`.

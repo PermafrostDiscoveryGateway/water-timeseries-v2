@@ -6,6 +6,7 @@ into Dynamic World or JRC format.
 """
 
 import os
+import warnings
 from pathlib import Path
 
 import ee
@@ -20,18 +21,22 @@ from tqdm import tqdm
 
 from water_timeseries.utils.data import (
     annotate_xr_dataset_dswx,
+    annotate_xr_dataset_dswx_hls,
     annotate_xr_dataset_dw,
     annotate_xr_dataset_jrc,
     dswx_bandnames,
+    dswx_hls_bandnames,
     dw_bandnames,
     jrc_bandnames,
 )
 from water_timeseries.utils.earthengine import (
     DSWX_ARCHIVE_START,
     DSWX_CRS,
+    DSWX_HLS_ARCHIVE_START,
     DSWX_MIN_MAPPING_AREA_HA,
     DSWX_SCALE,
     NoDSWxDataError,
+    NoDSWxHLSDataError,
     NoDynamicWorldDataError,
     calc_monthly_dw,
     call_with_retry,
@@ -40,6 +45,10 @@ from water_timeseries.utils.earthengine import (
     dswx_acquisitions,
     dswx_class_areas,
     dswx_collection,
+    dswx_hls_acquisitions,
+    dswx_hls_class_areas,
+    dswx_hls_collection,
+    dswx_hls_month_composite,
     dswx_month_composite,
     dw_acquisitions,
     dw_mode_composite,
@@ -69,6 +78,7 @@ EST_DSWX_ACQUISITIONS_PER_MONTH = 20
 __all__ = [
     "EarthEngineDownloader",
     "NoDSWxDataError",
+    "NoDSWxHLSDataError",
     "NoDynamicWorldDataError",
     "setup_annual_dates",
     "setup_dates_from_options",
@@ -126,6 +136,7 @@ class EarthEngineDownloader:
         self.dw_bandnames = dw_bandnames
         self.jrc_bandnames = jrc_bandnames
         self.dswx_bandnames = dswx_bandnames
+        self.dswx_hls_bandnames = dswx_hls_bandnames
 
         # Initialize Earth Engine
         if ee_auth:
@@ -1247,7 +1258,7 @@ class EarthEngineDownloader:
         }
         return fc, reducer_dict
 
-    def _validate_years_dswx(self, years) -> list[int]:
+    def _validate_years_dswx(self, years, first_year: int | None = None, archive_start: str = DSWX_ARCHIVE_START) -> list[int]:
         """Validate the years parameter for an OPERA DSWx-S1 download.
 
         Production starts in August 2024, so earlier years are dropped rather than
@@ -1260,7 +1271,8 @@ class EarthEngineDownloader:
             List[int]: Validated list of years to process.
         """
         current_year = pd.Timestamp.now().year
-        first_year = int(DSWX_ARCHIVE_START[:4])
+        if first_year is None:
+            first_year = int(archive_start[:4])
         if years is None:
             years = list(range(first_year, current_year + 1))
         elif isinstance(years, list):
@@ -1283,12 +1295,18 @@ class EarthEngineDownloader:
             else:
                 self._log_warning(
                     f"Year {year} is invalid, must be between {first_year} and {current_year} "
-                    f"(OPERA DSWx-S1 production starts {DSWX_ARCHIVE_START}) and will be skipped!"
+                    f"(production starts {archive_start}) and will be skipped!"
                 )
         return years_cleaned
 
     @staticmethod
-    def _dswx_add_coverage(frame: pd.DataFrame, areas: dict, name_attribute: str, scale: float) -> pd.DataFrame:
+    def _dswx_add_coverage(
+        frame: pd.DataFrame,
+        areas: dict,
+        name_attribute: str,
+        scale: float,
+        cover_columns: list[str] | None = None,
+    ) -> pd.DataFrame:
         """Add classified area, its share of the polygon, and the polygon's pixel count.
 
         ``coverage`` is the share of the polygon carrying any classification, i.e. the
@@ -1309,7 +1327,8 @@ class EarthEngineDownloader:
         df = frame.copy()
         # skipna=False keeps a partially-NaN row NaN so it is dropped below instead of being
         # mistaken for a genuine zero-area observation.
-        df["area_data"] = df[dswx_bandnames].sum(axis=1, skipna=False)
+        columns = list(cover_columns) if cover_columns is not None else list(dswx_bandnames)
+        df["area_data"] = df[columns].sum(axis=1, skipna=False)
         df["area_ha"] = df[name_attribute].map(areas)
         df["coverage"] = (df["area_data"] / df["area_ha"]).clip(upper=1.0)
         # A 30 m product puts ~11 pixels in a hectare, so a sub-hectare pond is a handful of
@@ -1338,7 +1357,7 @@ class EarthEngineDownloader:
         tolerance = np.maximum(max_nodata, min_masked_pixels / frame["polygon_pixels"])
         return frame[frame["coverage"] >= 1 - tolerance]
 
-    def _extract_dswx_acquisitions(
+    def _extract_dswx_daily(
         self,
         windows: list[tuple[str, str]],
         gdf_chunk,
@@ -1427,7 +1446,7 @@ class EarthEngineDownloader:
         fc_out = image_collection.getTimeSeriesByRegions(**reducer_dict)
         return call_with_retry(geemap.ee_to_df, fc_out)
 
-    def download_dswx_acquisitions(
+    def download_dswx_daily(
         self,
         vector_dataset: str | Path | None = None,
         gdf: gpd.GeoDataFrame | None = None,
@@ -1526,7 +1545,7 @@ class EarthEngineDownloader:
 
         Example:
             >>> downloader = EarthEngineDownloader()
-            >>> ds = downloader.download_dswx_acquisitions(
+            >>> ds = downloader.download_dswx_daily(
             ...     vector_dataset="tests/data/lake_polygons.parquet",
             ...     years=[2025],
             ...     start_date="05-01",
@@ -1655,7 +1674,7 @@ class EarthEngineDownloader:
         self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
 
         df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
-            joblib.delayed(self._extract_dswx_acquisitions)(
+            joblib.delayed(self._extract_dswx_daily)(
                 windows=windows, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
             )
             for chunk in tqdm(gdf_chunks, desc="Downloading DSWx acquisitions", unit="chunk")
@@ -1741,6 +1760,19 @@ class EarthEngineDownloader:
 
         return ds
 
+    def download_dswx_acquisitions(self, *args, **kwargs):
+        """Deprecated alias for :meth:`download_dswx_daily`.
+
+        The per-acquisition downloaders are named ``_daily`` for every source; this alias keeps the
+        0.17.x name working and will be removed in a later release.
+        """
+        warnings.warn(
+            "download_dswx_acquisitions is deprecated; use download_dswx_daily",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self.download_dswx_daily(*args, **kwargs)
+
     def download_dswx_monthly(
         self,
         vector_dataset: str | Path | None = None,
@@ -1766,7 +1798,7 @@ class EarthEngineDownloader:
         """Download monthly OPERA DSWx-S1 class areas for specified periods.
 
         One per-pixel mode composite of the month's acquisitions, reduced to the three class
-        areas - the monthly counterpart of :meth:`download_dswx_acquisitions`, and the same
+        areas - the monthly counterpart of :meth:`download_dswx_daily`, and the same
         compositing rule as :meth:`download_dw_monthly`, so the two sources share a cadence
         and a statistic.
 
@@ -1953,6 +1985,601 @@ class EarthEngineDownloader:
         )
 
         ds = annotate_xr_dataset_dswx(ds, input_vector_file=vector_dataset, temporal_resolution="monthly")
+        ds.attrs["monthly_composite"] = "mode"
+        ds.attrs["max_nodata"] = float(max_nodata)
+        ds.attrs["min_masked_pixels"] = float(min_masked_pixels)
+
+        if save_to_file is not None:
+            save_path = Path(save_to_file).absolute()
+            save_xarray_dataset(ds=ds, save_path=save_path, logger=self.logger)
+
+        return ds
+
+    def _setup_dswx_hls_reducer(self, gdf, feature_index_name: str, scale: float = DSWX_SCALE) -> tuple:
+        """Setup the reducer configuration for OPERA DSWx-HLS.
+
+        Same shape as :meth:`_setup_dswx_reducer`, but the band list includes the LAND layer band
+        even though it is not part of ``area_data`` - it is published alongside the water classes.
+
+        Args:
+            gdf: GeoDataFrame with features to process.
+            feature_index_name: Column name to use as the feature index.
+            scale: Pixel scale in meters (default: 30).
+
+        Returns:
+            tuple: (fc, reducer_dict) - GEE FeatureCollection and reducer configuration.
+        """
+        fc = geemap.gdf_to_ee(drop_z_from_gdf(gdf[:]))
+        reducer_dict = {
+            "reducer": ee.Reducer.sum(),
+            "collection": fc.select(feature_index_name),
+            "crs": DSWX_CRS,
+            "scale": scale,
+            "bands": self.dswx_hls_bandnames,
+        }
+        return fc, reducer_dict
+
+    def _extract_dswx_hls_daily(
+        self,
+        windows: list[tuple[str, str]],
+        gdf_chunk,
+        name_attribute: str,
+        scale: float = DSWX_SCALE,
+    ) -> pd.DataFrame:
+        """Extract per-acquisition DSWx-HLS class areas for one chunk over several date windows.
+
+        One calendar month per Earth Engine request, as in the DSWx-S1 extractor.
+
+        Args:
+            windows: List of ``(start, end)`` date-range pairs; the end is exclusive.
+            gdf_chunk: GeoDataFrame chunk to extract data for.
+            name_attribute: Column name used as the feature index.
+            scale: Pixel scale in meters.
+
+        Returns:
+            pd.DataFrame: One row per (polygon, tile, acquisition); empty if nothing was found.
+        """
+        fc, reducer_dict = self._setup_dswx_hls_reducer(gdf_chunk, name_attribute, scale=scale)
+
+        frames = []
+        for window_start, window_end in windows:
+            for slice_start, slice_end in month_slices(window_start, window_end):
+                collection = dswx_hls_acquisitions(fc, slice_start, slice_end, scale=scale)
+                n_images = call_with_retry(collection.size().getInfo)
+                if n_images == 0:
+                    self._log_info(f"No OPERA DSWx-HLS acquisitions between {slice_start} and {slice_end}")
+                    continue
+                self._log_info(f"{slice_start}..{slice_end}: {n_images} acquisitions")
+
+                fc_out = collection.getTimeSeriesByRegions(**reducer_dict)
+                df = call_with_retry(geemap.ee_to_df, fc_out)
+                if df is None or df.empty:
+                    continue
+                frames.append(df)
+
+        if not frames:
+            return pd.DataFrame()
+        return pd.concat(frames, ignore_index=True)
+
+    def _extract_dswx_hls_monthly(
+        self,
+        dates: list[str],
+        gdf_chunk,
+        name_attribute: str,
+        scale: float = DSWX_SCALE,
+    ) -> pd.DataFrame:
+        """Extract monthly DSWx-HLS class areas for one chunk, one mode composite per month.
+
+        Args:
+            dates: Month starts in ``'YYYY-MM-DD'`` format.
+            gdf_chunk: GeoDataFrame chunk to extract data for.
+            name_attribute: Column name used as the feature index.
+            scale: Pixel scale in meters.
+
+        Returns:
+            pd.DataFrame: One row per (polygon, month); empty if nothing was found.
+        """
+        fc, reducer_dict = self._setup_dswx_hls_reducer(gdf_chunk, name_attribute, scale=scale)
+
+        imlist = []
+        for date in dates:
+            month_start = pd.Timestamp(date)
+            month_end = month_start + pd.DateOffset(months=1)
+            slice_start = month_start.strftime("%Y-%m-%d")
+            slice_end = month_end.strftime("%Y-%m-%d")
+
+            n_images = call_with_retry(dswx_hls_collection(fc, slice_start, slice_end).size().getInfo)
+            if n_images == 0:
+                self._log_info(f"No OPERA DSWx-HLS acquisitions in {slice_start[:7]}")
+                continue
+            composite = dswx_hls_month_composite(fc, slice_start, slice_end, scale=scale)
+            imlist.append(dswx_hls_class_areas(composite))
+
+        if not imlist:
+            self._log_warning("No images processed for chunk")
+            return pd.DataFrame()
+
+        image_collection = ee.ImageCollection(imlist)
+        fc_out = image_collection.getTimeSeriesByRegions(**reducer_dict)
+        return call_with_retry(geemap.ee_to_df, fc_out)
+
+    def download_dswx_hls_daily(
+        self,
+        vector_dataset: str | Path | None = None,
+        gdf: gpd.GeoDataFrame | None = None,
+        name_attribute: str = "id_geohash",
+        years: list[int] | None = None,
+        months: list[int] | None = None,
+        date_list: list[str] | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+        max_nodata: float = 0.02,
+        min_masked_pixels: float = 2,
+        bbox_west: float = -180,
+        bbox_east: float = 180,
+        bbox_north: float = 90,
+        bbox_south: float = -90,
+        id_list: list | None = None,
+        scale: float = DSWX_SCALE,
+        max_total_requests: int = 500,
+        n_parallel: int = 1,
+        chunk_method: str = "simple",
+        no_download: bool = False,
+        save_to_file: str | None = None,
+    ) -> xr.Dataset:
+        """Download OPERA DSWx-HLS class areas per acquisition (unaggregated).
+
+        The optical counterpart of :meth:`download_dswx_daily`: Harmonized Landsat 8/9 +
+        Sentinel-2, 30 m, one row per scene inside the selected windows. The date arguments are the
+        same as for the Dynamic World and DSWx-S1 downloaders.
+
+        The class set differs from DSWx-S1: open water (WTR 1), **partial surface water** (WTR 2)
+        and not water (WTR 0); there is no inundated-vegetation class, and 253 is the mask/cloud
+        value. ``area_water`` is derived later by :class:`DSWxHLSDataset` as open + partial, which
+        is the product's own ``BWTR_Binary_water``. ``area_land_cover`` comes from the LAND layer and
+        is an independent quantity, not the complement of the water classes.
+
+        Being optical, cloud and snow remove observations: a scene can be almost entirely 253 and
+        still exist in the collection. Tiles are collapsed to the best-covered one per (polygon,
+        date) - here the fragments differ a lot, so this matters more than for S1 - fully masked
+        rows are dropped, and the no-data tolerance is the same lake-size-aware rule.
+
+        The archive has two eras with a 28-month hole (2016-03 .. 2020-09, then 2023-02 onwards);
+        all years are accepted, the gap simply produces no rows.
+
+        Either provide `vector_dataset` OR `gdf`. These options are mutually exclusive.
+
+        Args:
+            vector_dataset: Path to the input vector dataset (Parquet format).
+            gdf: Optional GeoDataFrame to use directly instead of loading from a path.
+            name_attribute: Column name in the vector dataset to use for grouping.
+            years: Years to process. Default: 2016 up to the current year.
+            months: Month numbers (1-12) to download. Mutually exclusive with ``date_list`` and
+                with ``start_date``/``end_date``.
+            date_list: Month strings in ``'YYYY-MM'`` format. Mutually exclusive with ``months``.
+            start_date: Within-year window start as ``'MM-DD'`` (default: '05-01').
+            end_date: Within-year window end as ``'MM-DD'`` (default: '09-30').
+            max_nodata: Mask an observation when more than this share of the polygon has no data.
+            min_masked_pixels: Absolute floor, in pixels, for that tolerance (default: 2).
+            bbox_west: Western boundary for spatial filtering (default: -180).
+            bbox_east: Eastern boundary for spatial filtering (default: 180).
+            bbox_north: Northern boundary for spatial filtering (default: 90).
+            bbox_south: Southern boundary for spatial filtering (default: -90).
+            id_list: Optional list of IDs to filter by (values from name_attribute column).
+            scale: Pixel scale in meters (default: 30).
+            max_total_requests: Maximum number of (feature, acquisition) requests per chunk.
+            n_parallel: Number of parallel workers for processing chunks (default: 1).
+            chunk_method: Method for chunking the data: "simple" or "spatial_kmeans".
+            no_download: If True, only log the download parameters without downloading.
+            save_to_file: Optional path to save the dataset ('.zarr' or '.nc').
+
+        Returns:
+            xr.Dataset: Class areas in hectares indexed by (name_attribute, date).
+
+        Raises:
+            ValueError: If both or neither of vector_dataset/gdf is given, if max_nodata is outside
+                0..1, if min_masked_pixels is negative, or if the date selection is ambiguous.
+            KeyError: If name_attribute is not present in the vector dataset.
+            NoDSWxHLSDataError: If Earth Engine returned no usable observation.
+        """
+        if vector_dataset is None and gdf is None:
+            raise ValueError("Either vector_dataset or gdf must be provided")
+        elif vector_dataset is not None and gdf is not None:
+            raise ValueError("Only one of vector_dataset or gdf should be provided, not both")
+
+        if not 0 <= max_nodata <= 1:
+            raise ValueError(
+                f"max_nodata must be between 0 and 1 (share of the polygon allowed to be no-data), got {max_nodata}"
+            )
+        if min_masked_pixels < 0:
+            raise ValueError(f"min_masked_pixels must be zero or positive, got {min_masked_pixels}")
+
+        if no_download:
+            self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
+
+        years = self._validate_years_dswx(years, archive_start=DSWX_HLS_ARCHIVE_START)
+
+        if months is not None and date_list is not None:
+            raise ValueError("Provide either 'months' or 'date_list', not both.")
+        if (months is not None or date_list is not None) and (start_date is not None or end_date is not None):
+            raise ValueError(
+                "Provide either 'months'/'date_list' or 'start_date'/'end_date', not both - "
+                "they select the same thing in two different ways."
+            )
+        if date_list is not None:
+            windows = windows_from_date_list(date_list)
+            window_label = f"date_list({len(date_list)} month(s))"
+        elif months is not None:
+            windows = month_windows(years, months)
+            window_label = "months(" + ",".join(str(int(m)) for m in months) + ")"
+        else:
+            start_date = start_date or "05-01"
+            end_date = end_date or "09-30"
+            windows = season_windows(years, start_date=start_date, end_date=end_date)
+            window_label = f"{start_date}..{end_date}"
+
+        if not windows:
+            raise ValueError("No valid date windows to download - check years, months and date_list.")
+
+        if vector_dataset is not None:
+            self._log_info(f"Loading vector dataset from: {vector_dataset}")
+            gdf = load_vector_dataset(vector_dataset, logger=self.logger)
+        else:
+            gdf = gdf.copy()
+
+        if name_attribute not in gdf.columns:
+            raise KeyError(f"The designated column '{name_attribute}' is not present in the vector dataset.")
+
+        self._log_info(f"Initial dataset has {len(gdf)} features")
+        gdf = self._apply_id_filter(gdf, id_list, name_attribute)
+
+        if bbox_west > bbox_east or bbox_south > bbox_north:
+            raise ValueError(
+                f"Invalid bbox parameters: west={bbox_west}, east={bbox_east}, south={bbox_south}, north={bbox_north}. "
+                "Ensure that west <= east and south <= north."
+            )
+
+        if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]) and not (
+            bbox_west == -180 and bbox_east == 180 and bbox_north == 90 and bbox_south == -90
+        ):
+            n_before_bbox_filter = len(gdf)
+            self._log_info(
+                f"Applying bbox filter: west={bbox_west}, south={bbox_south}, east={bbox_east}, north={bbox_north}"
+            )
+            gdf = filter_gdf_by_bbox(
+                gdf,
+                bbox_west=bbox_west,
+                bbox_south=bbox_south,
+                bbox_east=bbox_east,
+                bbox_north=bbox_north,
+            )
+            self._log_info(f"After bbox filter: {len(gdf)} features (removed {n_before_bbox_filter - len(gdf)})")
+        else:
+            self._log_info("No spatial bbox filtering applied (using default global bounds)")
+
+        n_features = len(gdf)
+        self._log_info(f"Processing {n_features} features")
+
+        n_month_slices = sum(len(month_slices(start, end)) for start, end in windows)
+        est_total_acquisitions = max(1, n_month_slices * EST_DSWX_ACQUISITIONS_PER_MONTH)
+        self._log_info(
+            f"Date selection {window_label}: {len(years)} year(s), {len(windows)} window(s); "
+            f"~{est_total_acquisitions} acquisitions per polygon (estimate), "
+            f"~{n_features * est_total_acquisitions} (polygon, acquisition) requests"
+        )
+
+        areas = self._polygon_areas_ha(gdf, name_attribute)
+        n_small = sum(1 for value in areas.values() if pd.notna(value) and value < DSWX_MIN_MAPPING_AREA_HA)
+        if n_small:
+            self._log_warning(
+                f"{n_small} of {n_features} polygon(s) are below the ~{DSWX_MIN_MAPPING_AREA_HA:.0f} ha minimum "
+                "mapping unit of DSWx and will read as no-water by design"
+            )
+
+        gdf_chunks = self._chunk_gdf(
+            gdf, max_total_requests, n_dates=EST_DSWX_ACQUISITIONS_PER_MONTH, chunk_method=chunk_method
+        )
+
+        n_parallel_effective = min(n_parallel, len(gdf_chunks))
+        if n_parallel_effective < n_parallel:
+            target_chunks = max(1, n_parallel * 2)
+            target_features = -(-n_features // target_chunks)  # ceil division
+            suggested_budget = max(1, target_features * EST_DSWX_ACQUISITIONS_PER_MONTH)
+            self._log_warning(
+                f"Only {len(gdf_chunks)} chunk(s) for {n_parallel} workers, so "
+                f"{n_parallel - n_parallel_effective} will idle. max_total_requests={suggested_budget} "
+                f"would split these {n_features} features into about {target_chunks} chunks."
+            )
+
+        if no_download:
+            self._log_info(f"Would process {len(gdf)} features with {len(gdf_chunks)} chunks")
+            self._log_info("=== END NO DOWNLOAD MODE ===")
+            return None
+
+        self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
+
+        df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
+            joblib.delayed(self._extract_dswx_hls_daily)(
+                windows=windows, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
+            )
+            for chunk in tqdm(gdf_chunks, desc="Downloading DSWx-HLS acquisitions", unit="chunk")
+        )
+        df_out_list = [df for df in df_out_list if df is not None and not df.empty]
+
+        if not df_out_list:
+            raise NoDSWxHLSDataError(
+                f"No data was extracted from any chunk: Earth Engine returned no OPERA DSWx-HLS data "
+                f"for any of the {len(gdf_chunks)} chunks and {est_total_acquisitions} requested acquisitions."
+            )
+
+        cover_columns = [c for c in self.dswx_hls_bandnames if c != "area_land_cover"]
+        df = pd.concat(df_out_list, ignore_index=True)
+        df["date"] = pd.to_datetime(df["date"]).dt.normalize()
+        df = df.drop(columns=["reducer"], errors="ignore")
+        df = self._dswx_add_coverage(
+            df, areas=areas, name_attribute=name_attribute, scale=scale, cover_columns=cover_columns
+        )
+
+        n_rows = len(df)
+        df = df[df["area_data"] > 0]
+        if n_rows - len(df):
+            self._log_info(
+                f"Dropped {n_rows - len(df)} acquisition(s) with no classified pixels "
+                "(cloud-covered or a tile that only clips the polygon)"
+            )
+
+        n_rows = len(df)
+        df["coverage_rank"] = df["coverage"].round(6)
+        df = df.sort_values(["coverage_rank", "area_not_water"]).drop_duplicates([name_attribute, "date"], keep="last")
+        df = df.drop(columns=["coverage_rank"])
+        if n_rows - len(df):
+            self._log_info(
+                f"Collapsed {n_rows - len(df)} duplicate (polygon, date) row(s) from overlapping MGRS tiles, "
+                "keeping the best-covered tile (tie-break: larger not-water area)"
+            )
+
+        n_rows = len(df)
+        df = self._dswx_apply_tolerance(df, max_nodata=max_nodata, min_masked_pixels=min_masked_pixels)
+        self._log_info(
+            f"Masked {n_rows - len(df)} acquisition(s) with more than {max_nodata:.1%} no-data "
+            f"(or {min_masked_pixels:g} pixel(s) on polygons too small for a percentage)"
+        )
+
+        if df.empty:
+            raise NoDSWxHLSDataError(
+                "No data was extracted: every acquisition was fully masked (cloud) or exceeded the "
+                f"max_nodata tolerance of {max_nodata:.1%}."
+            )
+
+        ds = (
+            df.drop(columns=["area_data", "area_ha", "coverage", "polygon_pixels"])
+            .set_index([name_attribute, "date"])
+            .to_xarray()
+        )
+        ds["date"] = pd.to_datetime(ds["date"])
+
+        per_polygon = ds["area_open_water"].notnull().sum("date").to_pandas()
+        self._log_info(
+            f"Download complete: {len(ds.coords[name_attribute])} polygons, "
+            f"{len(ds.coords['date'])} acquisitions, {int(ds['area_open_water'].notnull().sum())} observations "
+            f"(per polygon: min {int(per_polygon.min())}, median {per_polygon.median():.0f}, max {int(per_polygon.max())})"
+        )
+
+        ds = annotate_xr_dataset_dswx_hls(
+            ds, input_vector_file=vector_dataset, temporal_resolution="per_acquisition"
+        )
+        ds.attrs["season_window"] = window_label
+        ds.attrs["max_nodata"] = float(max_nodata)
+        ds.attrs["min_masked_pixels"] = float(min_masked_pixels)
+        ds.attrs["n_acquisitions"] = len(ds.coords["date"])
+
+        if save_to_file is not None:
+            save_path = Path(save_to_file).absolute()
+            save_xarray_dataset(ds=ds, save_path=save_path, logger=self.logger)
+
+        return ds
+
+    def download_dswx_hls_acquisitions(self, *args, **kwargs):
+        """Deprecated alias for :meth:`download_dswx_hls_daily`.
+
+        The per-acquisition downloaders are named ``_daily`` for every source; this alias keeps the
+        0.17.x name working and will be removed in a later release.
+        """
+        warnings.warn(
+            "download_dswx_hls_acquisitions is deprecated; use download_dswx_hls_daily",
+            FutureWarning,
+            stacklevel=2,
+        )
+        return self.download_dswx_hls_daily(*args, **kwargs)
+
+    def download_dswx_hls_monthly(
+        self,
+        vector_dataset: str | Path | None = None,
+        gdf: gpd.GeoDataFrame | None = None,
+        name_attribute: str = "id_geohash",
+        years: list[int] | None = None,
+        months: list[int] | None = None,
+        date_list: list[str] | None = None,
+        max_nodata: float = 0.02,
+        min_masked_pixels: float = 2,
+        bbox_west: float = -180,
+        bbox_east: float = 180,
+        bbox_north: float = 90,
+        bbox_south: float = -90,
+        id_list: list | None = None,
+        scale: float = DSWX_SCALE,
+        max_total_requests: int = 500,
+        n_parallel: int = 1,
+        chunk_method: str = "simple",
+        no_download: bool = False,
+        save_to_file: str | None = None,
+    ) -> xr.Dataset:
+        """Download monthly OPERA DSWx-HLS class areas for specified periods.
+
+        One per-pixel mode composite per month, the same statistic as
+        :meth:`download_dswx_monthly` and :meth:`download_dw_monthly`. A month without a usable
+        acquisition is absent, not zero - with an optical product that happens often in the Arctic,
+        so a lake's series can have sizeable holes that are sky, not hydrology.
+
+        Args:
+            vector_dataset: Path to the input vector dataset (Parquet format).
+            gdf: Optional GeoDataFrame to use instead of loading from a path.
+            name_attribute: Column name in the vector dataset to use for grouping.
+            years: List of years to process. Default: 2016 up to the current year.
+            months: List of months as integers (1-12). Required unless `date_list` is given.
+            date_list: Optional list of months in 'YYYY-MM' format. Mutually exclusive with
+                (years AND months).
+            max_nodata: Mask a month when more than this share of the polygon has no data.
+            min_masked_pixels: Absolute floor, in pixels, for that tolerance (default: 2).
+            bbox_west: Western boundary for spatial filtering (default: -180).
+            bbox_east: Eastern boundary for spatial filtering (default: 180).
+            bbox_north: Northern boundary for spatial filtering (default: 90).
+            bbox_south: Southern boundary for spatial filtering (default: -90).
+            id_list: Optional list of IDs to filter by (values from name_attribute column).
+            scale: Pixel scale in meters (default: 30).
+            max_total_requests: Maximum number of (feature, month) requests per chunk.
+            n_parallel: Number of parallel workers for processing chunks (default: 1).
+            chunk_method: Method for chunking the data: "simple" or "spatial_kmeans".
+            no_download: If True, only log the download parameters without downloading.
+            save_to_file: Optional path to save the dataset ('.zarr' or '.nc').
+
+        Returns:
+            xr.Dataset: Class areas in hectares indexed by (name_attribute, date), with ``date`` on
+                the first of the month.
+
+        Raises:
+            ValueError: If both or neither of vector_dataset/gdf is given, if max_nodata is outside
+                0..1, if min_masked_pixels is negative, or if the date arguments are incomplete.
+            KeyError: If name_attribute is not present in the vector dataset.
+            NoDSWxHLSDataError: If Earth Engine returned no usable month.
+        """
+        if vector_dataset is None and gdf is None:
+            raise ValueError("Either vector_dataset or gdf must be provided")
+        elif vector_dataset is not None and gdf is not None:
+            raise ValueError("Only one of vector_dataset or gdf should be provided, not both")
+
+        if not 0 <= max_nodata <= 1:
+            raise ValueError(
+                f"max_nodata must be between 0 and 1 (share of the polygon allowed to be no-data), got {max_nodata}"
+            )
+        if min_masked_pixels < 0:
+            raise ValueError(f"min_masked_pixels must be zero or positive, got {min_masked_pixels}")
+
+        if no_download:
+            self._log_info("=== NO DOWNLOAD MODE - Will skip after preprocessing ===")
+
+        if date_list is not None and (years is not None or months is not None):
+            self._log_warning("years and/or months parameters will be ignored since date_list is provided")
+        elif date_list is None:
+            years = self._validate_years_dswx(years, archive_start=DSWX_HLS_ARCHIVE_START)
+
+        if vector_dataset is not None:
+            self._log_info(f"Loading vector dataset from: {vector_dataset}")
+            gdf = load_vector_dataset(vector_dataset, logger=self.logger)
+        else:
+            gdf = gdf.copy()
+
+        if name_attribute not in gdf.columns:
+            raise KeyError(f"The designated column '{name_attribute}' is not present in the vector dataset.")
+
+        self._log_info(f"Initial dataset has {len(gdf)} features")
+        gdf = self._apply_id_filter(gdf, id_list, name_attribute)
+
+        if bbox_west > bbox_east or bbox_south > bbox_north:
+            raise ValueError(
+                f"Invalid bbox parameters: west={bbox_west}, east={bbox_east}, south={bbox_south}, north={bbox_north}. "
+                "Ensure that west <= east and south <= north."
+            )
+
+        if any(v is not None for v in [bbox_west, bbox_south, bbox_east, bbox_north]) and not (
+            bbox_west == -180 and bbox_east == 180 and bbox_north == 90 and bbox_south == -90
+        ):
+            n_before_bbox_filter = len(gdf)
+            self._log_info(
+                f"Applying bbox filter: west={bbox_west}, south={bbox_south}, east={bbox_east}, north={bbox_north}"
+            )
+            gdf = filter_gdf_by_bbox(
+                gdf,
+                bbox_west=bbox_west,
+                bbox_south=bbox_south,
+                bbox_east=bbox_east,
+                bbox_north=bbox_north,
+            )
+            self._log_info(f"After bbox filter: {len(gdf)} features (removed {n_before_bbox_filter - len(gdf)})")
+        else:
+            self._log_info("No spatial bbox filtering applied (using default global bounds)")
+
+        n_features = len(gdf)
+        self._log_info(f"Processing {n_features} features")
+
+        dates = setup_dates_from_options(years=years, months=months, date_list=date_list)
+        n_dates = len(dates)
+        self._log_info(f"Processing {n_features} features x {n_dates} months = {n_features * n_dates} total requests")
+        self._log_info(f"Processing dates: {dates}")
+
+        areas = self._polygon_areas_ha(gdf, name_attribute)
+
+        gdf_chunks = self._chunk_gdf(gdf, max_total_requests, n_dates=n_dates, chunk_method=chunk_method)
+
+        if no_download:
+            self._log_info(f"Would process {len(gdf)} features with {len(gdf_chunks)} chunks")
+            self._log_info("=== END NO DOWNLOAD MODE ===")
+            return None
+
+        n_parallel_effective = min(n_parallel, len(gdf_chunks))
+        self._log_info(f"Processing {len(gdf_chunks)} chunks with {n_parallel_effective} workers")
+
+        df_out_list = joblib.Parallel(n_jobs=n_parallel_effective, prefer="threads")(
+            joblib.delayed(self._extract_dswx_hls_monthly)(
+                dates=dates, gdf_chunk=chunk, name_attribute=name_attribute, scale=scale
+            )
+            for chunk in tqdm(gdf_chunks, desc="Downloading DSWx-HLS months", unit="chunk")
+        )
+        df_out_list = [df for df in df_out_list if df is not None and not df.empty]
+
+        if not df_out_list:
+            raise NoDSWxHLSDataError(
+                f"No data was extracted from any chunk: Earth Engine returned no OPERA DSWx-HLS data "
+                f"for any of the {len(gdf_chunks)} chunks and {n_dates} months requested."
+            )
+
+        cover_columns = [c for c in self.dswx_hls_bandnames if c != "area_land_cover"]
+        df = pd.concat(df_out_list, ignore_index=True)
+        df["date"] = pd.to_datetime(df["date"]).dt.normalize()
+        df = df.drop(columns=["reducer"], errors="ignore")
+        df = self._dswx_add_coverage(
+            df, areas=areas, name_attribute=name_attribute, scale=scale, cover_columns=cover_columns
+        )
+
+        n_rows = len(df)
+        df = df[df["area_data"] > 0]
+        if n_rows - len(df):
+            self._log_info(f"Dropped {n_rows - len(df)} month(s) with no classified pixels")
+
+        n_rows = len(df)
+        df = self._dswx_apply_tolerance(df, max_nodata=max_nodata, min_masked_pixels=min_masked_pixels)
+        self._log_info(
+            f"Masked {n_rows - len(df)} month(s) with more than {max_nodata:.1%} no-data "
+            f"(or {min_masked_pixels:g} pixel(s) on polygons too small for a percentage)"
+        )
+
+        if df.empty:
+            raise NoDSWxHLSDataError(
+                "No data was extracted: every month was fully masked or exceeded the "
+                f"max_nodata tolerance of {max_nodata:.1%}."
+            )
+
+        ds = (
+            df.drop(columns=["area_data", "area_ha", "coverage", "polygon_pixels"])
+            .set_index([name_attribute, "date"])
+            .to_xarray()
+        )
+        ds["date"] = pd.to_datetime(ds["date"])
+
+        n_items = len(ds.coords[name_attribute])
+        self._log_info(f"Download complete: {n_items} items, {len(ds.coords['date'])} months collected")
+
+        ds = annotate_xr_dataset_dswx_hls(ds, input_vector_file=vector_dataset, temporal_resolution="monthly")
         ds.attrs["monthly_composite"] = "mode"
         ds.attrs["max_nodata"] = float(max_nodata)
         ds.attrs["min_masked_pixels"] = float(min_masked_pixels)

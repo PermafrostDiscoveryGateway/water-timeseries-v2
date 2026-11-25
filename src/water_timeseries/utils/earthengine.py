@@ -1110,6 +1110,148 @@ def dswx_month_composite(
     )
 
 
+# ---------------------------------------------------------------------------
+# OPERA DSWx-HLS (Harmonized Landsat-Sentinel optical surface water)
+# ---------------------------------------------------------------------------
+
+DSWX_HLS_COLLECTION = "OPERA/DSWX/L3_V1/HLS"
+# Two eras with a 28-month hole between them, measured over the 118-lake test AOI: 2016-03 ..
+# 2020-09 and 2023-02 onwards. Earlier years are not clamped - the gap shows up as absent months,
+# and the archive may still be backfilled.
+DSWX_HLS_ARCHIVE_START = "2016-03-01"
+# The LAND layer carries a single value over the test AOI: a static, non-water footprint that is
+# NOT the complement of the water classes (measured 114 ha of LAND against 175 ha of WTR
+# ``not water`` on the same image), so it is published as its own band and never merged into
+# ``area_not_water`` or ``area_data``.
+DSWX_HLS_LAND_BAND = "LAND_land_cover_classification"
+DSWX_HLS_LAND_CLASS = 200
+
+
+class NoDSWxHLSDataError(NoDSWxDataError):
+    """Raised when Earth Engine returns no usable OPERA DSWx-HLS observation."""
+
+
+def dswx_hls_class_areas(image):
+    """Class areas in hectares for one OPERA DSWx-HLS image.
+
+    HLS uses a different class set from DSWx-S1: 0 not water, 1 open water and **2 partial surface
+    water** (sub-pixel water). Class 3 never appeared in any probed acquisition, and 253 is the
+    mask/cloud value, which belongs to no class. ``BWTR_Binary_water`` equals open + partial, so
+    that sum is the product's own water extent.
+
+    Args:
+        image: ``ee.Image`` with the WTR and LAND bands.
+
+    Returns:
+        ee.Image: Four bands - ``area_open_water``, ``area_partial_water``, ``area_not_water``,
+        ``area_land_cover`` - in hectares, keeping ``system:time_start``.
+    """
+    wtr = image.select(DSWX_CLASS_BAND)
+    land = image.select(DSWX_HLS_LAND_BAND)
+    pixel_area_ha = ee.Image.pixelArea().multiply(1e-4)
+    return ee.Image(
+        [
+            wtr.eq(1).multiply(pixel_area_ha).rename("area_open_water"),
+            wtr.eq(2).multiply(pixel_area_ha).rename("area_partial_water"),
+            wtr.eq(0).multiply(pixel_area_ha).rename("area_not_water"),
+            land.eq(DSWX_HLS_LAND_CLASS).multiply(pixel_area_ha).rename("area_land_cover"),
+        ]
+    ).set("system:time_start", image.get("system:time_start"))
+
+
+def dswx_hls_collection(
+    polygons: ee.FeatureCollection, start_date: str, end_date: str
+) -> ee.ImageCollection:
+    """The OPERA DSWx-HLS acquisitions in a date range, WTR and LAND bands only.
+
+    Args:
+        polygons: Region of interest, used to filter the collection.
+        start_date: Start date ``'YYYY-MM-DD'`` (inclusive).
+        end_date: End date ``'YYYY-MM-DD'`` (exclusive).
+
+    Returns:
+        ee.ImageCollection: Images with ``WTR_Water_classification`` and the LAND band.
+    """
+    return (
+        ee.ImageCollection(DSWX_HLS_COLLECTION)
+        .filterBounds(polygons)
+        .filterDate(start_date, end_date)
+        .select([DSWX_CLASS_BAND, DSWX_HLS_LAND_BAND])
+    )
+
+
+def dswx_hls_acquisitions(
+    polygons: ee.FeatureCollection,
+    start_date: str,
+    end_date: str,
+    crs: str = DSWX_CRS,
+    scale: float = DSWX_SCALE,
+) -> ee.ImageCollection:
+    """Every OPERA DSWx-HLS acquisition in a date range, as class-area bands.
+
+    One image per (MGRS tile, acquisition date), like :func:`dswx_acquisitions`: a polygon covered
+    by several tiles on one date returns several rows, and the caller must collapse them. Here the
+    fragments differ a lot - a tile that only clips the polygon returns almost nothing classified -
+    so the coverage test is what separates a usable observation from a footprint sliver.
+
+    Args:
+        polygons: Region of interest, used to filter the collection.
+        start_date: Start date ``'YYYY-MM-DD'`` (inclusive).
+        end_date: End date ``'YYYY-MM-DD'`` (exclusive).
+        crs: Coordinate reference system for the default projection (default: EPSG:3572).
+        scale: Pixel scale in meters (default: 30).
+
+    Returns:
+        ee.ImageCollection: Four-band class areas in hectares, one per acquisition.
+    """
+    return dswx_hls_collection(polygons, start_date, end_date).map(
+        lambda image: dswx_hls_class_areas(image).setDefaultProjection(crs=crs, scale=scale)
+    )
+
+
+def _hls_masked(image):
+    """Mask the WTR band to real classes (0..3) and keep LAND untouched.
+
+    The mask value 253 must not vote in the mode composite, but masking the whole image would also
+    punch holes in the static LAND layer.
+    """
+    wtr = image.select(DSWX_CLASS_BAND)
+    return wtr.updateMask(wtr.lte(3)).addBands(image.select(DSWX_HLS_LAND_BAND))
+
+
+def dswx_hls_month_composite(
+    polygons: ee.FeatureCollection,
+    start_date: str,
+    end_date: str,
+    crs: str = DSWX_CRS,
+    scale: float = DSWX_SCALE,
+) -> ee.Image:
+    """Per-pixel mode of a month's DSWx-HLS class codes.
+
+    Same statistic as :func:`download_dswx_monthly` and :func:`dswx_month_composite` for the sake
+    of cross-source comparability; the vendor's own recipe is a max/union. A pixel is composited
+    from the scenes where it was classified, so a cloudy month keeps its clear patches instead of
+    dropping them.
+
+    Args:
+        polygons: Region of interest, used to filter the collection.
+        start_date: Month start ``'YYYY-MM-01'``, also the composite's timestamp.
+        end_date: End date ``'YYYY-MM-DD'`` (exclusive).
+        crs: Coordinate reference system for the default projection (default: EPSG:3572).
+        scale: Pixel scale in meters (default: 30).
+
+    Returns:
+        ee.Image: Two-band composite - ``WTR_Water_classification`` and the LAND band.
+    """
+    collection = dswx_hls_collection(polygons, start_date, end_date).map(_hls_masked)
+    return (
+        collection.reduce(ee.Reducer.mode())
+        .rename([DSWX_CLASS_BAND, DSWX_HLS_LAND_BAND])
+        .set("system:time_start", ee.Date(start_date).millis())
+        .setDefaultProjection(crs=crs, scale=scale)
+    )
+
+
 def setup_annual_dates(years: list[int] | None = None, date_list: list[str] | None = None) -> list[str]:
     """Generate a list of annual dates from the given years or date_list.
 
