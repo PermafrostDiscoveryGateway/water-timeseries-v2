@@ -8483,7 +8483,7 @@ merged = dataset1.merge(dataset2, how="id_geohash")  # Add new lakes</p>
 
 
 <h2 id="water_timeseries.dataset.create_water_dataset" class="doc doc-heading">
-            <code class="highlight language-python"><span class="n">create_water_dataset</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">water_dataset_type</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
+            <code class="highlight language-python"><span class="n">create_water_dataset</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">water_dataset_type</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="kc">None</span><span class="p">)</span></code>
 
 <a href="#water_timeseries.dataset.create_water_dataset" class="headerlink" title="Permanent link">🔗</a></h2>
 
@@ -8533,6 +8533,23 @@ registered in one place instead of in every pipeline's <code>if/elif</code> chai
               <div class="doc-md-description">
                 <p><code>"dynamic_world"</code>, <code>"jrc"</code>, <code>"dswx"</code> or <code>"dswx_hls"</code>. If
 <code>None</code>, it is sniffed from the dataset's variables via :func:<code>get_water_dataset_type</code>.</p>
+              </div>
+            </td>
+            <td>
+                  <code>None</code>
+            </td>
+          </tr>
+          <tr class="doc-section-item">
+            <td>
+                <code>id_field</code>
+            </td>
+            <td>
+                  <code><span title="str">str</span> | None</code>
+            </td>
+            <td>
+              <div class="doc-md-description">
+                <p>Name of the identifier coordinate. Defaults to the name the dataset records in
+<code>ds.attrs["id_field"]</code>, and to <code>"id_geohash"</code> when it records none.</p>
               </div>
             </td>
             <td>
@@ -8619,7 +8636,20 @@ registered in one place instead of in every pipeline's <code>if/elif</code> chai
 <span class="normal">1334</span>
 <span class="normal">1335</span>
 <span class="normal">1336</span>
-<span class="normal">1337</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">create_water_dataset</span><span class="p">(</span><span class="n">ds</span><span class="p">:</span> <span class="n">xr</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span> <span class="n">water_dataset_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LakeDataset</span><span class="p">:</span>
+<span class="normal">1337</span>
+<span class="normal">1338</span>
+<span class="normal">1339</span>
+<span class="normal">1340</span>
+<span class="normal">1341</span>
+<span class="normal">1342</span>
+<span class="normal">1343</span>
+<span class="normal">1344</span>
+<span class="normal">1345</span>
+<span class="normal">1346</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">create_water_dataset</span><span class="p">(</span>
+    <span class="n">ds</span><span class="p">:</span> <span class="n">xr</span><span class="o">.</span><span class="n">Dataset</span><span class="p">,</span>
+    <span class="n">water_dataset_type</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+    <span class="n">id_field</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
+<span class="p">)</span> <span class="o">-&gt;</span> <span class="n">LakeDataset</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""Instantiate the dataset class for a water product.</span>
 
 <span class="sd">    Single dispatch point used by the breakpoint and plot pipelines, so a new source is</span>
@@ -8629,6 +8659,8 @@ registered in one place instead of in every pipeline's <code>if/elif</code> chai
 <span class="sd">        ds: xarray Dataset with one of the supported products.</span>
 <span class="sd">        water_dataset_type: ``"dynamic_world"``, ``"jrc"``, ``"dswx"`` or ``"dswx_hls"``. If</span>
 <span class="sd">            ``None``, it is sniffed from the dataset's variables via :func:`get_water_dataset_type`.</span>
+<span class="sd">        id_field: Name of the identifier coordinate. Defaults to the name the dataset records in</span>
+<span class="sd">            ``ds.attrs["id_field"]``, and to ``"id_geohash"`` when it records none.</span>
 
 <span class="sd">    Returns:</span>
 <span class="sd">        LakeDataset: The dataset handler for that product.</span>
@@ -8647,6 +8679,9 @@ registered in one place instead of in every pipeline's <code>if/elif</code> chai
     <span class="p">}</span>
     <span class="k">if</span> <span class="n">water_dataset_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
         <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Unknown water dataset type: </span><span class="si">{</span><span class="n">water_dataset_type</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="n">resolved_id_field</span> <span class="o">=</span> <span class="n">id_field</span> <span class="ow">or</span> <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"id_field"</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">resolved_id_field</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">classes</span><span class="p">[</span><span class="n">water_dataset_type</span><span class="p">](</span><span class="n">ds</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">resolved_id_field</span><span class="p">)</span>
     <span class="k">return</span> <span class="n">classes</span><span class="p">[</span><span class="n">water_dataset_type</span><span class="p">](</span><span class="n">ds</span><span class="p">)</span>
 </code></pre></div></td></tr></table></div>
             </details>

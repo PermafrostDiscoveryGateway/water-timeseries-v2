@@ -3972,7 +3972,18 @@ into Dynamic World or JRC format.</p>
 <span class="normal">2812</span>
 <span class="normal">2813</span>
 <span class="normal">2814</span>
-<span class="normal">2815</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">EarthEngineDownloader</span><span class="p">:</span>
+<span class="normal">2815</span>
+<span class="normal">2816</span>
+<span class="normal">2817</span>
+<span class="normal">2818</span>
+<span class="normal">2819</span>
+<span class="normal">2820</span>
+<span class="normal">2821</span>
+<span class="normal">2822</span>
+<span class="normal">2823</span>
+<span class="normal">2824</span>
+<span class="normal">2825</span>
+<span class="normal">2826</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">class</span><span class="w"> </span><span class="nc">EarthEngineDownloader</span><span class="p">:</span>
 <span class="w">    </span><span class="sd">"""</span>
 <span class="sd">    A class to download data from Google Earth Engine into various formats.</span>
 
@@ -4800,7 +4811,7 @@ into Dynamic World or JRC format.</p>
         <span class="n">ds</span><span class="p">[</span><span class="s2">"date"</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="n">ds</span><span class="p">[</span><span class="s2">"date"</span><span class="p">])</span>
 
         <span class="c1"># Annotate dataset with metadata</span>
-        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dw</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">)</span>
+        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dw</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span><span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"snow_free"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">snow_free</span><span class="p">)</span>
         <span class="k">if</span> <span class="n">snow_free</span><span class="p">:</span>
             <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_snow_fraction"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_snow_fraction</span><span class="p">)</span>
@@ -5111,7 +5122,9 @@ into Dynamic World or JRC format.</p>
                 <span class="s2">"Median observations per polygon is below 5 - that is a cloud/coverage limit, not a download failure"</span>
             <span class="p">)</span>
 
-        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dw</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">)</span>
+        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dw</span><span class="p">(</span>
+            <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span>
+        <span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"season_window"</span><span class="p">]</span> <span class="o">=</span> <span class="n">window_label</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"n_acquisitions"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="s2">"date"</span><span class="p">])</span>
@@ -5634,7 +5647,9 @@ into Dynamic World or JRC format.</p>
                 <span class="s2">"coverage limit, not a download failure"</span>
             <span class="p">)</span>
 
-        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">)</span>
+        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx</span><span class="p">(</span>
+            <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span>
+        <span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"season_window"</span><span class="p">]</span> <span class="o">=</span> <span class="n">window_label</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"min_masked_pixels"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">min_masked_pixels</span><span class="p">)</span>
@@ -5870,7 +5885,9 @@ into Dynamic World or JRC format.</p>
             <span class="sa">f</span><span class="s2">"Download complete: </span><span class="si">{</span><span class="n">n_items</span><span class="si">}</span><span class="s2"> items, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="s1">'date'</span><span class="p">])</span><span class="si">}</span><span class="s2"> months collected"</span>
         <span class="p">)</span>
 
-        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"monthly"</span><span class="p">)</span>
+        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx</span><span class="p">(</span>
+            <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"monthly"</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span>
+        <span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"monthly_composite"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"mode"</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"min_masked_pixels"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">min_masked_pixels</span><span class="p">)</span>
@@ -6252,7 +6269,10 @@ into Dynamic World or JRC format.</p>
         <span class="p">)</span>
 
         <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx_hls</span><span class="p">(</span>
-            <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span>
+            <span class="n">ds</span><span class="p">,</span>
+            <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span>
+            <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">,</span>
+            <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span><span class="p">,</span>
         <span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"season_window"</span><span class="p">]</span> <span class="o">=</span> <span class="n">window_label</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
@@ -6465,7 +6485,9 @@ into Dynamic World or JRC format.</p>
         <span class="n">n_items</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="n">name_attribute</span><span class="p">])</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_log_info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Download complete: </span><span class="si">{</span><span class="n">n_items</span><span class="si">}</span><span class="s2"> items, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="s1">'date'</span><span class="p">])</span><span class="si">}</span><span class="s2"> months collected"</span><span class="p">)</span>
 
-        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx_hls</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"monthly"</span><span class="p">)</span>
+        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx_hls</span><span class="p">(</span>
+            <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"monthly"</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span>
+        <span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"monthly_composite"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"mode"</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"min_masked_pixels"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">min_masked_pixels</span><span class="p">)</span>
@@ -6690,7 +6712,7 @@ into Dynamic World or JRC format.</p>
         <span class="n">ds</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">drop_vars</span><span class="p">(</span><span class="s2">"reducer"</span><span class="p">)</span>
 
         <span class="c1"># Annotate dataset with metadata</span>
-        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_jrc</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">)</span>
+        <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_jrc</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span><span class="p">)</span>
 
         <span class="c1"># Save to file if requested</span>
         <span class="k">if</span> <span class="n">save_to_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
@@ -6955,18 +6977,18 @@ If None, print statements will be used as fallback.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/downloader.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1763</span>
-<span class="normal">1764</span>
-<span class="normal">1765</span>
-<span class="normal">1766</span>
-<span class="normal">1767</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1767</span>
 <span class="normal">1768</span>
 <span class="normal">1769</span>
 <span class="normal">1770</span>
 <span class="normal">1771</span>
 <span class="normal">1772</span>
 <span class="normal">1773</span>
-<span class="normal">1774</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_acquisitions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="normal">1774</span>
+<span class="normal">1775</span>
+<span class="normal">1776</span>
+<span class="normal">1777</span>
+<span class="normal">1778</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_acquisitions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Deprecated alias for :meth:`download_dswx_daily`.</span>
 
 <span class="sd">    The per-acquisition downloaders are named ``_daily`` for every source; this alias keeps the</span>
@@ -7477,9 +7499,7 @@ ds = downloader.download_dswx_daily(
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/downloader.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1449</span>
-<span class="normal">1450</span>
-<span class="normal">1451</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1451</span>
 <span class="normal">1452</span>
 <span class="normal">1453</span>
 <span class="normal">1454</span>
@@ -7789,7 +7809,11 @@ ds = downloader.download_dswx_daily(
 <span class="normal">1758</span>
 <span class="normal">1759</span>
 <span class="normal">1760</span>
-<span class="normal">1761</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_daily</span><span class="p">(</span>
+<span class="normal">1761</span>
+<span class="normal">1762</span>
+<span class="normal">1763</span>
+<span class="normal">1764</span>
+<span class="normal">1765</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_daily</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">vector_dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -8091,7 +8115,9 @@ ds = downloader.download_dswx_daily(
             <span class="s2">"coverage limit, not a download failure"</span>
         <span class="p">)</span>
 
-    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">)</span>
+    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx</span><span class="p">(</span>
+        <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span>
+    <span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"season_window"</span><span class="p">]</span> <span class="o">=</span> <span class="n">window_label</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"min_masked_pixels"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">min_masked_pixels</span><span class="p">)</span>
@@ -8126,18 +8152,18 @@ ds = downloader.download_dswx_daily(
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/downloader.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2382</span>
-<span class="normal">2383</span>
-<span class="normal">2384</span>
-<span class="normal">2385</span>
-<span class="normal">2386</span>
-<span class="normal">2387</span>
-<span class="normal">2388</span>
-<span class="normal">2389</span>
-<span class="normal">2390</span>
-<span class="normal">2391</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2391</span>
 <span class="normal">2392</span>
-<span class="normal">2393</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_hls_acquisitions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+<span class="normal">2393</span>
+<span class="normal">2394</span>
+<span class="normal">2395</span>
+<span class="normal">2396</span>
+<span class="normal">2397</span>
+<span class="normal">2398</span>
+<span class="normal">2399</span>
+<span class="normal">2400</span>
+<span class="normal">2401</span>
+<span class="normal">2402</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_hls_acquisitions</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
 <span class="w">    </span><span class="sd">"""Deprecated alias for :meth:`download_dswx_hls_daily`.</span>
 
 <span class="sd">    The per-acquisition downloaders are named ``_daily`` for every source; this alias keeps the</span>
@@ -8605,13 +8631,7 @@ with <code>start_date</code>/<code>end_date</code>.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/downloader.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2106</span>
-<span class="normal">2107</span>
-<span class="normal">2108</span>
-<span class="normal">2109</span>
-<span class="normal">2110</span>
-<span class="normal">2111</span>
-<span class="normal">2112</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2112</span>
 <span class="normal">2113</span>
 <span class="normal">2114</span>
 <span class="normal">2115</span>
@@ -8879,7 +8899,16 @@ with <code>start_date</code>/<code>end_date</code>.</p>
 <span class="normal">2377</span>
 <span class="normal">2378</span>
 <span class="normal">2379</span>
-<span class="normal">2380</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_hls_daily</span><span class="p">(</span>
+<span class="normal">2380</span>
+<span class="normal">2381</span>
+<span class="normal">2382</span>
+<span class="normal">2383</span>
+<span class="normal">2384</span>
+<span class="normal">2385</span>
+<span class="normal">2386</span>
+<span class="normal">2387</span>
+<span class="normal">2388</span>
+<span class="normal">2389</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_hls_daily</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">vector_dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -9142,7 +9171,10 @@ with <code>start_date</code>/<code>end_date</code>.</p>
     <span class="p">)</span>
 
     <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx_hls</span><span class="p">(</span>
-        <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span>
+        <span class="n">ds</span><span class="p">,</span>
+        <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span>
+        <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">,</span>
+        <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span><span class="p">,</span>
     <span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"season_window"</span><span class="p">]</span> <span class="o">=</span> <span class="n">window_label</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
@@ -9568,16 +9600,7 @@ the first of the month.</p>
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/downloader.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2395</span>
-<span class="normal">2396</span>
-<span class="normal">2397</span>
-<span class="normal">2398</span>
-<span class="normal">2399</span>
-<span class="normal">2400</span>
-<span class="normal">2401</span>
-<span class="normal">2402</span>
-<span class="normal">2403</span>
-<span class="normal">2404</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2404</span>
 <span class="normal">2405</span>
 <span class="normal">2406</span>
 <span class="normal">2407</span>
@@ -9764,7 +9787,18 @@ the first of the month.</p>
 <span class="normal">2588</span>
 <span class="normal">2589</span>
 <span class="normal">2590</span>
-<span class="normal">2591</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_hls_monthly</span><span class="p">(</span>
+<span class="normal">2591</span>
+<span class="normal">2592</span>
+<span class="normal">2593</span>
+<span class="normal">2594</span>
+<span class="normal">2595</span>
+<span class="normal">2596</span>
+<span class="normal">2597</span>
+<span class="normal">2598</span>
+<span class="normal">2599</span>
+<span class="normal">2600</span>
+<span class="normal">2601</span>
+<span class="normal">2602</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_hls_monthly</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">vector_dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -9951,7 +9985,9 @@ the first of the month.</p>
     <span class="n">n_items</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="n">name_attribute</span><span class="p">])</span>
     <span class="bp">self</span><span class="o">.</span><span class="n">_log_info</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Download complete: </span><span class="si">{</span><span class="n">n_items</span><span class="si">}</span><span class="s2"> items, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="s1">'date'</span><span class="p">])</span><span class="si">}</span><span class="s2"> months collected"</span><span class="p">)</span>
 
-    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx_hls</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"monthly"</span><span class="p">)</span>
+    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx_hls</span><span class="p">(</span>
+        <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"monthly"</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span>
+    <span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"monthly_composite"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"mode"</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"min_masked_pixels"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">min_masked_pixels</span><span class="p">)</span>
@@ -10408,11 +10444,7 @@ ds = downloader.download_dswx_monthly(
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/downloader.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1776</span>
-<span class="normal">1777</span>
-<span class="normal">1778</span>
-<span class="normal">1779</span>
-<span class="normal">1780</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">1780</span>
 <span class="normal">1781</span>
 <span class="normal">1782</span>
 <span class="normal">1783</span>
@@ -10628,7 +10660,13 @@ ds = downloader.download_dswx_monthly(
 <span class="normal">1993</span>
 <span class="normal">1994</span>
 <span class="normal">1995</span>
-<span class="normal">1996</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_monthly</span><span class="p">(</span>
+<span class="normal">1996</span>
+<span class="normal">1997</span>
+<span class="normal">1998</span>
+<span class="normal">1999</span>
+<span class="normal">2000</span>
+<span class="normal">2001</span>
+<span class="normal">2002</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dswx_monthly</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">vector_dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -10839,7 +10877,9 @@ ds = downloader.download_dswx_monthly(
         <span class="sa">f</span><span class="s2">"Download complete: </span><span class="si">{</span><span class="n">n_items</span><span class="si">}</span><span class="s2"> items, </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="s1">'date'</span><span class="p">])</span><span class="si">}</span><span class="s2"> months collected"</span>
     <span class="p">)</span>
 
-    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"monthly"</span><span class="p">)</span>
+    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dswx</span><span class="p">(</span>
+        <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"monthly"</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span>
+    <span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"monthly_composite"</span><span class="p">]</span> <span class="o">=</span> <span class="s2">"mode"</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"min_masked_pixels"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">min_masked_pixels</span><span class="p">)</span>
@@ -11651,7 +11691,9 @@ ds = downloader.download_dw_daily(
 <span class="normal">1234</span>
 <span class="normal">1235</span>
 <span class="normal">1236</span>
-<span class="normal">1237</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dw_daily</span><span class="p">(</span>
+<span class="normal">1237</span>
+<span class="normal">1238</span>
+<span class="normal">1239</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_dw_daily</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">vector_dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -11949,7 +11991,9 @@ ds = downloader.download_dw_daily(
             <span class="s2">"Median observations per polygon is below 5 - that is a cloud/coverage limit, not a download failure"</span>
         <span class="p">)</span>
 
-    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dw</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">)</span>
+    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dw</span><span class="p">(</span>
+        <span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">temporal_resolution</span><span class="o">=</span><span class="s2">"per_acquisition"</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span>
+    <span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"season_window"</span><span class="p">]</span> <span class="o">=</span> <span class="n">window_label</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_nodata"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_nodata</span><span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"n_acquisitions"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">ds</span><span class="o">.</span><span class="n">coords</span><span class="p">[</span><span class="s2">"date"</span><span class="p">])</span>
@@ -12859,7 +12903,7 @@ or network request fails after retrying transient errors.</p>
     <span class="n">ds</span><span class="p">[</span><span class="s2">"date"</span><span class="p">]</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">to_datetime</span><span class="p">(</span><span class="n">ds</span><span class="p">[</span><span class="s2">"date"</span><span class="p">])</span>
 
     <span class="c1"># Annotate dataset with metadata</span>
-    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dw</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">)</span>
+    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_dw</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span><span class="p">)</span>
     <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"snow_free"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">snow_free</span><span class="p">)</span>
     <span class="k">if</span> <span class="n">snow_free</span><span class="p">:</span>
         <span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"max_snow_fraction"</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">max_snow_fraction</span><span class="p">)</span>
@@ -13237,18 +13281,7 @@ ds = downloader.download_jrc_annual(
 
             <details class="mkdocstrings-source">
               <summary>Source code in <code>src/water_timeseries/downloader.py</code></summary>
-              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2623</span>
-<span class="normal">2624</span>
-<span class="normal">2625</span>
-<span class="normal">2626</span>
-<span class="normal">2627</span>
-<span class="normal">2628</span>
-<span class="normal">2629</span>
-<span class="normal">2630</span>
-<span class="normal">2631</span>
-<span class="normal">2632</span>
-<span class="normal">2633</span>
-<span class="normal">2634</span>
+              <div class="highlight"><table class="highlighttable"><tr><td class="linenos"><div class="linenodiv"><pre><span></span><span class="normal">2634</span>
 <span class="normal">2635</span>
 <span class="normal">2636</span>
 <span class="normal">2637</span>
@@ -13429,7 +13462,18 @@ ds = downloader.download_jrc_annual(
 <span class="normal">2812</span>
 <span class="normal">2813</span>
 <span class="normal">2814</span>
-<span class="normal">2815</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_jrc_annual</span><span class="p">(</span>
+<span class="normal">2815</span>
+<span class="normal">2816</span>
+<span class="normal">2817</span>
+<span class="normal">2818</span>
+<span class="normal">2819</span>
+<span class="normal">2820</span>
+<span class="normal">2821</span>
+<span class="normal">2822</span>
+<span class="normal">2823</span>
+<span class="normal">2824</span>
+<span class="normal">2825</span>
+<span class="normal">2826</span></pre></div></td><td class="code"><div><pre><span></span><code><span class="k">def</span><span class="w"> </span><span class="nf">download_jrc_annual</span><span class="p">(</span>
     <span class="bp">self</span><span class="p">,</span>
     <span class="n">vector_dataset</span><span class="p">:</span> <span class="nb">str</span> <span class="o">|</span> <span class="n">Path</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
     <span class="n">gdf</span><span class="p">:</span> <span class="n">gpd</span><span class="o">.</span><span class="n">GeoDataFrame</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -13613,7 +13657,7 @@ ds = downloader.download_jrc_annual(
     <span class="n">ds</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">drop_vars</span><span class="p">(</span><span class="s2">"reducer"</span><span class="p">)</span>
 
     <span class="c1"># Annotate dataset with metadata</span>
-    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_jrc</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">)</span>
+    <span class="n">ds</span> <span class="o">=</span> <span class="n">annotate_xr_dataset_jrc</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">input_vector_file</span><span class="o">=</span><span class="n">vector_dataset</span><span class="p">,</span> <span class="n">id_field</span><span class="o">=</span><span class="n">name_attribute</span><span class="p">)</span>
 
     <span class="c1"># Save to file if requested</span>
     <span class="k">if</span> <span class="n">save_to_file</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>

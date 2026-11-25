@@ -460,10 +460,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#artefacts-keep-id_geohash" class="md-nav__link">
+  <a href="#artefacts-keep-id_geohash-and-carry-the-source-name-beside-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Artefacts keep id_geohash
+        Artefacts keep id_geohash, and carry the source name beside it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#download-break-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Download → break pipeline
       
     </span>
   </a>
@@ -748,10 +759,21 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#artefacts-keep-id_geohash" class="md-nav__link">
+  <a href="#artefacts-keep-id_geohash-and-carry-the-source-name-beside-it" class="md-nav__link">
     <span class="md-ellipsis">
       
-        Artefacts keep id_geohash
+        Artefacts keep id_geohash, and carry the source name beside it
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#download-break-pipeline" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Download → break pipeline
       
     </span>
   </a>
@@ -838,12 +860,45 @@ receive only the xarray object can honour it:</p>
 remaining non-<code>date</code> 1-D coordinate. When several candidates exist and none is declared,
 it raises rather than guessing: selecting the wrong column silently is the bug this
 design removes.</p>
-<h2 id="artefacts-keep-id_geohash">Artefacts keep <code>id_geohash</code><a class="headerlink" href="#artefacts-keep-id_geohash" title="Permanent link">🔗</a></h2>
+<h2 id="artefacts-keep-id_geohash-and-carry-the-source-name-beside-it">Artefacts keep <code>id_geohash</code>, and carry the source name beside it<a class="headerlink" href="#artefacts-keep-id_geohash-and-carry-the-source-name-beside-it" title="Permanent link">🔗</a></h2>
 <p>Files this package writes — break parquets, NRT parquets, PMTiles properties, dashboard
 payloads — carry the identifier as <strong><code>id_geohash</code></strong>, whatever the source dataset called
 it. That name is a wire contract for <code>pmtiles_build</code>, the MapLibre styles
-(<code>promoteId</code>) and existing consumers. A custom <code>id_field</code> changes which column is <em>read</em>,
-not which columns are <em>written</em>.</p>
+(<code>promoteId</code>) and existing consumers.</p>
+<p>When the source name differs, the artefact also <strong>keeps</strong> it, so a reader can map back
+to the dataset:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.utils.data</span><span class="w"> </span><span class="kn">import</span> <span class="n">ensure_id_columns</span>
+
+<span class="n">df</span> <span class="o">=</span> <span class="n">ensure_id_columns</span><span class="p">(</span><span class="n">df</span><span class="p">,</span> <span class="s2">"lake_id"</span><span class="p">)</span>      <span class="c1"># columns: lake_id, id_geohash, ...</span>
+</code></pre></div>
+<p><code>ensure_id_columns</code> is additive by construction — it never renames, drops or reorders.
+With the default <code>id_field="id_geohash"</code> it is a no-op, so existing files and their
+columns are unchanged. <code>calculate_break</code> (simple / beast / NRT) already returns such a
+frame: the index keeps the dataset's own name and <code>id_geohash</code> is present as a column.</p>
+<p>A new column is only ever added when the names differ. Consumers that assert an exact
+column list will see one extra column in that case — the default path emits nothing new.</p>
+<h2 id="download-break-pipeline">Download → break pipeline<a class="headerlink" href="#download-break-pipeline" title="Permanent link">🔗</a></h2>
+<p>The downloaders name the identifier coordinate after the vector column they were given
+(<code>name_attribute</code>), and now record it on the dataset:</p>
+<div class="highlight"><pre><span></span><code><span class="n">dl</span> <span class="o">=</span> <span class="n">EarthEngineDownloader</span><span class="p">(</span><span class="n">ee_auth</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">logger</span><span class="o">=</span><span class="n">logger</span><span class="p">)</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">dl</span><span class="o">.</span><span class="n">download_dw_monthly</span><span class="p">(</span><span class="n">vector_dataset</span><span class="o">=</span><span class="s2">"lakes.parquet"</span><span class="p">,</span> <span class="n">name_attribute</span><span class="o">=</span><span class="s2">"lake_id"</span><span class="p">)</span>
+<span class="n">ds</span><span class="o">.</span><span class="n">attrs</span><span class="p">[</span><span class="s2">"id_field"</span><span class="p">]</span>        <span class="c1"># "lake_id"</span>
+</code></pre></div>
+<p>From there the break pipeline resolves the name itself — no flag needed:</p>
+<div class="highlight"><pre><span></span><code><span class="n">pipeline</span> <span class="o">=</span> <span class="n">BreakpointPipeline</span><span class="p">(</span>
+    <span class="n">water_dataset_file</span><span class="o">=</span><span class="s2">"lakes_lake_id.nc"</span><span class="p">,</span>
+    <span class="n">output_file</span><span class="o">=</span><span class="s2">"breaks.parquet"</span><span class="p">,</span>
+    <span class="n">break_method</span><span class="o">=</span><span class="s2">"simple"</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">pipeline</span><span class="o">.</span><span class="n">id_field</span>   <span class="c1"># "lake_id"  (from the dataset's attrs)</span>
+</code></pre></div>
+<p>or pass it explicitly, which also covers a dataset that records nothing:</p>
+<div class="highlight"><pre><span></span><code>water-timeseries<span class="w"> </span>breakpoint-analysis-historical<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--water-dataset-file<span class="w"> </span>lakes_lake_id.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-file<span class="w"> </span>breaks.parquet<span class="w"> </span>--id-field<span class="w"> </span>lake_id
+</code></pre></div>
+<p>The output parquet then carries <strong>both</strong> names: <code>id_geohash</code> (the contract every
+downstream consumer reads) plus <code>lake_id</code> (the source name, as the index).</p>
 <h2 id="known-limits">Known limits<a class="headerlink" href="#known-limits" title="Permanent link">🔗</a></h2>
 <ul>
 <li>The Streamlit dashboard (<code>run_map_viewer</code>) is geohash-only: it reads the contract
