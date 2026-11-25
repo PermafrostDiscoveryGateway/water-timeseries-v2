@@ -149,6 +149,10 @@ class LakeDataset:
         self.ds_normalized_ismasked_: bool = False
         self.mask_data: bool = mask_data
         self.id_field: str = id_field
+        # Record the identifier name on the dataset so helpers that only receive the
+        # xarray object (utils.data.resolve_id_field) can honour a renamed id column.
+        # setdefault keeps a name the file already declares.
+        self.ds.attrs.setdefault("id_field", id_field)
         self._preprocess()
         self._normalize_ds()
         self._mask_invalid()
@@ -828,6 +832,7 @@ class DWDataset(LakeDataset):
             frames_per_second=frames_per_second,
             dimensions=dimensions,
             overwrite_exists=overwrite_exists,
+            id_field=self.id_field,
         )
 
 

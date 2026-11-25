@@ -19,18 +19,26 @@ def load_lake_polygons_cached(file_path: str):
 
 
 @st.cache_resource(show_spinner="Load lake's row")
-def load_lake_polygon_cached(file_path: str, id_geohash: str) -> gpd.GeoDataFrame:
+def load_lake_polygon_cached(file_path: str, id_geohash: str, id_field: str = "id_geohash") -> gpd.GeoDataFrame:
     """Load a single lake's row from the vector dataset without reading the full file.
 
     For parquet files this uses predicate pushdown so only the row group(s)
     containing the lake are read. Non-parquet formats fall back to a full read
     plus filter.
+
+    Args:
+        file_path: Vector dataset path (parquet gets predicate pushdown).
+        id_geohash: Identifier value to select.
+        id_field: Name of the identifier column. Defaults to ``"id_geohash"``;
+            pass the name actually present in the file (e.g. ``"lake_id"``).
     """
     if str(file_path).split("?")[0].split("#")[0].lower().endswith(".parquet"):
-        gdf = gpd.read_parquet(file_path, filters=[("id_geohash", "==", id_geohash)])
+        gdf = gpd.read_parquet(file_path, filters=[(id_field, "==", id_geohash)])
     else:
         gdf = load_vector_dataset(file_path)
-        gdf = gdf[gdf["id_geohash"] == id_geohash].copy()
+        if id_field not in gdf.columns:
+            raise KeyError(f"{id_field!r} is not a column of {file_path}; available: {list(gdf.columns)}")
+        gdf = gdf[gdf[id_field] == id_geohash].copy()
     if gdf.crs is None:
         gdf = gdf.set_crs(epsg=4326)
     return gdf
