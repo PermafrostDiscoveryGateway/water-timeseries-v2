@@ -75,7 +75,9 @@ def calculate_temporal_stats(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str | None = None) -> xr.Dataset:
+def annotate_xr_dataset_jrc(
+    ds: xr.Dataset, input_vector_file: Path | str | None = None, id_field: str | None = None
+) -> xr.Dataset:
     """
     Annotates an xarray Dataset with units, description, author, and contact information.
 
@@ -98,6 +100,11 @@ def annotate_xr_dataset_jrc(ds: xr.Dataset, input_vector_file: Path | str | None
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    if id_field:
+        # The identifier coordinate is named after the vector column it came from;
+        # recording it lets create_water_dataset()/_break_pipeline resolve it instead
+        # of assuming "id_geohash".
+        ds.attrs["id_field"] = id_field
     ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
     ds.attrs["contact"] = "ingmar.nitze@awi.de"
@@ -109,6 +116,7 @@ def annotate_xr_dataset_dw(
     ds: xr.Dataset,
     input_vector_file: Path | str | None = None,
     temporal_resolution: str = "monthly",
+    id_field: str | None = None,
 ) -> xr.Dataset:
     """
     Annotates an xarray Dataset with units, description, author, and contact information.
@@ -141,6 +149,11 @@ def annotate_xr_dataset_dw(
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    if id_field:
+        # The identifier coordinate is named after the vector column it came from;
+        # recording it lets create_water_dataset()/_break_pipeline resolve it instead
+        # of assuming "id_geohash".
+        ds.attrs["id_field"] = id_field
     ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = (
         "Ingmar Nitze (Alfred Wegener Institute), Kayla Hardie (Google), Chen Wang (NCSA, U Illinois), Todd Nicholson(NCSA, U Illinois)"
@@ -204,6 +217,7 @@ def annotate_xr_dataset_dswx(
     ds: xr.Dataset,
     input_vector_file: Path | str | None = None,
     temporal_resolution: str = "monthly",
+    id_field: str | None = None,
 ) -> xr.Dataset:
     """Annotate a DSWx dataset with units, provenance and the product's limits.
 
@@ -250,6 +264,11 @@ def annotate_xr_dataset_dswx(
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    if id_field:
+        # The identifier coordinate is named after the vector column it came from;
+        # recording it lets create_water_dataset()/_break_pipeline resolve it instead
+        # of assuming "id_geohash".
+        ds.attrs["id_field"] = id_field
     ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
     ds.attrs["contact"] = "ingmar.nitze@awi.de"
@@ -260,6 +279,7 @@ def annotate_xr_dataset_dswx_hls(
     ds: xr.Dataset,
     input_vector_file: Path | str | None = None,
     temporal_resolution: str = "monthly",
+    id_field: str | None = None,
 ) -> xr.Dataset:
     """Annotate a DSWx-HLS dataset with units, provenance and the product's limits.
 
@@ -308,6 +328,11 @@ def annotate_xr_dataset_dswx_hls(
     if input_vector_file is not None:
         input_vector_file = Path(input_vector_file)
         ds.attrs["accompanying vector dataset"] = input_vector_file.name
+    if id_field:
+        # The identifier coordinate is named after the vector column it came from;
+        # recording it lets create_water_dataset()/_break_pipeline resolve it instead
+        # of assuming "id_geohash".
+        ds.attrs["id_field"] = id_field
     ds.attrs["source"] = "https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2"
     ds.attrs["author"] = "Ingmar Nitze (Alfred Wegener Institute), Todd Nicholson(NCSA, U Illinois)"
     ds.attrs["contact"] = "ingmar.nitze@awi.de"
@@ -460,6 +485,63 @@ def resolve_id_field(obj) -> str:
     raise ValueError(
         f"No identifier field found among {list(KNOWN_ID_FIELDS)}; "
         f"available: {sorted(available)}. Pass id_field explicitly or set it on the dataset's attrs."
+    )
+
+
+def ensure_id_columns(
+    df: pd.DataFrame,
+    id_field: str,
+    contract: str = "id_geohash",
+) -> pd.DataFrame:
+    """Guarantee that an artefact carries the contract identifier column.
+
+    Every artefact this package writes promises ``id_geohash`` — the PMTiles
+    property lists, MapLibre ``promoteId`` and existing parquet consumers all read
+    that name. When the source dataset calls its identifier something else
+    (``lake_id``, ``object_id``, …) both names must survive: the contract column for
+    the consumers, the source name so a reader can map back.
+
+    The function is additive by construction — it never renames, drops or reorders
+    anything:
+
+    * ``df`` already has ``contract`` (or ``id_field`` *is* ``contract``) → returned
+      unchanged, so the default path stays byte-identical;
+    * ``id_field`` is a column → ``contract`` is inserted right beside it;
+    * ``id_field`` is the index name → ``contract`` is inserted as the first column;
+    * an empty frame is returned untouched (nothing to carry);
+    * ``id_field`` is missing → ``KeyError``, never a silently empty identifier.
+
+    Args:
+        df: Frame representing an artefact row set (breaks, NRT predictions, …).
+        id_field: Name of the source identifier column or index.
+        contract: Name the artefacts promise. Defaults to ``"id_geohash"``.
+
+    Returns:
+        pd.DataFrame: The frame, unchanged or with ``contract`` added.
+
+    Example:
+        >>> df = pd.DataFrame({"lake_id": ["a"], "date_break": ["2020-07-01"]})
+        >>> ensure_id_columns(df, "lake_id").columns.tolist()
+        ['lake_id', 'id_geohash', 'date_break']
+    """
+    if df.empty:
+        return df
+    if id_field == contract or contract in df.columns:
+        return df
+
+    if id_field in df.columns:
+        out = df.copy()
+        out.insert(out.columns.get_loc(id_field) + 1, contract, out[id_field])
+        return out
+
+    if df.index.name == id_field:
+        out = df.copy()
+        out.insert(0, contract, out.index)
+        return out
+
+    raise KeyError(
+        f"{id_field!r} is neither a column nor the index name of the frame "
+        f"(columns: {list(df.columns)}, index: {df.index.name!r})"
     )
 
 

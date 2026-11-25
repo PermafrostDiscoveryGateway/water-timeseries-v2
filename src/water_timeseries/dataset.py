@@ -1306,7 +1306,11 @@ class DSWxHLSDataset(DSWxDataset):
         self.ds = ds
 
 
-def create_water_dataset(ds: xr.Dataset, water_dataset_type: str | None = None) -> LakeDataset:
+def create_water_dataset(
+    ds: xr.Dataset,
+    water_dataset_type: str | None = None,
+    id_field: str | None = None,
+) -> LakeDataset:
     """Instantiate the dataset class for a water product.
 
     Single dispatch point used by the breakpoint and plot pipelines, so a new source is
@@ -1316,6 +1320,8 @@ def create_water_dataset(ds: xr.Dataset, water_dataset_type: str | None = None) 
         ds: xarray Dataset with one of the supported products.
         water_dataset_type: ``"dynamic_world"``, ``"jrc"``, ``"dswx"`` or ``"dswx_hls"``. If
             ``None``, it is sniffed from the dataset's variables via :func:`get_water_dataset_type`.
+        id_field: Name of the identifier coordinate. Defaults to the name the dataset records in
+            ``ds.attrs["id_field"]``, and to ``"id_geohash"`` when it records none.
 
     Returns:
         LakeDataset: The dataset handler for that product.
@@ -1334,4 +1340,7 @@ def create_water_dataset(ds: xr.Dataset, water_dataset_type: str | None = None) 
     }
     if water_dataset_type not in classes:
         raise ValueError(f"Unknown water dataset type: {water_dataset_type}")
+    resolved_id_field = id_field or ds.attrs.get("id_field")
+    if resolved_id_field:
+        return classes[water_dataset_type](ds, id_field=resolved_id_field)
     return classes[water_dataset_type](ds)

@@ -914,7 +914,7 @@ class EarthEngineDownloader:
         ds["date"] = pd.to_datetime(ds["date"])
 
         # Annotate dataset with metadata
-        ds = annotate_xr_dataset_dw(ds, input_vector_file=vector_dataset)
+        ds = annotate_xr_dataset_dw(ds, input_vector_file=vector_dataset, id_field=name_attribute)
         ds.attrs["snow_free"] = bool(snow_free)
         if snow_free:
             ds.attrs["max_snow_fraction"] = float(max_snow_fraction)
@@ -1225,7 +1225,9 @@ class EarthEngineDownloader:
                 "Median observations per polygon is below 5 - that is a cloud/coverage limit, not a download failure"
             )
 
-        ds = annotate_xr_dataset_dw(ds, input_vector_file=vector_dataset, temporal_resolution="per_acquisition")
+        ds = annotate_xr_dataset_dw(
+            ds, input_vector_file=vector_dataset, temporal_resolution="per_acquisition", id_field=name_attribute
+        )
         ds.attrs["season_window"] = window_label
         ds.attrs["max_nodata"] = float(max_nodata)
         ds.attrs["n_acquisitions"] = len(ds.coords["date"])
@@ -1748,7 +1750,9 @@ class EarthEngineDownloader:
                 "coverage limit, not a download failure"
             )
 
-        ds = annotate_xr_dataset_dswx(ds, input_vector_file=vector_dataset, temporal_resolution="per_acquisition")
+        ds = annotate_xr_dataset_dswx(
+            ds, input_vector_file=vector_dataset, temporal_resolution="per_acquisition", id_field=name_attribute
+        )
         ds.attrs["season_window"] = window_label
         ds.attrs["max_nodata"] = float(max_nodata)
         ds.attrs["min_masked_pixels"] = float(min_masked_pixels)
@@ -1984,7 +1988,9 @@ class EarthEngineDownloader:
             f"Download complete: {n_items} items, {len(ds.coords['date'])} months collected"
         )
 
-        ds = annotate_xr_dataset_dswx(ds, input_vector_file=vector_dataset, temporal_resolution="monthly")
+        ds = annotate_xr_dataset_dswx(
+            ds, input_vector_file=vector_dataset, temporal_resolution="monthly", id_field=name_attribute
+        )
         ds.attrs["monthly_composite"] = "mode"
         ds.attrs["max_nodata"] = float(max_nodata)
         ds.attrs["min_masked_pixels"] = float(min_masked_pixels)
@@ -2366,7 +2372,10 @@ class EarthEngineDownloader:
         )
 
         ds = annotate_xr_dataset_dswx_hls(
-            ds, input_vector_file=vector_dataset, temporal_resolution="per_acquisition"
+            ds,
+            input_vector_file=vector_dataset,
+            temporal_resolution="per_acquisition",
+            id_field=name_attribute,
         )
         ds.attrs["season_window"] = window_label
         ds.attrs["max_nodata"] = float(max_nodata)
@@ -2579,7 +2588,9 @@ class EarthEngineDownloader:
         n_items = len(ds.coords[name_attribute])
         self._log_info(f"Download complete: {n_items} items, {len(ds.coords['date'])} months collected")
 
-        ds = annotate_xr_dataset_dswx_hls(ds, input_vector_file=vector_dataset, temporal_resolution="monthly")
+        ds = annotate_xr_dataset_dswx_hls(
+            ds, input_vector_file=vector_dataset, temporal_resolution="monthly", id_field=name_attribute
+        )
         ds.attrs["monthly_composite"] = "mode"
         ds.attrs["max_nodata"] = float(max_nodata)
         ds.attrs["min_masked_pixels"] = float(min_masked_pixels)
@@ -2804,7 +2815,7 @@ class EarthEngineDownloader:
         ds = ds.drop_vars("reducer")
 
         # Annotate dataset with metadata
-        ds = annotate_xr_dataset_jrc(ds, input_vector_file=vector_dataset)
+        ds = annotate_xr_dataset_jrc(ds, input_vector_file=vector_dataset, id_field=name_attribute)
 
         # Save to file if requested
         if save_to_file is not None:

@@ -14,6 +14,10 @@ from tqdm import tqdm
 
 from water_timeseries.breakpoint import BeastBreakpoint
 from water_timeseries.dataset import create_water_dataset
+from water_timeseries.utils.data import (
+    ensure_id_columns,
+    resolve_id_field,
+)
 from water_timeseries.utils.data import get_water_dataset_type as sniff_water_dataset_type
 from water_timeseries.utils.io import load_vector_dataset, load_xarray_dataset
 from water_timeseries.utils.spatial import filter_gdf_by_bbox
@@ -60,13 +64,15 @@ def merge_config_with_args(config: dict, **kwargs) -> dict:
 
 
 @ray.remote
-def process_chunk_remote(chunk: xr.Dataset, water_dataset_type: str, break_method: str = "beast") -> pd.DataFrame:
+def process_chunk_remote(
+    chunk: xr.Dataset, water_dataset_type: str, break_method: str = "beast", id_field: str | None = None
+) -> pd.DataFrame:
     """Ray remote function to process a single chunk."""
     from water_timeseries.breakpoint import SimpleBreakpoint
 
     # One dispatch point: create_water_dataset knows every registered source, so adding a
     # fourth does not mean editing this module (twice, for ray and joblib).
-    ds = create_water_dataset(chunk, water_dataset_type)
+    ds = create_water_dataset(chunk, water_dataset_type, id_field=id_field)
 
     if break_method == "beast":
         bp = BeastBreakpoint()
@@ -78,13 +84,15 @@ def process_chunk_remote(chunk: xr.Dataset, water_dataset_type: str, break_metho
     return bp.calculate_breaks_batch(ds)
 
 
-def process_chunk(chunk: xr.Dataset, water_dataset_type: str, break_method: str = "beast") -> pd.DataFrame:
+def process_chunk(
+    chunk: xr.Dataset, water_dataset_type: str, break_method: str = "beast", id_field: str | None = None
+) -> pd.DataFrame:
     """Process a single chunk (for use with joblib)."""
     from water_timeseries.breakpoint import SimpleBreakpoint
 
     # One dispatch point: create_water_dataset knows every registered source, so adding a
     # fourth does not mean editing this module (twice, for ray and joblib).
-    ds = create_water_dataset(chunk, water_dataset_type)
+    ds = create_water_dataset(chunk, water_dataset_type, id_field=id_field)
 
     if break_method == "beast":
         bp = BeastBreakpoint()
@@ -117,6 +125,10 @@ class BreakpointPipeline:
         bbox_east: Maximum longitude for bbox filter.
         bbox_north: Maximum latitude for bbox filter.
         logger: Optional logger instance.
+        id_field: Name of the identifier coordinate in the water dataset and the vector
+            file. Defaults to the name recorded in ``ds.attrs["id_field"]``, else
+            ``"id_geohash"``. Artefacts are still written with an ``id_geohash`` column
+            beside the source name (see :func:`water_timeseries.utils.data.ensure_id_columns`).
     """
 
     def __init__(
@@ -137,6 +149,7 @@ class BreakpointPipeline:
         bbox_north: float | None = None,
         output_geometry: bool = True,
         output_geometry_all: bool = False,
+        id_field: str | None = None,
     ):
         self.water_dataset_file = water_dataset_file
         self.output_file = output_file
@@ -160,6 +173,9 @@ class BreakpointPipeline:
         self.breaks = None
         self.output_geometry = output_geometry
         self.output_geometry_all = output_geometry_all
+        # None means "take it from the dataset": resolved in load_water_data()
+        self.id_field_requested = id_field
+        self.id_field: str = id_field or "id_geohash"
 
         self.input_ds = self.load_water_data()
         self.get_water_dataset_type()
@@ -205,7 +221,8 @@ class BreakpointPipeline:
             xarray Dataset with water time series data.
         """
         ds = load_xarray_dataset(self.water_dataset_file)
-        self.process_ids = ds.id_geohash.values
+        self.id_field = self.id_field_requested or resolve_id_field(ds)
+        self.process_ids = ds[self.id_field].values
         return ds
 
     def save_to_parquet(self):
@@ -213,19 +230,27 @@ class BreakpointPipeline:
         output_file = Path(self.output_file)
 
         # join geospatial data
-        if self.gdf is not None and "id_geohash" in self.gdf.columns and self.output_geometry:
+        if self.gdf is not None and self.id_field in self.gdf.columns and self.output_geometry:
             if self.logger:
                 self.logger.info("Joining break results with vector dataset geometries")
-            local_gdf = self.gdf.set_index("id_geohash").loc[self.process_ids][["geometry"]]
+            local_gdf = self.gdf.set_index(self.id_field).loc[self.process_ids][["geometry"]]
+            breaks = self.breaks
+            if "id_geohash" in breaks.columns:
+                # A frame from a dataset with a custom id_field carries the contract column
+                # already; the index holds the same values, and reset_index() below would
+                # refuse to create a duplicate. Drop it and let the index supply the column.
+                breaks = breaks.drop(columns=["id_geohash"])
             if self.output_geometry_all:
-                joined = local_gdf.join(self.breaks, how="left").reset_index(drop=False)
+                joined = local_gdf.join(breaks, how="left").reset_index(drop=False)
             else:
-                joined = local_gdf.join(self.breaks, how="inner").reset_index(drop=False)
+                joined = local_gdf.join(breaks, how="inner").reset_index(drop=False)
+            joined = ensure_id_columns(joined, self.id_field)
             joined.to_parquet(output_file)
         else:
             if self.logger:
                 self.logger.info("Saving break results without vector dataset geometries")
-            self.breaks.to_parquet(output_file)
+            breaks = ensure_id_columns(self.breaks, self.id_field)
+            breaks.to_parquet(output_file)
 
     def get_water_dataset_type(self) -> str:
         """Determine the water dataset type from the dataset's variables.
@@ -271,9 +296,9 @@ class BreakpointPipeline:
 
             # Find overlapping IDs between gdf and ds
             overlap_ids = (
-                gdf[["id_geohash"]]
-                .set_index("id_geohash")
-                .join(self.input_ds.coords["id_geohash"].to_dataframe(), how="inner")["id_geohash"]
+                gdf[[self.id_field]]
+                .set_index(self.id_field)
+                .join(self.input_ds.coords[self.id_field].to_dataframe(), how="inner")[self.id_field]
                 .tolist()
             )
 
@@ -285,14 +310,14 @@ class BreakpointPipeline:
                     bbox_south=self.bbox_south,
                     bbox_east=self.bbox_east,
                     bbox_north=self.bbox_north,
-                    id_column="id_geohash",
+                    id_column=self.id_field,
                 )
 
                 # Get overlapping IDs after bbox filter
                 filtered_overlap_ids = (
-                    filtered_gdf[["id_geohash"]]
-                    .set_index("id_geohash")
-                    .join(self.input_ds.coords["id_geohash"].to_dataframe(), how="inner")["id_geohash"]
+                    filtered_gdf[[self.id_field]]
+                    .set_index(self.id_field)
+                    .join(self.input_ds.coords[self.id_field].to_dataframe(), how="inner")[self.id_field]
                     .tolist()
                 )
                 geohash_ids = filtered_overlap_ids
@@ -300,7 +325,7 @@ class BreakpointPipeline:
                 geohash_ids = overlap_ids
 
             # Filter the xarray dataset
-            self.input_ds = self.input_ds.sel(id_geohash=geohash_ids)
+            self.input_ds = self.input_ds.sel({self.id_field: geohash_ids})
             self.process_ids = geohash_ids
 
             if self.logger:
@@ -313,7 +338,7 @@ class BreakpointPipeline:
         return self.input_ds
 
     def chunk_dataset(self) -> list[xr.Dataset]:
-        """Split xarray dataset into chunks along id_geohash dimension.
+        """Split xarray dataset into chunks along the identifier dimension.
 
         Uses chunksize to determine the size of each chunk. The total number
         of chunks is calculated automatically based on the dataset size.
@@ -321,13 +346,13 @@ class BreakpointPipeline:
         Returns:
             List of xarray Datasets, one per chunk.
         """
-        n_ids = len(self.input_ds.id_geohash)
+        n_ids = len(self.input_ds[self.id_field])
 
         # Check if n_ids is smaller than chunksize
         if n_ids <= self.chunksize:
             # Create only one chunk containing all data
             self.n_chunks = 1
-            chunk = self.input_ds.isel(id_geohash=slice(0, n_ids))
+            chunk = self.input_ds.isel({self.id_field: slice(0, n_ids)})
             if self.logger:
                 self.logger.info(
                     f"Dataset has only {n_ids} ids (less than or equal to chunksize={self.chunksize}). Creating single chunk."
@@ -347,8 +372,8 @@ class BreakpointPipeline:
             else:
                 end_idx = (i + 1) * chunk_size
 
-            chunk = self.input_ds.isel(id_geohash=slice(start_idx, end_idx))
-            if len(chunk.id_geohash) > 0:
+            chunk = self.input_ds.isel({self.id_field: slice(start_idx, end_idx)})
+            if len(chunk[self.id_field]) > 0:
                 chunks.append(chunk)
 
         self.n_chunks = len(chunks)
@@ -412,7 +437,7 @@ class BreakpointPipeline:
             pbar_lock = threading.Lock()
 
             def process_with_pbar(chunk):
-                result = process_chunk(chunk, self.water_dataset_type, self.break_method)
+                result = process_chunk(chunk, self.water_dataset_type, self.break_method, self.id_field)
                 with pbar_lock:
                     pbar.update(1)
                 return result
@@ -429,7 +454,7 @@ class BreakpointPipeline:
 
                 # Submit all tasks
                 futures = [
-                    process_chunk_remote.remote(chunk, self.water_dataset_type, self.break_method)
+                    process_chunk_remote.remote(chunk, self.water_dataset_type, self.break_method, self.id_field)
                     for chunk in self.chunked_ds
                 ]
                 # Collect results with progress updates
@@ -446,7 +471,7 @@ class BreakpointPipeline:
 
                 # Sequential processing
                 for chunk in self.chunked_ds:
-                    ds = create_water_dataset(chunk, self.water_dataset_type)
+                    ds = create_water_dataset(chunk, self.water_dataset_type, id_field=self.id_field)
 
                     if self.break_method == "beast":
                         bp = BeastBreakpoint()
@@ -458,5 +483,10 @@ class BreakpointPipeline:
                 pbar.close()
 
         self.breaks = pd.concat(break_list, axis=0)
+        if self.id_field != "id_geohash" and self.breaks.index.name is None:
+            # A chunk that found no break returns a frame without an index name, and
+            # concat drops the name for the whole result. Restore the dataset's name so
+            # the artefact keeps it beside the id_geohash contract column.
+            self.breaks.index = self.breaks.index.rename(self.id_field)
         if self.logger:
             self.logger.info(f"Processed {len(self.breaks)} breakpoints")

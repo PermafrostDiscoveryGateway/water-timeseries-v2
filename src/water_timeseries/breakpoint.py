@@ -38,6 +38,7 @@ from water_timeseries.utils.data import (
     calculate_temporal_stats,
     calculate_water_area_after,
     calculate_water_area_before,
+    ensure_id_columns,
     resolve_id_field,
 )
 from water_timeseries.utils.nrt_postprocessing import (
@@ -303,6 +304,10 @@ class SimpleBreakpoint(BreakpointMethod):
         # calculate additional stats
         break_df = calculate_temporal_stats(break_df)
 
+        if dataset.id_field != "id_geohash":
+            break_df.index = break_df.index.rename(dataset.id_field)
+            break_df = ensure_id_columns(break_df, dataset.id_field)
+
         return break_df
 
 
@@ -431,8 +436,9 @@ class BeastBreakpoint(BreakpointMethod):
             break_list.append(df_breaks)
         break_df = pd.concat(break_list, axis=1).T
 
-        break_df.index.name = "id_geohash"
+        break_df.index.name = dataset.id_field
         break_df = calculate_temporal_stats(break_df)
+        break_df = ensure_id_columns(break_df, dataset.id_field)
 
         return break_df
 
@@ -919,4 +925,8 @@ class NRTBreakpoint(BreakpointMethod):
         # Add confidence interval string columns
         df_output = add_confidence_interval_strings(df_output)
 
-        return df_output[self.output_columns]
+        out = df_output[self.output_columns]
+        if dataset.id_field != "id_geohash":
+            out.index = out.index.rename(dataset.id_field)
+            out = ensure_id_columns(out, dataset.id_field)
+        return out

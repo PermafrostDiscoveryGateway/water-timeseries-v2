@@ -38,7 +38,6 @@ SELECTING_CALLS = {
 
 # path -> why this file may still name "id_geohash" when selecting
 ALLOWLIST = {
-    "scripts/break_pipeline.py": "operates on our own vector parquet, whose id column is the contract name",
     "scripts/precompute_nrt_monthly.py": "reads the archive zarr, whose id dim is the contract name",
     "scripts/plot_pipeline.py": "reads contract break parquets",
     "scripts/cli.py": "passes the contract column name to the contract-only dashboard",
