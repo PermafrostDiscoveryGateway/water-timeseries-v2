@@ -63,6 +63,45 @@ def filter_gdf_by_bbox(
     return gdf[mask]
 
 
+def select_feature_by_id(
+    gdf: gpd.GeoDataFrame,
+    object_id,
+    id_field: str = "id_geohash",
+) -> gpd.GeoDataFrame:
+    """Select the rows of ``gdf`` whose ``id_field`` equals ``object_id``.
+
+    Use this instead of indexing a literal ``"id_geohash"``: a dataset whose
+    identifier column is called ``lake_id`` (or anything else) works by passing
+    ``id_field="lake_id"``.
+
+    Args:
+        gdf: Frame holding the features; must contain ``id_field`` as a column.
+        object_id: Identifier value to select.
+        id_field: Name of the identifier column. Defaults to ``"id_geohash"``.
+
+    Returns:
+        The subset of ``gdf`` (possibly several rows for a duplicated id).
+
+    Raises:
+        KeyError: If ``id_field`` is not a column; the message lists the columns
+            that are present, so a wrong ``id_field`` cannot silently select
+            nothing.
+        ValueError: If no row matches ``object_id``.
+
+    Example:
+        >>> feature = select_feature_by_id(lakes_gdf, "b7g4rf3n3x43")
+        >>> feature = select_feature_by_id(lakes_gdf, lake, id_field="lake_id")
+    """
+    if id_field not in gdf.columns:
+        raise KeyError(
+            f"{id_field!r} is not a column of the frame; available columns: {list(gdf.columns)}"
+        )
+    feature = gdf[gdf[id_field] == object_id]
+    if feature.empty:
+        raise ValueError(f"No feature found with {id_field}: {object_id}")
+    return feature
+
+
 # create area calculation function for bounding box in arctic projection
 def bbox_area_km2_arctic(gdf: gpd.GeoDataFrame) -> float:
     """Calculate the area of a bounding box in square kilometers for a GeoDataFrame in Arctic projection.

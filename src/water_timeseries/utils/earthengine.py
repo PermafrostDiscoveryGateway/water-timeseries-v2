@@ -20,6 +20,8 @@ from loguru import logger
 from shapely.geometry import box
 from xee import helpers
 
+from water_timeseries.utils.spatial import select_feature_by_id
+
 
 def initialize_earth_engine(project: str | None = None, token_name: str = "EARTHENGINE_TOKEN") -> None:
     """Initialize the Earth Engine Python client.
@@ -1392,6 +1394,7 @@ def create_timelapse(
     frames_per_second: int = 1,
     dimensions: int = 512,
     overwrite_exists: bool = False,
+    id_field: str = "id_geohash",
 ) -> Path | None:
     """
     Create a Sentinel-2 timelapse GIF for a specific lake.
@@ -1414,6 +1417,8 @@ def create_timelapse(
         dimensions: Pixel dimensions for the output GIF (default: 512).
         overwrite_exists: If False (default), skip download if output file already exists.
                           If True, always re-download and overwrite existing file.
+        id_field: Name of the identifier column in ``input_lake_gdf``. Defaults to
+            ``"id_geohash"``; pass the name actually present (e.g. ``"lake_id"``).
 
     Returns:
         Path | None: Path to the generated GIF file, or None if skipped due to existing file.
@@ -1434,11 +1439,8 @@ def create_timelapse(
         print("[INFO] Skipping download (use overwrite_exists=True to re-download)")
         return None
 
-    # Filter to the specific lake feature by geohash
-    feature = input_lake_gdf[input_lake_gdf["id_geohash"] == id_geohash]
-
-    if feature.empty:
-        raise ValueError(f"No feature found with id_geohash: {id_geohash}")
+    # Filter to the specific lake feature by identifier
+    feature = select_feature_by_id(input_lake_gdf, id_geohash, id_field=id_field)
 
     # Create a bounding box around the lake with a buffer:
     # 1. Project to EPSG:3995 (World Mercator) for accurate meter-based buffering
@@ -1567,6 +1569,7 @@ def get_rioxarray_ds_from_lake(
     date_windows: Sequence[tuple[str, str]] | None = None,
     grid_scale: float = 10,
     cloud_filter: str = "pixel",
+    id_field: str = "id_geohash",
 ) -> xr.Dataset:
     """Load Sentinel-2 satellite imagery for a specific lake as an xarray Dataset.
 
@@ -1597,6 +1600,8 @@ def get_rioxarray_ds_from_lake(
         cloud_filter (str, optional): The method used to filter clouds.
             Options are "pixel" (filtering based on MSK_CLDPRB) or other
             Earth Engine metadata filters. Defaults to "pixel".
+        id_field (str, optional): Name of the identifier column in ``lake_gdf``.
+            Defaults to "id_geohash".
 
     Returns:
         xr.Dataset: An xarray Dataset with Sentinel-2 bands as data variables,
@@ -1611,7 +1616,7 @@ def get_rioxarray_ds_from_lake(
             bands.append(band)
 
     # 1. Filter the lake by its unique ID
-    local_gdf = lake_gdf[lake_gdf["id_geohash"] == id_geohash]
+    local_gdf = select_feature_by_id(lake_gdf, id_geohash, id_field=id_field)
 
     # 2. Setup Coordinate Reference System and AOI
     crs_object = local_gdf.estimate_utm_crs()
@@ -1669,12 +1674,15 @@ def cached_get_rioxarray_ds_from_lake(
     date_windows: tuple[tuple[str, str], ...] | None = None,
     grid_scale: float = 10,
     cloud_filter: str = "pixel",
+    id_field: str = "id_geohash",
 ) -> xr.Dataset:
     """Cached wrapper around get_rioxarray_ds_from_lake.
 
     The GeoDataFrame is excluded from the cache key (underscore prefix);
     id_geohash together with the query parameters identifies the result, so
-    re-selecting a lake does not re-hit Earth Engine.
+    re-selecting a lake does not re-hit Earth Engine. `id_field` joins the key
+    like any other argument, which costs at most one extra fetch when the same
+    lake is requested under two different column names.
     """
     return get_rioxarray_ds_from_lake(
         lake_gdf=_lake_gdf,
@@ -1687,6 +1695,7 @@ def cached_get_rioxarray_ds_from_lake(
         date_windows=date_windows,
         grid_scale=grid_scale,
         cloud_filter=cloud_filter,  # Added this line to ensure full parsing
+        id_field=id_field,
     )
 
 

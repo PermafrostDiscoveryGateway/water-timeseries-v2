@@ -351,9 +351,10 @@ def dw_coverage_stats(ds: xr.Dataset) -> pd.DataFrame:
     # Build with an explicit index: to_pandas() can return an Index flagged
     # _no_setting_name (it descends from a MultiIndex level), on which pandas refuses
     # ``index.name = ...``. An explicit Index also guarantees the row order.
-    index = pd.Index(ds["id_geohash"].to_numpy(), name="id_geohash")
-    if valid.dims != ("id_geohash", "date"):
-        valid = valid.transpose("id_geohash", "date")
+    id_field = resolve_id_field(ds)
+    index = pd.Index(ds[id_field].to_numpy(), name=id_field)
+    if valid.dims != (id_field, "date"):
+        valid = valid.transpose(id_field, "date")
     valid_np = valid.to_numpy()
     dates = pd.to_datetime(ds["date"].to_numpy())
     first_date = [dates[row].min() if row.any() else pd.NaT for row in valid_np]
@@ -403,6 +404,65 @@ def detect_temporal_resolution(ds: xr.Dataset) -> str:
     return "monthly" if on_month_start and median_gap_days >= 25 else "per_acquisition"
 
 
+KNOWN_ID_FIELDS: tuple[str, ...] = ("id_geohash", "lake_id", "object_id", "site_id")
+
+
+def resolve_id_field(obj) -> str:
+    """Return the name of the identifier field on a dataset or a frame.
+
+    Resolution order: the declared ``attrs["id_field"]`` (written by
+    :class:`~water_timeseries.dataset.LakeDataset`), then the known names in
+    :data:`KNOWN_ID_FIELDS` — ``id_geohash`` first, so the historical default keeps
+    winning — then, for an xarray Dataset, the only remaining non-``date`` 1-D
+    coordinate.
+
+    Args:
+        obj: ``xr.Dataset``, ``pd.DataFrame`` or ``gpd.GeoDataFrame``.
+
+    Returns:
+        str: Name of the identifier coordinate/column.
+
+    Raises:
+        ValueError: When nothing identifies the objects, or when several candidates
+            are present and none is declared. Guessing in that case would select the
+            wrong column silently, which is the bug this replaces.
+    """
+    attrs = getattr(obj, "attrs", None) or {}
+    declared = attrs.get("id_field")
+
+    if isinstance(obj, xr.Dataset):
+        available = set(obj.coords) | set(obj.dims) | set(obj.data_vars)
+    else:
+        available = set(getattr(obj, "columns", []))
+
+    if declared:
+        if declared not in available:
+            raise ValueError(
+                f"id_field={declared!r} is declared on the dataset's attrs but is not present; "
+                f"available: {sorted(available)}"
+            )
+        return declared
+
+    candidates = [name for name in KNOWN_ID_FIELDS if name in available]
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        raise ValueError(
+            f"Ambiguous identifier: several known id fields are present ({candidates}). "
+            "Set id_field explicitly or record it on the dataset's attrs."
+        )
+
+    if isinstance(obj, xr.Dataset):
+        leftovers = [c for c in obj.coords if c != "date" and obj.coords[c].ndim == 1]
+        if len(leftovers) == 1:
+            return leftovers[0]
+
+    raise ValueError(
+        f"No identifier field found among {list(KNOWN_ID_FIELDS)}; "
+        f"available: {sorted(available)}. Pass id_field explicitly or set it on the dataset's attrs."
+    )
+
+
 def find_data_gaps(dataset: xr.Dataset, variable: str = "water", id_geohash_subset=None):
     """
     Identifies lakes with significant data gaps.
@@ -418,7 +478,7 @@ def find_data_gaps(dataset: xr.Dataset, variable: str = "water", id_geohash_subs
     # Logic to handle subsetting
     if id_geohash_subset is not None:
         print(f"Applying subset for 'id_geohash': {id_geohash_subset}")
-        ds_to_analyze = dataset.isel(id_geohash=id_geohash_subset)
+        ds_to_analyze = dataset.isel({resolve_id_field(dataset): id_geohash_subset})
     else:
         print("No subset provided. Analyzing the full dataset.")
         ds_to_analyze = dataset
@@ -435,7 +495,7 @@ def find_data_gaps(dataset: xr.Dataset, variable: str = "water", id_geohash_subs
     # We use .values.flatten() to ensure we get the raw data into the dataframe correctly
     df = pd.DataFrame(
         {
-            "id_geohash": ds_to_analyze.id_geohash.values,
+            "id_geohash": ds_to_analyze[resolve_id_field(ds_to_analyze)].values,
             "missing_count": missing_counts.values.flatten(),
             "completion_pct": completion_pct.values.flatten(),
         }
@@ -453,6 +513,8 @@ def load_and_merge_parquets(file_list: list[Path], logger=None) -> pd.DataFrame:
     if logger:
         logger.info(f"Found {len(file_list)} files to merge.")
     df_list = []
+    # Artefact contract: parquets we write carry the identifier as "id_geohash",
+    # whatever the source dataset's id_field was (see docs/id_field.md).
     required_column = "id_geohash"
 
     index_count = 0

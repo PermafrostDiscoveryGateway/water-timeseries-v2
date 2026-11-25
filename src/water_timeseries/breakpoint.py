@@ -38,6 +38,7 @@ from water_timeseries.utils.data import (
     calculate_temporal_stats,
     calculate_water_area_after,
     calculate_water_area_before,
+    resolve_id_field,
 )
 from water_timeseries.utils.nrt_postprocessing import (
     CONFIDENCE_INPUT_COLUMNS,
@@ -61,7 +62,9 @@ class BreakpointMethod:
     def __init__(self, method_name: str):
         self.method_name = method_name
 
-    def get_first_break_date(self, df: pd.DataFrame, column: str = "water") -> tuple:
+    def get_first_break_date(
+        self, df: pd.DataFrame, column: str = "water", id_column: str = "id_geohash"
+    ) -> tuple:
         """Placeholder implementation for the abstract base.
 
         Concrete subclasses override this method.  The default returns a
@@ -122,9 +125,9 @@ class BreakpointMethod:
         dataset.ds_normalized.load()
         results = []
         if progress_bar:
-            progress = tqdm(dataset.ds_normalized.id_geohash.values)
+            progress = tqdm(dataset.ds_normalized[dataset.id_field].values)
         else:
-            progress = dataset.ds_normalized.id_geohash.values
+            progress = dataset.ds_normalized[dataset.id_field].values
         for object_id in progress:
             result = self.calculate_break(dataset, object_id)
             results.append(result)
@@ -163,7 +166,9 @@ class SimpleBreakpoint(BreakpointMethod):
         self.kwargs_break = kwargs_break
         self.breakpoint_columns = ["date_break", "date_before_break", "date_after_break", "break_method"]
 
-    def get_first_break_date(self, df: pd.DataFrame, column: str = "water") -> tuple:
+    def get_first_break_date(
+        self, df: pd.DataFrame, column: str = "water", id_column: str = "id_geohash"
+    ) -> tuple:
         """Find the first break date and the immediately preceding index value.
 
         The detection uses a dual‑window approach: a primary rolling window
@@ -184,7 +189,7 @@ class SimpleBreakpoint(BreakpointMethod):
             (first_break_date, previous_date, after_date) where each element is
             a pandas Timestamp or None if no break was found.
         """
-        df = df.drop(columns=["id_geohash"]).dropna()
+        df = df.drop(columns=[id_column]).dropna()
 
         # Determine the rolling window sizes
         primary_window = self.kwargs_break["window"]
@@ -261,8 +266,8 @@ class SimpleBreakpoint(BreakpointMethod):
         """
         # dataset._normalize_ds()
         ds = dataset.ds_normalized
-        df_normed = ds.sel(id_geohash=object_id).to_pandas()
-        first_break, previous_date, after_date = self.get_first_break_date(df=df_normed, column=dataset.water_column)
+        df_normed = ds.sel({dataset.id_field: object_id}).to_pandas()
+        first_break, previous_date, after_date = self.get_first_break_date(df=df_normed, column=dataset.water_column, id_column=dataset.id_field)
         if first_break is None:
             return pd.DataFrame(columns=self.breakpoint_columns)
         df_out = pd.DataFrame(
@@ -276,7 +281,7 @@ class SimpleBreakpoint(BreakpointMethod):
         )
 
         break_list = []
-        df_water = dataset.ds.sel(id_geohash=object_id).to_dataframe()
+        df_water = dataset.ds.sel({dataset.id_field: object_id}).to_dataframe()
         # TODO: can this be optimized to process the entire dataframe?
         for i, row in df_out.iterrows():
             id_geohash = row.name
@@ -363,7 +368,7 @@ class BeastBreakpoint(BreakpointMethod):
         # Example implementation for BeastBreakpoint
         # In a real application, this would use the rbeast library or similar
         ds = dataset.ds_normalized
-        df = ds.sel(id_geohash=object_id).to_pandas()
+        df = ds.sel({dataset.id_field: object_id}).to_pandas()
         df["date"] = df.index
         data = df[dataset.water_column]
 
@@ -402,13 +407,13 @@ class BeastBreakpoint(BreakpointMethod):
         break_df = break_df.sort_values("proba_rbeast", ascending=False).copy()
         break_df["break_number"] = range(1, len(break_df) + 1)
 
-        break_df_out = break_df.rename(columns={"date": "date_break"}).set_index("id_geohash")
+        break_df_out = break_df.rename(columns={"date": "date_break"}).set_index(dataset.id_field)
         break_df_out["break_method"] = self.method_name
 
         df_out = break_df_out[self.breakpoint_columns]
 
         break_list = []
-        df_water = dataset.ds.sel(id_geohash=object_id).to_dataframe()
+        df_water = dataset.ds.sel({dataset.id_field: object_id}).to_dataframe()
         for i, row in df_out.iterrows():
             id_geohash = row.name
             df_breaks = pd.concat(
@@ -524,7 +529,12 @@ class NRTBreakpoint(BreakpointMethod):
         ]
 
     def predict_nrt_arima(
-        self, ds_in: xr.Dataset, id_geohash: str, min_length: int = 3, water_column: str = "water"
+        self,
+        ds_in: xr.Dataset,
+        id_geohash: str,
+        min_length: int = 3,
+        water_column: str = "water",
+        id_field: str | None = None,
     ) -> pd.Series:
         """_summary_
 
@@ -545,10 +555,11 @@ class NRTBreakpoint(BreakpointMethod):
         # any missing values (e.g. cloud-cover gaps), which statsmodels treats as an
         # unsupported index - newer statsmodels versions (>=0.15) raise a hard
         # "No supported index is available" ValueError for this instead of only warning.
+        id_field = id_field or resolve_id_field(ds_in)
         df_in = (
-            ds_in.sel(id_geohash=id_geohash)
+            ds_in.sel({id_field: id_geohash})
             .to_dataframe()
-            .drop(columns=["id_geohash"])[water_column]
+            .drop(columns=[id_field])[water_column]
             .dropna()
             .reset_index(drop=True)
         )
@@ -630,10 +641,11 @@ class NRTBreakpoint(BreakpointMethod):
             Filtered (ds_analysis, ds_historical) datasets.
         """
         # Get valid id_geohash values that have non-NaN data in ds_analysis
-        valid_ids = ds_analysis.dropna(dim="id_geohash", how="all").id_geohash.values
+        id_field = resolve_id_field(ds_analysis)
+        valid_ids = ds_analysis.dropna(dim=id_field, how="all")[id_field].values
 
         # get invalid ids with nan values
-        all_ids = ds_analysis.id_geohash.values
+        all_ids = ds_analysis[id_field].values
         nan_ids = all_ids[~pd.Series(all_ids).isin(pd.Series(valid_ids))]
 
         # Count total ids and valid ids for logging
@@ -647,8 +659,8 @@ class NRTBreakpoint(BreakpointMethod):
         )
 
         # Filter both datasets to only include valid ids
-        ds_analysis_filtered = ds_analysis.sel(id_geohash=valid_ids)
-        ds_historical_filtered = ds_historical.sel(id_geohash=valid_ids)
+        ds_analysis_filtered = ds_analysis.sel({id_field: valid_ids})
+        ds_historical_filtered = ds_historical.sel({id_field: valid_ids})
 
         return ds_analysis_filtered, ds_historical_filtered, valid_ids, nan_ids
 
@@ -658,7 +670,8 @@ class NRTBreakpoint(BreakpointMethod):
         """Calculate statistics for the given dataset."""
         if filter_month is not None:
             dataset = dataset.where(dataset.date.dt.month == filter_month, drop=True)
-        out_df = dataset.to_dataframe()[water_column].groupby("id_geohash").agg(["mean", "median", "std", "min", "max"])
+        id_field = resolve_id_field(dataset)
+        out_df = dataset.to_dataframe()[water_column].groupby(id_field).agg(["mean", "median", "std", "min", "max"])
         return out_df
 
     def _add_confidence_level(self, break_output_df: pd.DataFrame) -> pd.DataFrame:
@@ -786,7 +799,7 @@ class NRTBreakpoint(BreakpointMethod):
             if isinstance(object_id, str):
                 object_id = [object_id]
             object_id = [obj for obj in object_id if obj in dataset.object_ids_]
-            data = data.sel(id_geohash=object_id)
+            data = data.sel({dataset.id_field: object_id})
 
         # split data into historical and analysis datasets based on analysis_date
         ds_analysis = data.sel(date=analysis_date)
@@ -830,7 +843,7 @@ class NRTBreakpoint(BreakpointMethod):
         prediction_df = pd.DataFrame(predictions)
         if prediction_df.empty:
             prediction_df = pd.DataFrame(
-                index=ds_analysis_filtered.id_geohash.values,
+                index=ds_analysis_filtered[dataset.id_field].values,
                 columns=self.output_columns,
             )
 
@@ -881,7 +894,7 @@ class NRTBreakpoint(BreakpointMethod):
                 columns=base_columns_no_abs,
             )
             df_historical_stats_nans = self._get_ds_stats(
-                ds_historical.sel(id_geohash=nan_ids), water_column=dataset.water_column
+                ds_historical.sel({dataset.id_field: nan_ids}), water_column=dataset.water_column
             ).round(4)
             df_historical_stats_nans.columns = "water_historical_" + df_historical_stats_nans.columns.astype(str)
             df_output_nan = prediction_df_nan.join(df_historical_stats_nans, how="left").round(4)

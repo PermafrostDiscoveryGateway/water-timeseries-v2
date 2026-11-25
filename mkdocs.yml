@@ -54,6 +54,7 @@ nav:
   - Examples: examples.md
   - Embedding & Shareable Links: embedding.md
   - Building Map Tilesets: tile_generation.md
+  - Object Identifiers: id_field.md
   - NRT Monthly Update: nrt_monthly_update.md
   - API Reference:
     - Overview: api/index.md
