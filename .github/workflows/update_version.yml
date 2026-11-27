@@ -117,7 +117,13 @@ jobs:
           name: ${{ needs.update-version.outputs.VERSION }}
           draft: false
           prerelease: false
-          files: dist/*.whl dist/*.tar.gz
+          # softprops/action-gh-release splits `files` on newlines (or commas), NOT spaces:
+          # the one-line `dist/*.whl dist/*.tar.gz` form is a single glob that matches
+          # nothing, so every release after ac190f3 failed with "Pattern ... does not match
+          # any files" even though `uv build` had printed both artefacts.
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
           # Fail loudly if `uv build` produced nothing, instead of publishing an empty release
           # again. The explicit patterns also keep `dist/.gitignore`, which `uv build` writes,
           # out of the release.
