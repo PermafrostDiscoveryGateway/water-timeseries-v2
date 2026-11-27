@@ -46,9 +46,13 @@ RUN uv pip install -e ".[pmtiles]"
 ENV PATH="/app/.venv/bin:$PATH"
 ENV VIRTUAL_ENV=/app/.venv
 
-# Remove the fixed ENTRYPOINT - we'll specify commands at runtime
-# Keep CMD as default for local testing, but it can be overridden
-CMD ["uv", "run", "water-timeseries"]
+# No ENTRYPOINT: every deployment overrides the command (helm: `water-timeseries
+# dashboard`, compose: the same). The default is for a bare `docker run`, and it must not
+# go through `uv run`: with no uv.lock in the image, `uv run` tries to resolve and build
+# the project at container start, which needs PyPI (it fails with "Failed to fetch
+# https://pypi.org/simple/hatchling/" on a network-less host) and could resolve different
+# versions than the ones baked in. Invoke the console script from the venv directly.
+CMD ["water-timeseries"]
 
 # metadata
 LABEL org.opencontainers.image.title="water-timeseries-v2"
