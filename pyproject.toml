@@ -77,10 +77,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# PMTiles building shells out to the `tippecanoe` binary. Installing this extra provides one
-# (it compiles from sdist: needs cmake >= 3.20 plus scikit_build_core and setuptools_scm < 10);
-# a system install (brew/apt) works just as well - `find_tippecanoe` only looks on PATH.
+# PMTiles building. `pmtiles` is the default and is pure wheels: tylertoo reads
+# GeoParquet directly (the multi-layer join needs its release binary, see
+# TYLERTOO_CLI in utils/pmtiles_build_tylertoo.py). `pmtiles-tippecanoe` keeps the
+# previous engine for one release as `WTS_TILER=tippecanoe`; it compiles from sdist
+# (cmake >= 3.20 plus scikit_build_core and setuptools_scm < 10), so it is no longer
+# installed by default.
 pmtiles = [
+    "tylertoo==0.8.0",
+]
+pmtiles-tippecanoe = [
     "tippecanoe>=2.72.0",
 ]
 dev = [

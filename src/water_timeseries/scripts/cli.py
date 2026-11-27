@@ -35,8 +35,8 @@ from water_timeseries.utils.pmtiles_build import (
     build_pmtiles_nrt_monthly,
     build_pmtiles_shared_geometry,
     find_nrt_run_parquets,
-    find_tippecanoe,
     historical_drained_tiles_path,
+    require_tiler,
 )
 from water_timeseries.utils.pmtiles_serve import PmtilesServer
 
@@ -351,8 +351,7 @@ def build_pmtiles(
     if logfile_val:
         logfile_val = setup_logging(logfile=logfile_val, verbose=verbose_val)
 
-    if not find_tippecanoe():
-        raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
+    require_tiler()
 
     print(f"Building PMTiles from {vector_file_path} -> {output_file_path}")
     build_pmtiles_shared_geometry(vector_file_path, output_file_path, keep_geojsonl=keep_geojsonl_val)
@@ -438,8 +437,7 @@ def build_drained_pmtiles(
     if logfile_val:
         setup_logging(logfile=logfile_val, verbose=config_dict.get("verbose", 0))
 
-    if not find_tippecanoe():
-        raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
+    require_tiler()
 
     print(f"Building drained-lakes overlay from {vector_file_str} -> {output_file_path}")
     build_pmtiles_historical_drained(
@@ -551,8 +549,7 @@ def build_nrt_pmtiles(
             "(via CLI flags, or a --config-file with precomputed_nrt_dir/vector_file/nrt_pmtiles_dir)."
         )
         raise SystemExit(1)
-    if not find_tippecanoe():
-        raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
+    require_tiler()
 
     month_list = [m.strip() for m in months.split(",") if m.strip()] if months else None
 
