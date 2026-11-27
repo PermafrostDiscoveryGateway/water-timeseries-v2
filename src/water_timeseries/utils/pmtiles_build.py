@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -287,6 +288,52 @@ def find_tippecanoe() -> str | None:
     return shutil.which("tippecanoe")
 
 
+# Which engine the public builders use. tylertoo reads GeoParquet directly and skips
+# the GeoJSONL stage; tippecanoe stays selectable for one release so a build can be
+# rolled back without a code change (Escape hatch: WTS_TILER=tippecanoe).
+TILER_ENGINES = ("tylertoo", "tippecanoe")
+DEFAULT_TILER = "tylertoo"
+
+
+def tiler_engine() -> str:
+    """Return the engine selected by ``WTS_TILER`` (defaults to ``tylertoo``)."""
+    engine = (os.environ.get("WTS_TILER") or DEFAULT_TILER).strip().lower()
+    if engine not in TILER_ENGINES:
+        raise ValueError(f"WTS_TILER must be one of {TILER_ENGINES}, got {engine!r}")
+    return engine
+
+
+def require_tiler() -> None:
+    """Fail before the slow work if the selected engine cannot run at all.
+
+    The base and overlay builds need both halves of the selected engine: the tiling
+    API and, for the multi-layer join, the binary (the 0.8.0 wheel ships no console
+    script), so this checks both rather than discovering the missing one after a
+    multi-minute read.
+    """
+    if tiler_engine() == "tippecanoe":
+        if not find_tippecanoe():
+            raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
+        return
+
+    from water_timeseries.utils.pmtiles_build_tylertoo import _tylertoo, find_tylertoo_cli
+
+    _tylertoo()
+    if not find_tylertoo_cli():
+        raise RuntimeError(
+            "tylertoo's binary is needed for the multi-layer join (the PyPI wheel has no "
+            "console script at 0.8.0). Set TYLERTOO_CLI to the release binary, or set "
+            "WTS_TILER=tippecanoe."
+        )
+
+
+def _dispatch_engine(dest: str, **kwargs):
+    """Call the same builder in ``pmtiles_build_tylertoo`` (lazy, to avoid a cycle)."""
+    from water_timeseries.utils import pmtiles_build_tylertoo
+
+    return getattr(pmtiles_build_tylertoo, dest)(**kwargs)
+
+
 def _sanitize_properties(gdf: gpd.GeoDataFrame, columns: Sequence[str]) -> gpd.GeoDataFrame:
     """Keep only tile-safe property columns with JSON-serializable values."""
     keep = [c for c in columns if c in gdf.columns]
@@ -506,7 +553,8 @@ def build_pmtiles(
     """Convert a lake GeoParquet file to a single ``.pmtiles`` archive.
 
     Requires `tippecanoe <https://github.com/felt/tippecanoe>`_ (v2.17+ for
-    direct PMTiles output). Install via Homebrew: ``brew install tippecanoe``.
+    direct PMTiles output) unless ``WTS_TILER=tylertoo``, which is the default and
+    needs ``pip install tylertoo`` plus the release binary for the layer join.
 
     Args:
         parquet_path: Input GeoParquet.
@@ -527,6 +575,24 @@ def build_pmtiles(
     parquet_path = Path(parquet_path)
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if tiler_engine() == "tylertoo":
+        # tippecanoe args are translated, not forwarded: only the no-limit pair has a
+        # meaning in the new pipeline, and that is what the overlays ask for.
+        keep_every_feature = tippecanoe_args is not None and any(
+            flag in tippecanoe_args for flag in ("--no-tile-size-limit", "--no-feature-limit", "-r1")
+        )
+        return _dispatch_engine(
+            "build_pmtiles",
+            parquet_path=parquet_path,
+            output_path=output_path,
+            property_columns=property_columns,
+            point_property_columns=point_property_columns,
+            layer_names=layer_names,
+            row_filter=row_filter,
+            keep_every_feature=keep_every_feature,
+            keep_intermediate=keep_geojsonl,
+        )
 
     # Fail before the (slow) GeoJSON export rather than after it.
     tippecanoe_bin = tippecanoe_bin or find_tippecanoe()
@@ -786,6 +852,11 @@ def build_pmtiles_nrt_monthly(
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # Fail before the expensive geometry scan rather than after it.
+    if tiler_engine() == "tylertoo":
+        print(
+            "WTS_TILER=tylertoo: the NRT monthly build still uses tippecanoe -- its two "
+            "layers need opposite thinning budgets and the join is not validated yet."
+        )
     tippecanoe_bin = tippecanoe_bin or find_tippecanoe()
     if not tippecanoe_bin:
         raise RuntimeError("tippecanoe is not installed or not on PATH. Install it with: brew install tippecanoe")
