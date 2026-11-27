@@ -65,7 +65,7 @@ def filter_gdf_by_bbox(
 
 def select_feature_by_id(
     gdf: gpd.GeoDataFrame,
-    object_id,
+    object_id: str | int,
     id_field: str = "id_geohash",
 ) -> gpd.GeoDataFrame:
     """Select the rows of ``gdf`` whose ``id_field`` equals ``object_id``.

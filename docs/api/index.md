@@ -14,7 +14,11 @@ This section provides comprehensive API documentation for the water-timeseries p
 - [Downloader](downloader.md) - Google Earth Engine data downloader (`EarthEngineDownloader`)
 
 ### Utilities
-- [Utils](utils.md) - Plotting and helper utilities
+- [Utils](utils.md) - Data handling, spatial helpers, Earth Engine and helper utilities
+
+### Guides
+- [Object Identifiers](../id_field.md) - Using a custom `id_field` instead of `id_geohash`
+- [Sentinel-2 Imagery](../sentinel2_imagery.md) - Fetching an S2 cube and rendering RGB / CIR composites
 
 ## Usage
 

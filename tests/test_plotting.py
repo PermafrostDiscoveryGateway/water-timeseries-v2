@@ -402,3 +402,48 @@ class TestIdGeohashBackwardCompatibility:
             plt.close(fig)
         else:
             assert isinstance(fig, go.Figure)
+
+
+class TestSentinel2CubeStretch:
+    """The RGB/cir stretches in the Sentinel-2 cube viewers (earthengine.py)."""
+
+    @staticmethod
+    def _cube(value: float) -> xr.Dataset:
+        """One 5x6 acquisition where every band carries the same DN."""
+        import numpy as np
+
+        bands = ("B2", "B3", "B4", "B8")
+        # non-square spatial dims so xarray does not mistake a spatial axis for RGB
+        return xr.Dataset(
+            {b: (("time", "y", "x"), np.full((1, 5, 6), value, dtype="float32")) for b in bands},
+            coords={"time": [np.datetime64("2024-07-01")], "y": np.arange(5.0), "x": np.arange(6.0)},
+        )
+
+    def test_cir_divides_by_4000(self):
+        from water_timeseries.utils.earthengine import visualize_s2_xee_cube
+
+        fig = visualize_s2_xee_cube(self._cube(2000.0), ["2024-07-01"], style="cir")
+        image = fig.axes[0].images[0].get_array()
+        # matplotlib returns RGBA; the alpha channel is 1.0, so look at the colour channels
+        # 2000 DN / 4000 = 0.5 — at the old /3000 it would read 0.667
+        assert image[..., :3].max() == pytest.approx(0.5, abs=1e-3)
+        plt.close(fig)
+
+    def test_rgb_divides_by_1000(self):
+        from water_timeseries.utils.earthengine import visualize_s2_xee_cube
+
+        fig = visualize_s2_xee_cube(self._cube(500.0), ["2024-07-01"], style="rgb")
+        image = fig.axes[0].images[0].get_array()
+        assert image[..., :3].max() == pytest.approx(0.5, abs=1e-3)
+        plt.close(fig)
+
+    def test_first_and_last_viewer_matches(self):
+        import numpy as np
+
+        from water_timeseries.utils.earthengine import visualize_s2_first_and_last
+
+        ds = self._cube(2000.0)
+        ds = xr.concat([ds, ds.assign_coords(time=[np.datetime64("2024-08-01")])], dim="time")
+        fig = visualize_s2_first_and_last(ds, style="cir")
+        assert fig.axes[0].images[0].get_array()[..., :3].max() == pytest.approx(0.5, abs=1e-3)
+        plt.close(fig)

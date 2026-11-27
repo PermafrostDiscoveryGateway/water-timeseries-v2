@@ -432,7 +432,7 @@ def detect_temporal_resolution(ds: xr.Dataset) -> str:
 KNOWN_ID_FIELDS: tuple[str, ...] = ("id_geohash", "lake_id", "object_id", "site_id")
 
 
-def resolve_id_field(obj) -> str:
+def resolve_id_field(obj: xr.Dataset | pd.DataFrame) -> str:
     """Return the name of the identifier field on a dataset or a frame.
 
     Resolution order: the declared ``attrs["id_field"]`` (written by
