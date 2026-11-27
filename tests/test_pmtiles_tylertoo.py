@@ -13,7 +13,6 @@ from shapely.geometry import Polygon
 from water_timeseries.utils import pmtiles_build
 from water_timeseries.utils.pmtiles_build import tiler_engine
 from water_timeseries.utils.pmtiles_build_tylertoo import (
-    build_pmtiles_nrt_monthly,
     centroid_parquet,
     find_tylertoo_cli,
     prepare_parquet,
@@ -135,6 +134,46 @@ def test_build_pmtiles_dispatches_to_tylertoo(tmp_path, monkeypatch):
     assert "strategies" not in metadata, "tippecanoe's metadata is gone; no code may read it"
 
 
-def test_nrt_monthly_is_not_migrated_yet():
-    with pytest.raises(RuntimeError, match="still uses tippecanoe"):
-        build_pmtiles_nrt_monthly()
+@pytest.mark.skipif(not HAS_TYLERTOO, reason="tylertoo is not installed")
+def test_nrt_monthly_keeps_three_layers_with_their_own_budgets(tmp_path, monkeypatch):
+    """The NRT archive needs drained + drained_points (keep everything) and scored."""
+    if not HAS_CLI:
+        pytest.skip("the multi-layer join needs the tylertoo binary (TYLERTOO_CLI)")
+    monkeypatch.delenv("WTS_TILER", raising=False)
+
+    geometry = lakes_fixture(tmp_path, count=4)
+    breaks = pd.DataFrame(
+        {
+            "analysis_month": ["2026-07"] * 4,
+            "id_geohash": [f"lake{i}" for i in range(4)],
+            "drainage_confidence": [1.0, 2.0, pd.NA, pd.NA],
+            "water_change_perc": [-70.0, -65.0, -1.0, -1.0],
+        }
+    )
+    breaks_path = tmp_path / "breaks.parquet"
+    breaks.to_parquet(breaks_path)
+
+    run = gpd.read_parquet(geometry)
+    run["date"] = pd.to_datetime(["2026-07-01", "2026-07-01", pd.NaT, pd.NaT])
+    run["water_observed_absolute"] = [3.0, 4.0, 10.0, 11.0]
+    run_path = tmp_path / "run.parquet"
+    run.to_parquet(run_path)
+
+    out_dir = tmp_path / "tiles"
+    outputs = pmtiles_build.build_pmtiles_nrt_monthly(
+        breaks_path,
+        geometry,
+        out_dir,
+        months=["2026-07"],
+        run_parquet_by_month={"2026-07": run_path},
+    )
+
+    archive = outputs["2026-07"]
+    assert archive.name == "nrt_2026-07_drainage.pmtiles"
+    metadata = read_pmtiles_metadata(archive)
+    layers = {layer["id"]: (layer["minzoom"], layer["maxzoom"]) for layer in metadata["vector_layers"]}
+    assert layers == {
+        "drained": (pmtiles_build.POINT_POLY_SWITCH_ZOOM - 1, pmtiles_build.TILE_MAX_ZOOM),
+        "drained_points": (0, pmtiles_build.POINT_POLY_SWITCH_ZOOM + 1),
+        "scored": (pmtiles_build.POINT_POLY_SWITCH_ZOOM - 1, pmtiles_build.TILE_MAX_ZOOM),
+    }, "all three layers must be present, each in its own zoom band"

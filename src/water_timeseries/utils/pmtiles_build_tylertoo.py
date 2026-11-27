@@ -28,9 +28,11 @@ dependency) because tylertoo reads rows in order and warns on unsorted input. Th
 sort runs on a column-pruned extract, so it also shrinks the ~3 GB source down to
 what the tiles carry.
 
-The NRT monthly build stays on tippecanoe for now: its two layers need opposite
-thinning budgets, and that join has to be validated feature by feature before the
-drained layer can be trusted to keep every lake at every zoom.
+The NRT monthly build uses the same trick for its three layers: `drained` and
+`drained_points` are tiled with every feature kept, `scored` with the dense cap, and
+`pyramid` joins them **without size caps of its own** -- so the join copies tiles
+instead of re-thinning them and each layer's budget survives, which is what
+`tile-join -pk` bought in the tippecanoe path.
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ import json
 import os
 import shutil
 import subprocess
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 import numpy as np
@@ -49,13 +51,22 @@ import pyarrow.compute as pc
 import pyarrow.parquet as pq
 import shapely
 
+from water_timeseries.utils.nrt_postprocessing import DRAIN_THRESHOLD, drained_mask
 from water_timeseries.utils.pmtiles_build import (
     DEFAULT_POINTS_ZOOM,
     DEFAULT_POLY_ZOOM,
     DEFAULT_TILE_PROPERTIES,
     DRAINAGE_YEAR_POINT_PROPERTIES,
+    NRT_MONTHLY_TILE_PROPERTIES,
+    NRT_SCORED_LAYER,
+    NRT_SCORED_TILE_PROPERTIES,
     SHARED_GEOMETRY_POINT_PROPERTIES,
     SHARED_GEOMETRY_TILE_PROPERTIES,
+    TILE_MAX_ZOOM,
+    _collect_geometries,
+    nrt_monthly_tiles_filename,
+    nrt_scored_rows,
+    point_poly_zoom_ranges,
 )
 
 GEOMETRY_COLUMN = "geometry"
@@ -452,12 +463,227 @@ def build_pmtiles_historical_drained(
     )
 
 
-def build_pmtiles_nrt_monthly(*args, **kwargs):
-    """Not migrated yet: the two-budget join has to be validated first."""
-    raise RuntimeError(
-        "the NRT monthly build still uses tippecanoe (two layers with opposite thinning "
-        "budgets). Run build-nrt-pmtiles with WTS_TILER=tippecanoe."
+def _month_parquet(
+    month_rows: pd.DataFrame,
+    geom_by_id: Mapping[str, bytes],
+    output_path: Path,
+    *,
+    columns: Sequence[str],
+    id_column: str,
+    geometry_template: bytes | None,
+) -> Path:
+    """Write one month's drained lakes -- properties plus geometry -- as GeoParquet."""
+    keep = [c for c in columns if c in month_rows.columns]
+    ids = month_rows[id_column].astype(str)
+    table = pa.Table.from_pandas(month_rows[keep].reset_index(drop=True), preserve_index=False)
+    table = table.append_column(
+        GEOMETRY_COLUMN,
+        pa.array([geom_by_id[gid] for gid in ids], type=pa.binary()),
     )
+    table = _sanitize(table, keep)
+    if geometry_template is None:
+        raise ValueError("the geometry parquet carries no 'geo' metadata; tylertoo cannot read it")
+    geo = json.loads(geometry_template)
+    geo["columns"][GEOMETRY_COLUMN]["geometry_types"] = ["Polygon", "MultiPolygon"]
+    table = table.replace_schema_metadata({b"geo": json.dumps(geo).encode()})
+    pq.write_table(table, output_path, compression="zstd")
+    return output_path
+
+
+def build_pmtiles_nrt_monthly(
+    breaks_parquet: Path | str,
+    geometry_parquet: Path | str,
+    output_dir: Path | str,
+    *,
+    months: Sequence[str] | None = None,
+    property_columns: Sequence[str] = NRT_MONTHLY_TILE_PROPERTIES,
+    tippecanoe_args: Sequence[str] | None = None,
+    tippecanoe_bin: str | None = None,
+    keep_geojsonl: bool = False,
+    month_column: str = "analysis_month",
+    id_column: str = "id_geohash",
+    drain_threshold: float = DRAIN_THRESHOLD,
+    poly_max_zoom: int = TILE_MAX_ZOOM,
+    run_parquet_by_month: Mapping[str, Path | str] | None = None,
+    scored_property_columns: Sequence[str] = NRT_SCORED_TILE_PROPERTIES,
+) -> dict[str, Path]:
+    """Build one PMTiles archive of a month's NRT results per analysis month, with tylertoo.
+
+    Same three layers as the tippecanoe build -- ``drained``, ``drained_points`` and
+    ``scored`` -- and the same per-layer budgets, which is the whole difficulty here:
+
+    * ``drained``/``drained_points`` keep **every** feature (``tile_size_limit=0``,
+      ``drop_rate=1``): a dropped drained lake is a lake missing from the map.
+    * ``scored`` holds ~1.8 M lakes and is thinned to the dense-layer cap.
+
+    tippecanoe could only express that with two invocations plus ``tile-join -pk``.
+    Here each layer is tiled on its own and ``pyramid`` joins them **with no size caps
+    of its own**, so it copies tiles and merges layers without re-thinning -- the
+    per-layer budgets survive by construction, exactly as ``-pk`` made them survive.
+    A joined tile may therefore exceed the dense cap, which is also what ``-pk`` did.
+
+    Args:
+        breaks_parquet: Aggregated NRT breaks table (``nrt_monthly_drain_breaks.parquet``).
+        geometry_parquet: Lake table carrying ``id_column`` + geometry.
+        output_dir: Directory to write ``nrt_<month>_drainage.pmtiles`` into.
+        months: Months to build (``YYYY-MM``); defaults to every month in the table.
+        property_columns: Columns baked onto the drained layers.
+        tippecanoe_args: Accepted for signature compatibility; only the "no limit"
+            pair is honoured, and that is already how this builder runs.
+        tippecanoe_bin: Accepted for signature compatibility; unused.
+        keep_geojsonl: Keep the prepared parquets next to the output (there is no
+            GeoJSONL any more).
+        month_column: Column naming the month.
+        id_column: Column naming the lake id.
+        drain_threshold: ``water_residual`` threshold for rows with no
+            ``drainage_confidence`` (see ``drained_mask``).
+        poly_max_zoom: Highest zoom for the polygon layers.
+        run_parquet_by_month: ``{month: full NRT run parquet}``; a month listed here gets
+            the ``scored`` layer.
+        scored_property_columns: Columns baked onto the scored lakes.
+
+    Returns:
+        ``{month: pmtiles_path}`` for the months actually built.
+    """
+    breaks_parquet = Path(breaks_parquet)
+    geometry_parquet = Path(geometry_parquet)
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    run_parquets = {str(m): Path(p) for m, p in (run_parquet_by_month or {}).items()}
+    missing_runs = [str(p) for p in run_parquets.values() if not p.exists()]
+    if missing_runs:
+        raise FileNotFoundError(f"NRT run parquet(s) not found: {', '.join(missing_runs)}")
+
+    breaks = pd.read_parquet(breaks_parquet)
+    if month_column not in breaks.columns:
+        raise ValueError(f"{breaks_parquet} has no '{month_column}' column")
+    breaks = breaks[breaks[month_column].notna()].copy()
+    breaks[month_column] = breaks[month_column].astype(str)
+    if months is not None:
+        breaks = breaks[breaks[month_column].isin(set(months))]
+    if breaks.empty:
+        raise ValueError(f"No rows in {breaks_parquet} for months={months}")
+
+    # A row that is not a drainage detection must not get in: every feature in this
+    # tileset is styled and hovered as a lake that drained in its month.
+    before = len(breaks)
+    breaks = breaks[drained_mask(breaks, drain_threshold=drain_threshold)]
+    if len(breaks) != before:
+        print(f"Dropped {before - len(breaks)} non-drained row(s) of {before} from {breaks_parquet.name}")
+    if breaks.empty:
+        raise ValueError(f"No drained lakes in {breaks_parquet} for months={months}")
+
+    # One lake can drain in several months; dedupe within a month.
+    breaks = breaks.drop_duplicates(subset=[month_column, id_column], keep="last")
+
+    wanted_ids = set(breaks[id_column].astype(str))
+    print(f"Collecting geometries for {len(wanted_ids)} lakes from {geometry_parquet}...")
+    geom_by_id = _collect_geometries(geometry_parquet, wanted_ids, id_column=id_column)
+    print(f"Found geometries for {len(geom_by_id)}/{len(wanted_ids)} lakes")
+    if not geom_by_id:
+        raise ValueError(f"No geometries in {geometry_parquet} matched ids from {breaks_parquet}")
+
+    geometry_template = (pq.ParquetFile(geometry_parquet).schema_arrow.metadata or {}).get(b"geo")
+    poly_zoom, points_zoom = point_poly_zoom_ranges(max_zoom=poly_max_zoom)
+    keep_columns = [c for c in property_columns if c in breaks.columns]
+    outputs: dict[str, Path] = {}
+
+    for month, month_rows in breaks.groupby(month_column, sort=True):
+        month_rows = month_rows[month_rows[id_column].astype(str).isin(geom_by_id)]
+        if month_rows.empty:
+            print(f"[{month}] no lakes with geometry, skipping")
+            continue
+
+        output_path = output_dir / nrt_monthly_tiles_filename(str(month))
+        work_dir = output_dir / f"{output_path.stem}.tylertoo"
+        work_dir.mkdir(exist_ok=True)
+        run_parquet = run_parquets.get(str(month))
+
+        # Drained layers: every feature, at every zoom.
+        month_parquet = _month_parquet(
+            month_rows,
+            geom_by_id,
+            work_dir / "drained_raw.parquet",
+            columns=keep_columns,
+            id_column=id_column,
+            geometry_template=geometry_template,
+        )
+        drained = prepare_parquet(
+            month_parquet,
+            work_dir / "drained.parquet",
+            columns=keep_columns,
+            sort=True,
+        )
+        drained_points = centroid_parquet(
+            drained,
+            work_dir / "drained_points.parquet",
+            id_column=id_column,
+            columns=keep_columns,
+        )
+        print(f"[{month}] tiling {month_rows.shape[0]} drained lake(s)...")
+        points_archive = _layer_archive(
+            drained_points,
+            work_dir / "drained_points.pmtiles",
+            layer="drained_points",
+            zoom=points_zoom,
+            byte_cap=0,
+            drop_rate=1.0,
+            work_dir=work_dir,
+            keep_intermediate=keep_geojsonl,
+        )
+        drained_archive = _layer_archive(
+            drained,
+            work_dir / "drained.pmtiles",
+            layer="drained",
+            zoom=poly_zoom,
+            byte_cap=0,
+            drop_rate=1.0,
+            work_dir=work_dir,
+            keep_intermediate=keep_geojsonl,
+        )
+        bands = [
+            f"{points_zoom[0]}-{points_zoom[1]}:{points_archive}:drained_points",
+            f"{poly_zoom[0]}-{poly_zoom[1]}:{drained_archive}:drained",
+        ]
+
+        if run_parquet:
+            # Streamed row group by row group and filtered before any WKB is parsed,
+            # so the ~3 GB run parquet never lands in memory and the unscored lakes
+            # cost only the filter.
+            print(f"[{month}] baking '{NRT_SCORED_LAYER}' layer from {run_parquet.name}...")
+            scored = prepare_parquet(
+                run_parquet,
+                work_dir / "scored.parquet",
+                columns=scored_property_columns,
+                row_filter=nrt_scored_rows,
+                sort=True,
+            )
+            scored_archive = _layer_archive(
+                scored,
+                work_dir / "scored.pmtiles",
+                layer=NRT_SCORED_LAYER,
+                zoom=poly_zoom,
+                byte_cap=TILE_BYTE_CAP,
+                drop_rate=DENSE_DROP_RATE,
+                work_dir=work_dir,
+                keep_intermediate=keep_geojsonl,
+            )
+            bands.append(f"{poly_zoom[0]}-{poly_zoom[1]}:{scored_archive}:{NRT_SCORED_LAYER}")
+
+        # No caps on the join: each band was already thinned with its own budget, and
+        # re-applying one here would drop drained lakes the separate build exists to
+        # protect (that is what `-pk` bought in the tippecanoe path).
+        _pyramid(bands, output_path, work_dir=work_dir)
+
+        if not keep_geojsonl:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
+        size_mb = output_path.stat().st_size / 1e6
+        print(f"[{month}] wrote {output_path.name} ({size_mb:.1f} MB)")
+        outputs[str(month)] = output_path
+
+    return outputs
 
 
 __all__ = [

@@ -853,9 +853,21 @@ def build_pmtiles_nrt_monthly(
 
     # Fail before the expensive geometry scan rather than after it.
     if tiler_engine() == "tylertoo":
-        print(
-            "WTS_TILER=tylertoo: the NRT monthly build still uses tippecanoe -- its two "
-            "layers need opposite thinning budgets and the join is not validated yet."
+        require_tiler()
+        return _dispatch_engine(
+            "build_pmtiles_nrt_monthly",
+            breaks_parquet=breaks_parquet,
+            geometry_parquet=geometry_parquet,
+            output_dir=output_dir,
+            months=months,
+            property_columns=property_columns,
+            keep_geojsonl=keep_geojsonl,
+            month_column=month_column,
+            id_column=id_column,
+            drain_threshold=drain_threshold,
+            poly_max_zoom=poly_max_zoom,
+            run_parquet_by_month=run_parquet_by_month,
+            scored_property_columns=scored_property_columns,
         )
     tippecanoe_bin = tippecanoe_bin or find_tippecanoe()
     if not tippecanoe_bin:

@@ -35,7 +35,6 @@ from water_timeseries.utils.pmtiles_build import (
     build_pmtiles_nrt_monthly,
     build_pmtiles_shared_geometry,
     find_nrt_run_parquets,
-    find_tippecanoe,
     historical_drained_tiles_path,
     require_tiler,
 )
@@ -550,8 +549,7 @@ def build_nrt_pmtiles(
             "(via CLI flags, or a --config-file with precomputed_nrt_dir/vector_file/nrt_pmtiles_dir)."
         )
         raise SystemExit(1)
-    if not find_tippecanoe():
-        raise RuntimeError("tippecanoe is not installed. Install with: brew install tippecanoe")
+    require_tiler()
 
     month_list = [m.strip() for m in months.split(",") if m.strip()] if months else None
 
