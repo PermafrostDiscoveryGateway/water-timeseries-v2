@@ -77,12 +77,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# PMTiles building. Two engines during the migration: `tylertoo` (default, reads
-# GeoParquet directly, needs the release binary for the multi-layer join) and
-# `tippecanoe` (kept for one release as `WTS_TILER=tippecanoe`; it compiles from sdist:
-# needs cmake >= 3.20 plus scikit_build_core and setuptools_scm < 10).
+# PMTiles building. `pmtiles` is the default and is pure wheels: tylertoo reads
+# GeoParquet directly (the multi-layer join needs its release binary, see
+# TYLERTOO_CLI in utils/pmtiles_build_tylertoo.py). `pmtiles-tippecanoe` keeps the
+# previous engine for one release as `WTS_TILER=tippecanoe`; it compiles from sdist
+# (cmake >= 3.20 plus scikit_build_core and setuptools_scm < 10), so it is no longer
+# installed by default.
 pmtiles = [
     "tylertoo==0.8.0",
+]
+pmtiles-tippecanoe = [
     "tippecanoe>=2.72.0",
 ]
 dev = [
