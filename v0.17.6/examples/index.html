@@ -1,0 +1,2103 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+        <meta name="description" content="Automated analysis of water timeseries data from satellite imagery and remote sensing sources">
+      
+      
+      
+        <link rel="canonical" href="https://PermafrostDiscoveryGateway.github.io/water-timeseries-v2/v0.17.6/examples/">
+      
+      
+        <link rel="prev" href="../getting_started/">
+      
+      
+        <link rel="next" href="../embedding/">
+      
+      
+        
+      
+      
+      <link rel="icon" href="../assets/images/favicon.png">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.8.2">
+    
+    
+      
+        <title>Examples - water-timeseries</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.57a0d79d.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.fb2fffe2.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="blue" data-md-color-accent="light-blue">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#examples" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+      </div>
+    
+    
+      
+
+  
+
+<header class="md-header md-header--shadow" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="water-timeseries" class="md-header__button md-logo" aria-label="water-timeseries" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            water-timeseries
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Examples
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+  
+    
+    
+    
+    <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="blue" data-md-color-accent="light-blue"  aria-hidden="true"  type="radio" name="__palette" id="__palette_0">
+    
+  
+</form>
+      
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&palette.color){if("(prefers-color-scheme)"===palette.color.media){var media=matchMedia("(prefers-color-scheme: light)"),input=document.querySelector(media.matches?"[data-md-color-media='(prefers-color-scheme: light)']":"[data-md-color-media='(prefers-color-scheme: dark)']");palette.color.media=input.getAttribute("data-md-color-media"),palette.color.scheme=input.getAttribute("data-md-color-scheme"),palette.color.primary=input.getAttribute("data-md-color-primary"),palette.color.accent=input.getAttribute("data-md-color-accent")}for(var[key,value]of Object.entries(palette.color))document.body.setAttribute("data-md-color-"+key,value)}</script>
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+        <div class="md-search__suggest" data-md-component="search-suggest"></div>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    PermafrostDiscoveryGateway/water-timeseries-v2
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+
+<nav class="md-nav md-nav--primary" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="water-timeseries" class="md-nav__button md-logo" aria-label="water-timeseries" data-md-component="logo">
+      
+  
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a3 3 0 0 0 3-3 3 3 0 0 0-3-3 3 3 0 0 0-3 3 3 3 0 0 0 3 3m0 3.54C9.64 9.35 6.5 8 3 8v11c3.5 0 6.64 1.35 9 3.54 2.36-2.19 5.5-3.54 9-3.54V8c-3.5 0-6.64 1.35-9 3.54"/></svg>
+
+    </a>
+    water-timeseries
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/PermafrostDiscoveryGateway/water-timeseries-v2" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    PermafrostDiscoveryGateway/water-timeseries-v2
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Home
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../getting_started/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Getting Started
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Examples
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-dwdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with DWDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-jrcdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with JRCDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-dswxdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with DSWxDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-dswxhlsdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with DSWxHLSDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#merging-datasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Merging Datasets
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Merging Datasets">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#merge-along-both-dimensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Merge Along Both Dimensions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#add-new-dates-same-lakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add New Dates (Same Lakes)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#add-new-lakes-same-time-period" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add New Lakes (Same Time Period)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#handling-overlapping-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Handling Overlapping Data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-normalization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Normalization
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#masking-invalid-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Masking Invalid Data
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#breakpoint-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breakpoint Detection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Breakpoint Detection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breakpoint-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breakpoint Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#command-line-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command Line Interface
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Command Line Interface">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#running-from-command-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running from Command Line
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-configuration-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using Configuration Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cli-options-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Options Reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plot-time-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot Time Series
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Plot Time Series">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#python-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python API
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plot-with-breakpoint-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot with Breakpoint Detection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plot-with-specific-date" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot with Specific Date
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#save-plots-to-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Save Plots to File
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plot-returns-and-legend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot Returns and Legend
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cli-plot-time-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Plot Time Series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plot-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interactive-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive Dashboard
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Interactive Dashboard">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#running-the-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the Dashboard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dashboard-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dashboard Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sidebar-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sidebar Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-api_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python API
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../embedding/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Embedding & Shareable Links
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tile_generation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Building Map Tilesets
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../id_field/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Object Identifiers
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../sentinel2_imagery/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Sentinel-2 Imagery
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../nrt_monthly_update/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    NRT Monthly Update
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_9" >
+        
+          
+          <label class="md-nav__link" for="__nav_9" id="__nav_9_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    API Reference
+  
+
+    
+  </span>
+  
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_9_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_9">
+            <span class="md-nav__icon md-icon"></span>
+            
+  
+    API Reference
+  
+
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Overview
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/dataset/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Dataset
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/downloader/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Downloader
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/breakpoint/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Breakpoint
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/utils/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    
+  
+    Utils
+  
+
+    
+  </span>
+  
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-dwdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with DWDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-jrcdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with JRCDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-dswxdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with DSWxDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#working-with-dswxhlsdataset" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Working with DSWxHLSDataset
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#merging-datasets" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Merging Datasets
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Merging Datasets">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#merge-along-both-dimensions" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Merge Along Both Dimensions
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#add-new-dates-same-lakes" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add New Dates (Same Lakes)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#add-new-lakes-same-time-period" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Add New Lakes (Same Time Period)
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#handling-overlapping-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Handling Overlapping Data
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#requirements" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Requirements
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#data-normalization" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Data Normalization
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#masking-invalid-data" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Masking Invalid Data
+      
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#breakpoint-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breakpoint Detection
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Breakpoint Detection">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#breakpoint-methods" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Breakpoint Methods
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#command-line-interface" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Command Line Interface
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Command Line Interface">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#running-from-command-line" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running from Command Line
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#using-configuration-files" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Using Configuration Files
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cli-options-reference" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Options Reference
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#plot-time-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot Time Series
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Plot Time Series">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#python-api" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python API
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plot-with-breakpoint-detection" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot with Breakpoint Detection
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plot-with-specific-date" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot with Specific Date
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#save-plots-to-file" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Save Plots to File
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plot-returns-and-legend" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot Returns and Legend
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#cli-plot-time-series" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        CLI Plot Time Series
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#plot-options" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Plot Options
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#interactive-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Interactive Dashboard
+      
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Interactive Dashboard">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#running-the-dashboard" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Running the Dashboard
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#dashboard-workflow" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Dashboard Workflow
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sidebar-settings" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Sidebar Settings
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#features" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Features
+      
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#python-api_1" class="md-nav__link">
+    <span class="md-ellipsis">
+      
+        Python API
+      
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+  
+  
+
+
+<h1 id="examples">Examples<a class="headerlink" href="#examples" title="Permanent link">🔗</a></h1>
+<h2 id="working-with-dwdataset">Working with DWDataset<a class="headerlink" href="#working-with-dwdataset" title="Permanent link">🔗</a></h2>
+<p>The <code>DWDataset</code> class processes Dynamic World land cover classifications.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">DWDataset</span>
+
+<span class="c1"># Load Dynamic World data</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_dataset</span><span class="p">(</span><span class="s2">"dynamic_world_data.nc"</span><span class="p">)</span>
+
+<span class="c1"># Initialize the dataset processor</span>
+<span class="n">processor</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
+
+<span class="c1"># Access data</span>
+<span class="n">original_data</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds</span>
+<span class="n">normalized_data</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds_normalized</span>
+
+<span class="c1"># Check available data columns</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">data_columns</span><span class="p">)</span>
+<span class="c1"># Output: ['water', 'bare', 'snow_and_ice', 'trees', 'grass', 'flooded_vegetation', 'crops', 'shrub_and_scrub', 'built']</span>
+
+<span class="c1"># Water column</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">water_column</span><span class="p">)</span>  <span class="c1"># 'water'</span>
+</code></pre></div>
+<h2 id="working-with-jrcdataset">Working with JRCDataset<a class="headerlink" href="#working-with-jrcdataset" title="Permanent link">🔗</a></h2>
+<p>The <code>JRCDataset</code> class handles JRC water classification data.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">JRCDataset</span>
+
+<span class="c1"># Load JRC data</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_dataset</span><span class="p">(</span><span class="s2">"jrc_water_data.nc"</span><span class="p">)</span>
+
+<span class="c1"># Initialize the processor</span>
+<span class="n">processor</span> <span class="o">=</span> <span class="n">JRCDataset</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
+
+<span class="c1"># Access permanent and seasonal water data</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">data_columns</span><span class="p">)</span>
+<span class="c1"># Output: ['area_water_permanent', 'area_water_seasonal', 'area_land']</span>
+
+<span class="c1"># Get preprocessed data with calculated total area</span>
+<span class="n">total_area</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds</span><span class="p">[</span><span class="s2">"area_data"</span><span class="p">]</span>
+</code></pre></div>
+<h2 id="working-with-dswxdataset">Working with DSWxDataset<a class="headerlink" href="#working-with-dswxdataset" title="Permanent link">🔗</a></h2>
+<p>The <code>DSWxDataset</code> class handles OPERA DSWx-S1 radar surface water. Its three class areas are
+<code>area_open_water</code>, <code>area_inundated_vegetation</code> and <code>area_not_water</code>; <code>area_water</code> (open +
+inundated vegetation) is derived, and <code>water_column</code> is <code>area_open_water</code>.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">DSWxDataset</span>
+
+<span class="c1"># Either product works: per acquisition (one row per Sentinel-1 scene) or monthly</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_dataset</span><span class="p">(</span><span class="s2">"dswx_monthly.zarr"</span><span class="p">)</span>
+<span class="n">processor</span> <span class="o">=</span> <span class="n">DSWxDataset</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">data_columns</span><span class="p">)</span>
+<span class="c1"># Output: ['area_open_water', 'area_inundated_vegetation', 'area_not_water']</span>
+
+<span class="c1"># Total water = the union of both water classes, comparable with DW water + flooded_vegetation</span>
+<span class="n">total_water</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds</span><span class="p">[</span><span class="s2">"area_water"</span><span class="p">]</span>
+
+<span class="n">fig</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">plot_timeseries</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">object_ids_</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</code></pre></div>
+<p>Comparing with Dynamic World: add DW's <code>flooded_vegetation</code> to its <code>water</code> before
+comparing, and expect DSWx open water alone to be roughly 63 % of DW's water. Winter rows
+are not hydrology - the product has no snow/ice class and reports a frozen basin as
+inundated vegetation, so gate them per acquisition against DW's <code>snow_and_ice</code>.</p>
+<h2 id="working-with-dswxhlsdataset">Working with DSWxHLSDataset<a class="headerlink" href="#working-with-dswxhlsdataset" title="Permanent link">🔗</a></h2>
+<p><code>DSWxHLSDataset</code> handles OPERA DSWx-HLS: optical (Harmonized Landsat-Sentinel) surface water with a
+different class set from DSWx-S1 - open water, <strong>partial surface water</strong> and not water, plus the
+LAND layer.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">DSWxHLSDataset</span>
+
+<span class="n">processor</span> <span class="o">=</span> <span class="n">DSWxHLSDataset</span><span class="p">(</span><span class="n">xr</span><span class="o">.</span><span class="n">open_dataset</span><span class="p">(</span><span class="s2">"dswx_hls_monthly.zarr"</span><span class="p">))</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">data_columns</span><span class="p">)</span>
+<span class="c1"># ['area_open_water', 'area_partial_water', 'area_not_water', 'area_land_cover']</span>
+
+<span class="c1"># headline series: open + partial, i.e. the product's BWTR_Binary_water</span>
+<span class="n">total_water</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds</span><span class="p">[</span><span class="n">processor</span><span class="o">.</span><span class="n">water_column</span><span class="p">]</span>      <span class="c1"># water_column == "area_water"</span>
+
+<span class="n">fig</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">plot_timeseries</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">object_ids_</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</code></pre></div>
+<p>Two things to remember: <code>area_land_cover</code> is an independent quantity (the product's LAND layer)
+and is not part of <code>area_data</code>, and the product is optical - a masked month is cloud, so a gap in
+the series is not necessarily a gap in the lake.</p>
+<h2 id="merging-datasets">Merging Datasets<a class="headerlink" href="#merging-datasets" title="Permanent link">🔗</a></h2>
+<p>The <code>merge()</code> method allows combining two LakeDataset instances. This is useful for combining data from different time periods or adding new lakes to an existing dataset.</p>
+<h3 id="merge-along-both-dimensions">Merge Along Both Dimensions<a class="headerlink" href="#merge-along-both-dimensions" title="Permanent link">🔗</a></h3>
+<p>The default strategy merges along both date and id_geohash dimensions:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">DWDataset</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+
+<span class="c1"># Load two datasets from different time periods</span>
+<span class="n">ds1</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="s2">"data_2020_2022.zarr"</span><span class="p">)</span>
+<span class="n">ds2</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="s2">"data_2023_2024.zarr"</span><span class="p">)</span>
+
+<span class="n">dataset1</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">ds1</span><span class="p">)</span>
+<span class="n">dataset2</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">ds2</span><span class="p">)</span>
+
+<span class="c1"># Merge along both dimensions</span>
+<span class="n">merged</span> <span class="o">=</span> <span class="n">dataset1</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">dataset2</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">"both"</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Original dates: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset1</span><span class="o">.</span><span class="n">dates_</span><span class="p">)</span><span class="si">}</span><span class="s2"> + </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">dataset2</span><span class="o">.</span><span class="n">dates_</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Merged dates: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">merged</span><span class="o">.</span><span class="n">dates_</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="add-new-dates-same-lakes">Add New Dates (Same Lakes)<a class="headerlink" href="#add-new-dates-same-lakes" title="Permanent link">🔗</a></h3>
+<p>Use <code>how="date"</code> to extend the time series of existing lakes:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Both datasets must have the same lakes (id_geohash)</span>
+<span class="n">ds_early</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="s2">"data_2020_2021.zarr"</span><span class="p">)</span>
+<span class="n">ds_late</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="s2">"data_2022_2023.zarr"</span><span class="p">)</span>
+
+<span class="n">dataset_early</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">ds_early</span><span class="p">)</span>
+<span class="n">dataset_late</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">ds_late</span><span class="p">)</span>
+
+<span class="c1"># Add new dates to existing time series</span>
+<span class="n">merged</span> <span class="o">=</span> <span class="n">dataset_early</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">dataset_late</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">"date"</span><span class="p">)</span>
+
+<span class="c1"># Check that we have all dates</span>
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Total dates: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">merged</span><span class="o">.</span><span class="n">dates_</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="c1"># Output: Combined dates from both datasets</span>
+</code></pre></div>
+<h3 id="add-new-lakes-same-time-period">Add New Lakes (Same Time Period)<a class="headerlink" href="#add-new-lakes-same-time-period" title="Permanent link">🔗</a></h3>
+<p>Use <code>how="id_geohash"</code> to add new lakes with the same temporal coverage:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Both datasets must have the same dates</span>
+<span class="n">ds_region1</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="s2">"region_a.zarr"</span><span class="p">)</span>  <span class="c1"># Lakes in region A</span>
+<span class="n">ds_region2</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="s2">"region_b.zarr"</span><span class="p">)</span>  <span class="c1"># Lakes in region B</span>
+
+<span class="n">dataset1</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">ds_region1</span><span class="p">)</span>
+<span class="n">dataset2</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">ds_region2</span><span class="p">)</span>
+
+<span class="c1"># Add new lakes</span>
+<span class="n">merged</span> <span class="o">=</span> <span class="n">dataset1</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">dataset2</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">"id_geohash"</span><span class="p">)</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Total lakes: </span><span class="si">{</span><span class="nb">len</span><span class="p">(</span><span class="n">merged</span><span class="o">.</span><span class="n">object_ids_</span><span class="p">)</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+<span class="c1"># Output: Combined lake count from both datasets</span>
+</code></pre></div>
+<h3 id="handling-overlapping-data">Handling Overlapping Data<a class="headerlink" href="#handling-overlapping-data" title="Permanent link">🔗</a></h3>
+<p>When there are overlapping dates or id_geohash values, a warning is issued:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">warnings</span>
+
+<span class="c1"># Enable warnings to be displayed</span>
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s2">"default"</span><span class="p">)</span>
+
+<span class="c1"># This will issue a warning about overlapping dates</span>
+<span class="n">merged</span> <span class="o">=</span> <span class="n">dataset1</span><span class="o">.</span><span class="n">merge</span><span class="p">(</span><span class="n">dataset2</span><span class="p">,</span> <span class="n">how</span><span class="o">=</span><span class="s2">"date"</span><span class="p">)</span>
+<span class="c1"># UserWarning: Datasets have X overlapping dates...</span>
+</code></pre></div>
+<h3 id="requirements">Requirements<a class="headerlink" href="#requirements" title="Permanent link">🔗</a></h3>
+<ul>
+<li>Both datasets must be the same type (both <code>DWDataset</code> or both <code>JRCDataset</code>)</li>
+<li>Both datasets must have the same variables</li>
+<li>For <code>how="date"</code>: Same id_geohash values required</li>
+<li>For <code>how="id_geohash"</code>: Same dates required</li>
+</ul>
+<h2 id="data-normalization">Data Normalization<a class="headerlink" href="#data-normalization" title="Permanent link">🔗</a></h2>
+<p>Both dataset classes automatically normalize data by the maximum area:</p>
+<div class="highlight"><pre><span></span><code><span class="n">processor</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
+
+<span class="c1"># Original data</span>
+<span class="n">original</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds</span><span class="p">[</span><span class="s2">"water"</span><span class="p">]</span>
+
+<span class="c1"># Normalized data (0-1 scale)</span>
+<span class="n">normalized</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds_normalized</span><span class="p">[</span><span class="s2">"water"</span><span class="p">]</span>
+
+<span class="c1"># The normalized data is scaled by max area across all dates</span>
+</code></pre></div>
+<h2 id="masking-invalid-data">Masking Invalid Data<a class="headerlink" href="#masking-invalid-data" title="Permanent link">🔗</a></h2>
+<p>Invalid data is automatically masked based on quality criteria:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># After initialization, you have access to masked datasets</span>
+<span class="n">masked_data</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds</span>  <span class="c1"># Original masked</span>
+<span class="n">masked_normalized</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">ds_normalized</span>  <span class="c1"># Normalized masked</span>
+
+<span class="c1"># Check if data is masked</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">ds_ismasked_</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">ds_normalized_ismasked_</span><span class="p">)</span>
+</code></pre></div>
+<h2 id="breakpoint-detection">Breakpoint Detection<a class="headerlink" href="#breakpoint-detection" title="Permanent link">🔗</a></h2>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.breakpoint</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleBreakpoint</span><span class="p">,</span> <span class="n">BeastBreakpoint</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">DWDataset</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+
+<span class="c1"># Load a small test dataset</span>
+<span class="n">xr_ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="s2">"tests/data/lakes_dw_test.zarr"</span><span class="p">)</span>
+<span class="c1"># Wrap in the dataset class</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">xr_ds</span><span class="p">)</span>
+
+<span class="c1"># Simple method – one lake</span>
+<span class="n">simple</span> <span class="o">=</span> <span class="n">SimpleBreakpoint</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">simple</span><span class="o">.</span><span class="n">calculate_break</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="s2">"b7uefy0bvcrc"</span><span class="p">))</span>
+
+<span class="c1"># Beast method – batch processing</span>
+<span class="n">beast</span> <span class="o">=</span> <span class="n">BeastBreakpoint</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">beast</span><span class="o">.</span><span class="n">calculate_breaks_batch</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">progress_bar</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span><span class="o">.</span><span class="n">head</span><span class="p">())</span>
+</code></pre></div>
+<p>Detect changes in water extent over time using statistical or advanced methods:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.breakpoint</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleBreakpoint</span><span class="p">,</span> <span class="n">BeastBreakpoint</span>
+
+<span class="c1"># Initialize dataset</span>
+<span class="n">processor</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
+
+<span class="c1"># Simple statistical breakpoint detection</span>
+<span class="n">simple_bp</span> <span class="o">=</span> <span class="n">SimpleBreakpoint</span><span class="p">()</span>
+<span class="n">breaks_simple</span> <span class="o">=</span> <span class="n">simple_bp</span><span class="o">.</span><span class="n">calculate_break</span><span class="p">(</span><span class="n">processor</span><span class="p">,</span> <span class="n">geohash_id</span><span class="o">=</span><span class="s2">"your_geohash"</span><span class="p">)</span>
+
+<span class="c1"># Advanced RBEAST-based detection</span>
+<span class="n">beast_bp</span> <span class="o">=</span> <span class="n">BeastBreakpoint</span><span class="p">()</span>
+<span class="n">breaks_beast</span> <span class="o">=</span> <span class="n">beast_bp</span><span class="o">.</span><span class="n">calculate_break</span><span class="p">(</span><span class="n">processor</span><span class="p">,</span> <span class="n">geohash_id</span><span class="o">=</span><span class="s2">"your_geohash"</span><span class="p">)</span>
+
+<span class="c1"># Batch processing for all geohashes</span>
+<span class="n">all_breaks</span> <span class="o">=</span> <span class="n">simple_bp</span><span class="o">.</span><span class="n">calculate_breaks_batch</span><span class="p">(</span><span class="n">processor</span><span class="p">,</span> <span class="n">progress_bar</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Results include:</span>
+<span class="c1"># - date_break: When the break was detected</span>
+<span class="c1"># - date_before_break: Date immediately before the break</span>
+<span class="c1"># - break_method: "simple" or "rbeast"</span>
+<span class="c1"># - break_number: Sequential numbering (Beast only)</span>
+<span class="c1"># - proba_rbeast: Probability score (Beast only)</span>
+</code></pre></div>
+<h3 id="breakpoint-methods">Breakpoint Methods<a class="headerlink" href="#breakpoint-methods" title="Permanent link">🔗</a></h3>
+<ul>
+<li><strong>SimpleBreakpoint</strong>: Statistical method using rolling window comparisons</li>
+<li><strong>BeastBreakpoint</strong>: Advanced Bayesian analysis using RBEAST library</li>
+</ul>
+<h2 id="command-line-interface">Command Line Interface<a class="headerlink" href="#command-line-interface" title="Permanent link">🔗</a></h2>
+<p>The hierarchical CLI tool provides a convenient way to run breakpoint detection without writing Python code.</p>
+<h3 id="running-from-command-line">Running from Command Line<a class="headerlink" href="#running-from-command-line" title="Permanent link">🔗</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Basic usage with required arguments</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>breakpoint-analysis-historical<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/path/to/lakes.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/path/to/breaks.parquet
+
+<span class="c1"># With parallel processing</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>breakpoint-analysis-historical<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/path/to/lakes.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/path/to/breaks.parquet<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--chunksize<span class="w"> </span><span class="m">100</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--n-jobs<span class="w"> </span><span class="m">20</span>
+
+<span class="c1"># With bounding box filter</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>breakpoint-analysis-historical<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/path/to/lakes.zarr<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>/path/to/breaks.parquet<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--vector-dataset-file<span class="w"> </span>/path/to/lakes.gpkg<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bbox-west<span class="w"> </span>-160<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bbox-east<span class="w"> </span>-155<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bbox-north<span class="w"> </span><span class="m">68</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--bbox-south<span class="w"> </span><span class="m">66</span>
+</code></pre></div>
+<h3 id="using-configuration-files">Using Configuration Files<a class="headerlink" href="#using-configuration-files" title="Permanent link">🔗</a></h3>
+<p>For complex workflows, use a config file:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># config.yaml</span>
+<span class="nt">water_dataset_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/lakes.zarr</span>
+<span class="nt">output_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/breaks.parquet</span>
+<span class="nt">vector_dataset_file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/lakes.gpkg</span>
+<span class="nt">chunksize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span>
+<span class="nt">n_jobs</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20</span>
+<span class="nt">bbox_west</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-160</span>
+<span class="nt">bbox_east</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-155</span>
+<span class="nt">bbox_north</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">68</span>
+<span class="nt">bbox_south</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">66</span>
+<span class="nt">min_chunksize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</code></pre></div>
+<div class="highlight"><pre><span></span><code><span class="c1"># Run with config file</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>breakpoint-analysis-historical<span class="w"> </span>--config-file<span class="w"> </span>config.yaml
+
+<span class="c1"># Override specific config values from CLI</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>breakpoint-analysis-historical<span class="w"> </span>--config-file<span class="w"> </span>config.yaml<span class="w"> </span>--n-jobs<span class="w"> </span><span class="m">8</span>
+</code></pre></div>
+<h3 id="cli-options-reference">CLI Options Reference<a class="headerlink" href="#cli-options-reference" title="Permanent link">🔗</a></h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Short</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>water_dataset_file</code></td>
+<td></td>
+<td>Path to water dataset (zarr)</td>
+<td>Required*</td>
+</tr>
+<tr>
+<td><code>output_file</code></td>
+<td></td>
+<td>Path to output parquet</td>
+<td>Required*</td>
+</tr>
+<tr>
+<td><code>--config-file</code></td>
+<td></td>
+<td>Path to config file</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>--vector-dataset-file</code></td>
+<td><code>-v</code></td>
+<td>Path to vector dataset</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>--chunksize</code></td>
+<td><code>-c</code></td>
+<td>IDs per chunk</td>
+<td>100</td>
+</tr>
+<tr>
+<td><code>--n-jobs</code></td>
+<td><code>-j</code></td>
+<td>Parallel jobs</td>
+<td>1</td>
+</tr>
+<tr>
+<td><code>--min-chunksize</code></td>
+<td><code>-m</code></td>
+<td>Min chunk size</td>
+<td>10</td>
+</tr>
+<tr>
+<td><code>--bbox-west</code></td>
+<td></td>
+<td>Min longitude</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>--bbox-south</code></td>
+<td></td>
+<td>Min latitude</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>--bbox-east</code></td>
+<td></td>
+<td>Max longitude</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>--bbox-north</code></td>
+<td></td>
+<td>Max latitude</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>--output-geometry</code></td>
+<td></td>
+<td>Include geometry in output (default: True)</td>
+<td>True</td>
+</tr>
+<tr>
+<td><code>--output-geometry-all</code></td>
+<td></td>
+<td>Include geometry for all lakes (default: False)</td>
+<td>False</td>
+</tr>
+</tbody>
+</table>
+<p>*Can also be provided via config file</p>
+<h2 id="plot-time-series">Plot Time Series<a class="headerlink" href="#plot-time-series" title="Permanent link">🔗</a></h2>
+<p>The package provides two plotting methods for visualizing lake water extent over time:</p>
+<h3 id="python-api">Python API<a class="headerlink" href="#python-api" title="Permanent link">🔗</a></h3>
+<p>Both <code>DWDataset</code> and <code>JRCDataset</code> support static (matplotlib) and interactive (Plotly) plotting:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.dataset</span><span class="w"> </span><span class="kn">import</span> <span class="n">DWDataset</span><span class="p">,</span> <span class="n">JRCDataset</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.breakpoint</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleBreakpoint</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">xarray</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">xr</span>
+
+<span class="c1"># Load data</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">DWDataset</span><span class="p">(</span><span class="n">xr</span><span class="o">.</span><span class="n">open_zarr</span><span class="p">(</span><span class="s2">"lakes_dw.zarr"</span><span class="p">))</span>
+<span class="n">geohash</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">object_ids_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>  <span class="c1"># Get first lake</span>
+
+<span class="c1"># --- Static matplotlib plot ---</span>
+<span class="n">fig_static</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">plot_timeseries</span><span class="p">(</span><span class="n">geohash</span><span class="p">)</span>
+<span class="n">fig_static</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>  <span class="c1"># In Jupyter, or plt.show() otherwise</span>
+
+<span class="c1"># --- Interactive Plotly plot ---</span>
+<span class="n">fig_interactive</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">plot_timeseries_interactive</span><span class="p">(</span><span class="n">geohash</span><span class="p">)</span>
+<span class="n">fig_interactive</span><span class="o">.</span><span class="n">show</span><span class="p">()</span>  <span class="c1"># In Jupyter, or save to HTML</span>
+</code></pre></div>
+<h3 id="plot-with-breakpoint-detection">Plot with Breakpoint Detection<a class="headerlink" href="#plot-with-breakpoint-detection" title="Permanent link">🔗</a></h3>
+<p>Pass a <code>BreakpointMethod</code> instance to automatically detect and visualize the breakpoint:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.breakpoint</span><span class="w"> </span><span class="kn">import</span> <span class="n">SimpleBreakpoint</span>
+
+<span class="c1"># Create breakpoint method</span>
+<span class="n">bp</span> <span class="o">=</span> <span class="n">SimpleBreakpoint</span><span class="p">()</span>
+
+<span class="c1"># Static plot with breakpoint</span>
+<span class="n">fig_static</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">plot_timeseries</span><span class="p">(</span><span class="n">geohash</span><span class="p">,</span> <span class="n">breakpoints</span><span class="o">=</span><span class="n">bp</span><span class="p">)</span>
+
+<span class="c1"># Interactive plot with breakpoint</span>
+<span class="n">fig_interactive</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">plot_timeseries_interactive</span><span class="p">(</span><span class="n">geohash</span><span class="p">,</span> <span class="n">breakpoints</span><span class="o">=</span><span class="n">bp</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="plot-with-specific-date">Plot with Specific Date<a class="headerlink" href="#plot-with-specific-date" title="Permanent link">🔗</a></h3>
+<p>Alternatively, pass a specific date or list of dates:</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># Single date (string)</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">plot_timeseries</span><span class="p">(</span><span class="n">geohash</span><span class="p">,</span> <span class="n">breakpoints</span><span class="o">=</span><span class="s2">"2023-06-15"</span><span class="p">)</span>
+
+<span class="c1"># Single date (pd.Timestamp)</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="n">fig</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">plot_timeseries</span><span class="p">(</span><span class="n">geohash</span><span class="p">,</span> <span class="n">breakpoints</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">"2023-06-15"</span><span class="p">))</span>
+
+<span class="c1"># List of dates (only first date is used)</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">plot_timeseries</span><span class="p">(</span><span class="n">geohash</span><span class="p">,</span> <span class="n">breakpoints</span><span class="o">=</span><span class="p">[</span><span class="s2">"2023-06-15"</span><span class="p">,</span> <span class="s2">"2020-09-01"</span><span class="p">])</span>
+</code></pre></div>
+<h3 id="save-plots-to-file">Save Plots to File<a class="headerlink" href="#save-plots-to-file" title="Permanent link">🔗</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Static plot (PNG, PDF, etc.)</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">plot_timeseries</span><span class="p">(</span><span class="n">geohash</span><span class="p">,</span> <span class="n">breakpoints</span><span class="o">=</span><span class="n">bp</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="s2">"plot.png"</span><span class="p">)</span>
+
+<span class="c1"># Interactive plot (HTML)</span>
+<span class="n">fig</span> <span class="o">=</span> <span class="n">ds</span><span class="o">.</span><span class="n">plot_timeseries_interactive</span><span class="p">(</span><span class="n">geohash</span><span class="p">,</span> <span class="n">breakpoints</span><span class="o">=</span><span class="n">bp</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="s2">"plot.html"</span><span class="p">)</span>
+</code></pre></div>
+<h3 id="plot-returns-and-legend">Plot Returns and Legend<a class="headerlink" href="#plot-returns-and-legend" title="Permanent link">🔗</a></h3>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Return Type</th>
+<th>Breakpoint in Legend</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>plot_timeseries()</code></td>
+<td><code>matplotlib.figure.Figure</code></td>
+<td>Yes, labeled "Breakpoint"</td>
+</tr>
+<tr>
+<td><code>plot_timeseries_interactive()</code></td>
+<td><code>plotly.graph_objects.Figure</code></td>
+<td>Yes, labeled "Breakpoint"</td>
+</tr>
+</tbody>
+</table>
+<h3 id="cli-plot-time-series">CLI Plot Time Series<a class="headerlink" href="#cli-plot-time-series" title="Permanent link">🔗</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Plot lake timeseries</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>plot-timeseries<span class="w"> </span>data.zarr<span class="w"> </span>--lake-id<span class="w"> </span>b7uefy0bvcrc
+
+<span class="c1"># Save figure to file</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>plot-timeseries<span class="w"> </span>data.zarr<span class="w"> </span>--lake-id<span class="w"> </span>b7uefy0bvcrc<span class="w"> </span>--output-figure<span class="w"> </span>plot.png
+
+<span class="c1"># Save only (no popup window)</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>plot-timeseries<span class="w"> </span>data.zarr<span class="w"> </span>--lake-id<span class="w"> </span>b7uefy0bvcrc<span class="w"> </span>--output-figure<span class="w"> </span>plot.png<span class="w"> </span>--no-show
+
+<span class="c1"># Use config file</span>
+uv<span class="w"> </span>run<span class="w"> </span>water-timeseries<span class="w"> </span>plot-timeseries<span class="w"> </span>--config-file<span class="w"> </span>configs/plot_config.yaml
+</code></pre></div>
+<h3 id="plot-options">Plot Options<a class="headerlink" href="#plot-options" title="Permanent link">🔗</a></h3>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Short</th>
+<th>Description</th>
+<th>Default</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>water_dataset_file</code></td>
+<td></td>
+<td>Path to water dataset (zarr or netCDF)</td>
+<td>Required*</td>
+</tr>
+<tr>
+<td><code>--lake-id</code></td>
+<td></td>
+<td>Geohash ID of the lake</td>
+<td>Required*</td>
+</tr>
+<tr>
+<td><code>--output-figure</code></td>
+<td></td>
+<td>Path to save output figure</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>--break-method</code></td>
+<td></td>
+<td>Break method to overlay (beast or simple)</td>
+<td>None</td>
+</tr>
+<tr>
+<td><code>--no-show</code></td>
+<td></td>
+<td>Don't show popup window</td>
+<td>False</td>
+</tr>
+</tbody>
+</table>
+<p>// The <code>--no-show</code> flag suppresses the interactive plot window; use it when running headless or when only saving the figure.
+| <code>--config-file</code> | | Path to config YAML/JSON file | None |</p>
+<p>*Can also be provided via config file</p>
+<h2 id="interactive-dashboard">Interactive Dashboard<a class="headerlink" href="#interactive-dashboard" title="Permanent link">🔗</a></h2>
+<p>The package includes a Streamlit dashboard for interactive visualization of lake polygons and time series data.</p>
+<h3 id="running-the-dashboard">Running the Dashboard<a class="headerlink" href="#running-the-dashboard" title="Permanent link">🔗</a></h3>
+<div class="highlight"><pre><span></span><code><span class="c1"># Install streamlit and plotly if not already installed</span>
+pip<span class="w"> </span>install<span class="w"> </span>streamlit<span class="w"> </span>plotly
+
+<span class="c1"># Run the dashboard</span>
+streamlit<span class="w"> </span>run<span class="w"> </span>src/water_timeseries/dashboard/app.py
+</code></pre></div>
+<h3 id="dashboard-workflow">Dashboard Workflow<a class="headerlink" href="#dashboard-workflow" title="Permanent link">🔗</a></h3>
+<ol>
+<li><strong>Map View</strong>: The dashboard loads lake polygons from a parquet file and displays them on an interactive map</li>
+<li><strong>Selection</strong>: Click on any lake polygon to select it</li>
+<li><strong>Time Series</strong>: The dashboard automatically loads/creates a DWDataset and plots the time series for the selected lake</li>
+<li><strong>Automatic Download</strong>: If the selected lake's data is not in the cached zarr file, it automatically downloads from Google Earth Engine</li>
+</ol>
+<h3 id="sidebar-settings">Sidebar Settings<a class="headerlink" href="#sidebar-settings" title="Permanent link">🔗</a></h3>
+<ul>
+<li><strong>Google Earth Engine Project</strong>: Enter your EE project ID and click "Set EE Project"</li>
+<li><strong>Parquet File Path</strong>: Path to the lake polygons file (default: <code>tests/data/lake_polygons.parquet</code>)</li>
+<li><strong>Zarr Path</strong>: Path to cached time series data (default: <code>tests/data/lakes_dw_test.zarr</code>)</li>
+<li><strong>ID Column</strong>: The column name containing geohash IDs (default: <code>id_geohash</code>)</li>
+<li><strong>Zoom Level</strong>: Initial map zoom (1-20)</li>
+</ul>
+<h3 id="features">Features<a class="headerlink" href="#features" title="Permanent link">🔗</a></h3>
+<ul>
+<li><strong>Hover</strong>: View lake attributes (id_geohash, area, net change) on hover</li>
+<li><strong>Click</strong>: Select a lake to view its time series</li>
+<li><strong>Popup</strong>: Click "Open Time Series in Popup" for a larger plot view</li>
+<li><strong>Automatic Download</strong>: Missing data is fetched automatically from GEE</li>
+</ul>
+<h3 id="python-api_1">Python API<a class="headerlink" href="#python-api_1" title="Permanent link">🔗</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">water_timeseries.dashboard.map_viewer</span><span class="w"> </span><span class="kn">import</span> <span class="n">create_app</span>
+
+<span class="c1"># Basic usage with defaults</span>
+<span class="n">create_app</span><span class="p">()</span>
+
+<span class="c1"># Custom paths</span>
+<span class="n">create_app</span><span class="p">(</span><span class="n">data_path</span><span class="o">=</span><span class="s2">"/path/to/lakes.parquet"</span><span class="p">,</span> <span class="n">zarr_path</span><span class="o">=</span><span class="s2">"/path/to/timeseries.zarr"</span><span class="p">)</span>
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      
+      <script id="__config" type="application/json">{"annotate": null, "base": "..", "features": ["navigation.instant", "navigation.tracking", "toc.follow", "search.suggest", "search.highlight"], "search": "../assets/javascripts/workers/search.a7633da7.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.a5f9d56c.min.js"></script>
+      
+    
+  </body>
+</html>
